@@ -1,0 +1,5 @@
+dist/
+npm/bin/
+*.exe
+supermodel
+cli

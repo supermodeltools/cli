@@ -1,0 +1,173 @@
+version: 2
+
+project_name: supermodel
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: supermodel
+    binary: supermodel
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE*
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+changelog:
+  use: github
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^feat'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^fix'
+      order: 1
+    - title: Performance
+      regexp: '^perf'
+      order: 2
+    - title: Other
+      order: 999
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: supermodeltools
+    name: cli
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"
+  footer: |
+    ## Installation
+
+    **macOS / Linux (Homebrew)**
+    ```sh
+    brew install supermodeltools/tap/supermodel
+    ```
+
+    **macOS / Linux (curl)**
+    ```sh
+    curl -fsSL https://supermodeltools.com/install.sh | sh
+    ```
+
+    **Windows (Scoop)**
+    ```sh
+    scoop bucket add supermodel https://github.com/supermodeltools/scoop-bucket
+    scoop install supermodel
+    ```
+
+    **npm**
+    ```sh
+    npm install -g @supermodeltools/cli
+    ```
+
+    **Full changelog**: https://github.com/supermodeltools/cli/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+# Homebrew tap — pushes Formula/supermodel.rb to supermodeltools/homebrew-tap
+brews:
+  - name: supermodel
+    repository:
+      owner: supermodeltools
+      name: homebrew-tap
+      token: "{{ .Env.SUPERMODEL_HOMEBREW_TAP_TOKEN }}"
+    commit_author:
+      name: supermodel-bot
+      email: abe@supermodel.software
+    commit_msg_template: "chore: update supermodel to {{ .Tag }}"
+    homepage: https://supermodeltools.com
+    description: Give your AI coding agent a map of your codebase
+    license: MIT
+    install: |
+      bin.install "supermodel"
+    test: |
+      system "#{bin}/supermodel", "version"
+
+# Scoop bucket — pushes supermodel.json to supermodeltools/scoop-bucket
+scoops:
+  - repository:
+      owner: supermodeltools
+      name: scoop-bucket
+      token: "{{ .Env.SUPERMODEL_SCOOP_BUCKET_TOKEN }}"
+    commit_author:
+      name: supermodel-bot
+      email: abe@supermodel.software
+    commit_msg_template: "chore: update supermodel to {{ .Tag }}"
+    homepage: https://supermodeltools.com
+    description: Give your AI coding agent a map of your codebase
+    license: MIT
+
+# deb, rpm, apk packages (Linux)
+nfpms:
+  - id: packages
+    package_name: supermodel
+    file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    homepage: https://supermodeltools.com
+    description: Give your AI coding agent a map of your codebase
+    maintainer: Supermodel <abe@supermodel.software>
+    license: MIT
+    formats:
+      - deb
+      - rpm
+      - apk
+    bindir: /usr/bin
+    contents:
+      - src: ./README.md
+        dst: /usr/share/doc/supermodel/README.md
+
+# AUR (Arch Linux)
+aurs:
+  - name: supermodel-bin
+    homepage: https://supermodeltools.com
+    description: Give your AI coding agent a map of your codebase
+    maintainers:
+      - Supermodel <abe@supermodel.software>
+    contributors:
+      - Supermodel <abe@supermodel.software>
+    license: MIT
+    private_key: "{{ .Env.SUPERMODEL_AUR_KEY }}"
+    git_url: "ssh://aur@aur.archlinux.org/supermodel-bin.git"
+    skip_upload: auto
+    provides:
+      - supermodel
+    conflicts:
+      - supermodel
+    package: |
+      install -Dm755 "./supermodel" "${pkgdir}/usr/bin/supermodel"
+      install -Dm644 "./README.md" "${pkgdir}/usr/share/doc/supermodel/README.md"

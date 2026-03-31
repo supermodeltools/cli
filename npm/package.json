@@ -1,0 +1,24 @@
+{
+  "name": "@supermodeltools/cli",
+  "version": "0.0.1",
+  "description": "Give your AI coding agent a map of your codebase",
+  "homepage": "https://supermodeltools.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/supermodeltools/cli"
+  },
+  "license": "MIT",
+  "bin": {
+    "supermodel": "./bin.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "files": [
+    "bin.js",
+    "install.js"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}
