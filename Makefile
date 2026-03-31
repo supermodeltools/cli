@@ -50,6 +50,11 @@ tidy:
 clean:
 	rm -rf $(OUTDIR) coverage.out
 
+## arch-check: validate vertical slice architecture via Supermodel API
+arch-check:
+	@[ -n "$$SUPERMODEL_API_KEY" ] || (echo "error: SUPERMODEL_API_KEY is not set" && exit 1)
+	go run ./scripts/check-architecture
+
 ## release-dry: dry-run GoReleaser (builds all platform binaries locally)
 release-dry:
 	goreleaser release --snapshot --clean

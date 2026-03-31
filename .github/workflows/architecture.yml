@@ -1,0 +1,39 @@
+name: Architecture
+
+on:
+  pull_request:
+    paths:
+      - 'internal/**'
+      - 'cmd/**'
+      - 'main.go'
+      - 'scripts/check-architecture/**'
+  push:
+    branches: [main]
+    paths:
+      - 'internal/**'
+      - 'cmd/**'
+      - 'main.go'
+
+jobs:
+  vertical-slice:
+    name: vertical slice check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check vertical slice architecture
+        env:
+          SUPERMODEL_API_KEY: ${{ secrets.SUPERMODEL_API_KEY }}
+        run: |
+          if [ -z "$SUPERMODEL_API_KEY" ]; then
+            echo "::warning::SUPERMODEL_API_KEY not set — skipping architecture check (fork PR?)"
+            exit 0
+          fi
+          go run ./scripts/check-architecture
