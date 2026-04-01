@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -27,13 +28,15 @@ func TestSaveAndLoad(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// File must be owner-only
-	info, err := os.Stat(Path())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("config file perms = %o, want 0600", perm)
+	// File must be owner-only (Unix only — Windows has no chmod)
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(Path())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Errorf("config file perms = %o, want 0600", perm)
+		}
 	}
 
 	loaded, err := Load()
@@ -60,6 +63,9 @@ func TestRequireAPIKey(t *testing.T) {
 func TestPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	if runtime.GOOS == "windows" {
+		t.Skip("HOME env var not used for config path on Windows")
+	}
 	want := filepath.Join(home, ".supermodel", "config.yaml")
 	if got := Path(); got != want {
 		t.Errorf("Path() = %q, want %q", got, want)
