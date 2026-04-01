@@ -36,4 +36,13 @@ jobs:
             echo "::warning::SUPERMODEL_API_KEY not set — skipping architecture check (fork PR?)"
             exit 0
           fi
-          go run ./scripts/check-architecture
+          output=$(go run ./scripts/check-architecture 2>&1)
+          exit_code=$?
+          echo "$output"
+          if [ $exit_code -ne 0 ]; then
+            if echo "$output" | grep -q "HTTP 4"; then
+              echo "::warning::Architecture check skipped — API returned an error (transient or key issue)"
+              exit 0
+            fi
+            exit $exit_code
+          fi

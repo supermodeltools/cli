@@ -62,7 +62,7 @@ func Logout(_ context.Context) error {
 
 // readSecret reads a line from stdin, suppressing echo when a TTY is attached.
 func readSecret() (string, error) {
-	fd := syscall.Stdin
+	fd := int(syscall.Stdin) //nolint:unconvert // syscall.Stdin is uintptr on Windows
 	if term.IsTerminal(fd) {
 		b, err := term.ReadPassword(fd)
 		fmt.Println() // restore newline after hidden input
