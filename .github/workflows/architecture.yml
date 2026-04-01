@@ -29,7 +29,6 @@ jobs:
           cache: true
 
       - name: Check vertical slice architecture
-        continue-on-error: true
         env:
           SUPERMODEL_API_KEY: ${{ secrets.SUPERMODEL_API_KEY }}
         run: |
