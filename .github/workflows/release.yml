@@ -48,3 +48,58 @@ jobs:
           npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.SUPERMODEL_NPM_TOKEN }}
+
+  wait-for-propagation:
+    name: wait for package propagation
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sleep 5 minutes
+        run: sleep 300
+
+  smoke-test:
+    name: smoke test / ${{ matrix.name }}
+    needs: wait-for-propagation
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: install.sh
+            os: ubuntu-latest
+          - name: npm
+            os: ubuntu-latest
+          - name: homebrew
+            os: macos-latest
+          - name: scoop
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install via install.sh
+        if: matrix.name == 'install.sh'
+        run: |
+          curl -fsSL https://supermodeltools.com/install.sh | SUPERMODEL_INSTALL_DIR="$HOME/.local/bin" sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install via npm
+        if: matrix.name == 'npm'
+        run: npm install -g @supermodeltools/cli
+
+      - name: Install via Homebrew
+        if: matrix.name == 'homebrew'
+        run: brew install supermodeltools/tap/supermodel
+
+      - name: Install via Scoop
+        if: matrix.name == 'scoop'
+        shell: pwsh
+        run: |
+          scoop bucket add supermodeltools https://github.com/supermodeltools/scoop-bucket
+          scoop install supermodel
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          supermodel --version
+          supermodel --version | grep -F "$VERSION"
+          supermodel --help
+          echo "✓ smoke test passed on ${{ matrix.name }}"
