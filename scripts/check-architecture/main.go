@@ -42,6 +42,7 @@ var sharedKernel = map[string]bool{
 	"internal/cache":  true,
 	"internal/config": true,
 	"internal/ui":     true,
+	// pkg/ is a public SDK, not subject to slice rules.
 }
 
 // --- Supermodel API response types -------------------------------------------
