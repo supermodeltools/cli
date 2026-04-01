@@ -1,6 +1,6 @@
 module github.com/supermodeltools/cli
 
-go 1.25.0
+go 1.25.8
 
 require (
 	github.com/spf13/cobra v1.10.2
