@@ -35,9 +35,15 @@ func Run(ctx context.Context, cfg *config.Config, dir string, targets []string, 
 		return err
 	}
 
+	idempotencyKey := "impact-" + hash[:16]
+	targetStr := strings.Join(targets, ",")
+	if targetStr != "" {
+		idempotencyKey += "-" + targetStr
+	}
+
 	client := api.New(cfg)
 	spin = ui.Start("Analyzing impact…")
-	result, err := client.Impact(ctx, zipPath, "impact-"+hash[:16], strings.Join(targets, ","), opts.Diff)
+	result, err := client.Impact(ctx, zipPath, idempotencyKey, targetStr, opts.Diff)
 	spin.Stop()
 	if err != nil {
 		return err
