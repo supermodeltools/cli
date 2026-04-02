@@ -158,6 +158,48 @@ type jobResult struct {
 	Graph Graph `json:"graph"`
 }
 
+// DeadCodeResult is the result from /v1/analysis/dead-code.
+type DeadCodeResult struct {
+	Metadata           DeadCodeMetadata    `json:"metadata"`
+	DeadCodeCandidates []DeadCodeCandidate `json:"deadCodeCandidates"`
+	AliveCode          []AliveCode         `json:"aliveCode"`
+	EntryPoints        []EntryPoint        `json:"entryPoints"`
+}
+
+// DeadCodeMetadata holds summary stats for a dead code analysis.
+type DeadCodeMetadata struct {
+	TotalDeclarations  int    `json:"totalDeclarations"`
+	DeadCodeCandidates int    `json:"deadCodeCandidates"`
+	AliveCode          int    `json:"aliveCode"`
+	AnalysisMethod     string `json:"analysisMethod"`
+	AnalysisStartTime  string `json:"analysisStartTime"`
+	AnalysisEndTime    string `json:"analysisEndTime"`
+}
+
+// DeadCodeCandidate is a function flagged as unreachable.
+type DeadCodeCandidate struct {
+	File       string `json:"file"`
+	Name       string `json:"name"`
+	Line       int    `json:"line"`
+	Type       string `json:"type"`
+	Confidence string `json:"confidence"`
+	Reason     string `json:"reason"`
+}
+
+// AliveCode is a function confirmed as reachable.
+type AliveCode struct {
+	File        string `json:"file"`
+	Name        string `json:"name"`
+	Line        int    `json:"line"`
+	Type        string `json:"type"`
+	CallerCount int    `json:"callerCount"`
+}
+
+// EntryPoint is a detected entry point that should not be flagged as dead.
+type EntryPoint struct {
+	File string `json:"file"`
+}
+
 // Error represents a non-2xx response from the API.
 type Error struct {
 	StatusCode int    `json:"-"`
