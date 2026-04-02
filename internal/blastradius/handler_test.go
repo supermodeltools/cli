@@ -116,3 +116,87 @@ func TestPrintResults_GlobalCouplingMap(t *testing.T) {
 		t.Errorf("expected dependent count 42, got:\n%s", out)
 	}
 }
+
+func TestPrintResults_MultipleTargets(t *testing.T) {
+	result := &api.ImpactResult{
+		Metadata: api.ImpactMetadata{
+			TotalFiles:      200,
+			TotalFunctions:  1000,
+			TargetsAnalyzed: 2,
+		},
+		Impacts: []api.ImpactTarget{
+			{
+				Target:      api.ImpactTargetInfo{File: "src/a.ts", Type: "file"},
+				BlastRadius: api.BlastRadius{DirectDependents: 5, TransitiveDependents: 10, AffectedFiles: 3, RiskScore: "medium"},
+			},
+			{
+				Target:      api.ImpactTargetInfo{File: "src/b.ts", Name: "doStuff", Type: "function"},
+				BlastRadius: api.BlastRadius{DirectDependents: 1, TransitiveDependents: 2, AffectedFiles: 1, RiskScore: "low"},
+			},
+		},
+	}
+	var buf bytes.Buffer
+	if err := printResults(&buf, result, ui.FormatHuman); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "src/a.ts") {
+		t.Error("expected first target in output")
+	}
+	if !strings.Contains(out, "src/b.ts:doStuff") {
+		t.Error("expected second target with function name in output")
+	}
+	if !strings.Contains(out, "2 target(s) analyzed") {
+		t.Error("expected summary with 2 targets")
+	}
+}
+
+func TestPrintResults_NoEntryPoints(t *testing.T) {
+	result := &api.ImpactResult{
+		Metadata: api.ImpactMetadata{TotalFiles: 50, TotalFunctions: 200, TargetsAnalyzed: 1},
+		Impacts: []api.ImpactTarget{
+			{
+				Target:      api.ImpactTargetInfo{File: "src/internal.ts", Type: "file"},
+				BlastRadius: api.BlastRadius{DirectDependents: 2, TransitiveDependents: 0, AffectedFiles: 1, RiskScore: "low"},
+				AffectedFiles: []api.AffectedFile{
+					{File: "src/caller.ts", DirectDependencies: 2, TransitiveDependencies: 0},
+				},
+			},
+		},
+	}
+	var buf bytes.Buffer
+	if err := printResults(&buf, result, ui.FormatHuman); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "Entry points") {
+		t.Error("should not show entry points section when none affected")
+	}
+	if !strings.Contains(out, "src/caller.ts") {
+		t.Error("expected affected file in output")
+	}
+}
+
+func TestPrintResults_JSONRoundTrip(t *testing.T) {
+	original := sampleImpact()
+	var buf bytes.Buffer
+	if err := printResults(&buf, original, ui.FormatJSON); err != nil {
+		t.Fatal(err)
+	}
+	var decoded api.ImpactResult
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if decoded.Metadata.TotalFiles != 100 {
+		t.Errorf("totalFiles: got %d, want 100", decoded.Metadata.TotalFiles)
+	}
+	if decoded.Metadata.TargetsAnalyzed != 1 {
+		t.Errorf("targetsAnalyzed: got %d, want 1", decoded.Metadata.TargetsAnalyzed)
+	}
+	if len(decoded.Impacts[0].AffectedFiles) != 2 {
+		t.Errorf("affectedFiles: got %d, want 2", len(decoded.Impacts[0].AffectedFiles))
+	}
+	if len(decoded.Impacts[0].EntryPointsAffected) != 1 {
+		t.Errorf("entryPoints: got %d, want 1", len(decoded.Impacts[0].EntryPointsAffected))
+	}
+}
