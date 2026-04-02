@@ -57,7 +57,7 @@ linters:
       # Ported packages from supermodeltools/arch-docs — style/complexity issues are
       # acceptable in vendored/ported code; fixing them would cause needless upstream divergence.
       - path: 'internal/archdocs/(graph2md|pssg)/'
-        linters: [gocritic, gocyclo, gosec, revive, ineffassign]
+        linters: [gocritic, gocyclo, gosec, revive, ineffassign, staticcheck]
       # Test files get more latitude.
       - path: _test\.go
         linters: [errcheck, gosec, gocritic]
