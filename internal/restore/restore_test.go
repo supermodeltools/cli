@@ -68,8 +68,8 @@ func TestIsHorizontalRule(t *testing.T) {
 		{"--", false},
 		{"abc", false},
 		{"# heading", false},
-		{"-*-", false},     // mixed characters
-		{"- -a", false},    // non-separator character
+		{"-*-", false},  // mixed characters
+		{"- -a", false}, // non-separator character
 	}
 	for _, tt := range tests {
 		if got := isHorizontalRule(tt.line); got != tt.want {

@@ -118,7 +118,7 @@ const deadCodeEndpoint = "/v1/analysis/dead-code"
 
 // DeadCode uploads a repository ZIP and runs dead code analysis,
 // polling until the async job completes and returning the result.
-func (c *Client) DeadCode(ctx context.Context, zipPath, idempotencyKey string, minConfidence string, limit int) (*DeadCodeResult, error) {
+func (c *Client) DeadCode(ctx context.Context, zipPath, idempotencyKey, minConfidence string, limit int) (*DeadCodeResult, error) {
 	endpoint := deadCodeEndpoint
 	sep := "?"
 	if minConfidence != "" {
