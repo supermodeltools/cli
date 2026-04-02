@@ -45,7 +45,7 @@ func findDeadCode(g *api.Graph, includeExports bool) []Result {
 	// Build set of function node IDs that receive at least one CALLS edge.
 	called := make(map[string]bool)
 	for _, rel := range g.Rels() {
-		if rel.Type == "CALLS" || rel.Type == "CONTAINS_CALL" {
+		if rel.Type == "calls" || rel.Type == "contains_call" {
 			called[rel.EndNode] = true
 		}
 	}

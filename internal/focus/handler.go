@@ -206,7 +206,7 @@ func reachableImports(g *api.Graph, seedID string, nodeByID map[string]*api.Node
 func functionNodesForFile(g *api.Graph, fileID string, rels []api.Relationship) []string {
 	var ids []string
 	for _, rel := range rels {
-		if (rel.Type == "DEFINES_FUNCTION" || rel.Type == "DEFINES") && rel.StartNode == fileID {
+		if (rel.Type == "defines_function" || rel.Type == "defines") && rel.StartNode == fileID {
 			ids = append(ids, rel.EndNode)
 		}
 	}
@@ -225,7 +225,7 @@ func functionNodesForFile(g *api.Graph, fileID string, rels []api.Relationship) 
 func buildCalleesOf(rels []api.Relationship) map[string][]string {
 	m := make(map[string][]string)
 	for _, rel := range rels {
-		if rel.Type == "CALLS" || rel.Type == "CONTAINS_CALL" {
+		if rel.Type == "calls" || rel.Type == "contains_call" {
 			m[rel.StartNode] = append(m[rel.StartNode], rel.EndNode)
 		}
 	}

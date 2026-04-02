@@ -62,7 +62,7 @@ func findBlastRadius(g *api.Graph, repoDir, target string, maxDepth int) ([]Resu
 	// Build reverse adjacency: nodeID → set of node IDs that import it.
 	importedBy := make(map[string][]string)
 	for _, rel := range g.Rels() {
-		if rel.Type == "IMPORTS" || rel.Type == "WILDCARD_IMPORTS" {
+		if rel.Type == "imports" || rel.Type == "wildcard_imports" {
 			importedBy[rel.EndNode] = append(importedBy[rel.EndNode], rel.StartNode)
 		}
 	}

@@ -37,8 +37,8 @@ func TestFindBlastRadius(t *testing.T) {
 			fileNode("c", "internal/c/c.go"),
 		},
 		Relationships: []api.Relationship{
-			{ID: "r1", Type: "IMPORTS", StartNode: "a", EndNode: "b"},
-			{ID: "r2", Type: "IMPORTS", StartNode: "c", EndNode: "a"},
+			{ID: "r1", Type: "imports", StartNode: "a", EndNode: "b"},
+			{ID: "r2", Type: "imports", StartNode: "c", EndNode: "a"},
 		},
 	}
 

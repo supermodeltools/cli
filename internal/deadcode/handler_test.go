@@ -46,7 +46,7 @@ func TestFindDeadCode(t *testing.T) {
 			node("f4", "Function", "Handler", "server.go"), // exported → excluded by default
 		},
 		Relationships: []api.Relationship{
-			{ID: "r1", Type: "CALLS", StartNode: "f2", EndNode: "f1"}, // main → process
+			{ID: "r1", Type: "calls", StartNode: "f2", EndNode: "f1"}, // main → process
 		},
 	}
 

@@ -114,7 +114,7 @@ func main() {
 
 	var violations []string
 	for _, rel := range graph.rels() {
-		if rel.Type != "IMPORTS" && rel.Type != "WILDCARD_IMPORTS" {
+		if rel.Type != "imports" && rel.Type != "wildcard_imports" {
 			continue
 		}
 		src := nodePackage[rel.StartNode]
