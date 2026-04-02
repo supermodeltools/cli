@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/supermodeltools/cli/internal/api"
+	"github.com/supermodeltools/cli/internal/cache"
 	"github.com/supermodeltools/cli/internal/config"
 	"github.com/supermodeltools/cli/internal/restore"
 )
@@ -117,13 +118,18 @@ func restoreViaAPI(cmd *cobra.Command, cfg *config.Config, rootDir, projectName 
 	}
 	defer os.Remove(zipPath)
 
+	hash, err := cache.HashFile(zipPath)
+	if err != nil {
+		return nil, fmt.Errorf("hash archive: %w", err)
+	}
+
 	client := api.New(cfg)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
 	fmt.Fprintln(cmd.ErrOrStderr(), "Analyzing repository…")
-	ir, err := client.AnalyzeDomains(ctx, zipPath, "restore-"+projectName)
+	ir, err := client.AnalyzeDomains(ctx, zipPath, "restore-"+hash[:16])
 	if err != nil {
 		return nil, err
 	}
@@ -197,14 +203,21 @@ func restoreWalkZip(dir, dest string) error {
 		if err != nil {
 			return err
 		}
-		src, err := os.Open(path) //nolint:gosec // path is from filepath.Walk within dir
-		if err != nil {
-			return err
-		}
-		defer src.Close()
-		_, err = io.Copy(w, src)
-		return err
+		return copyFileIntoZip(path, w)
 	})
+}
+
+// copyFileIntoZip opens path, copies its contents into w, then closes the file.
+// Using an explicit Close (rather than defer) avoids accumulating open handles
+// across all Walk iterations.
+func copyFileIntoZip(path string, w io.Writer) error {
+	src, err := os.Open(path) //nolint:gosec // path is from filepath.Walk within dir
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(w, src)
+	src.Close()
+	return err
 }
 
 // findGitRoot walks up from start to find the directory containing .git.

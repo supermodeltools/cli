@@ -323,7 +323,7 @@ func collectFiles(ctx context.Context, rootDir string) (extCounts map[string]int
 
 	walkErr := filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, werr error) error {
 		if werr != nil {
-			return nil
+			return werr
 		}
 		select {
 		case <-ctx.Done():

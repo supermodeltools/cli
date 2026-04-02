@@ -86,6 +86,9 @@ type RenderOptions struct {
 // Render produces the context bomb Markdown, respecting the token budget.
 // Returns the rendered text, estimated token count, and any template error.
 func Render(graph *ProjectGraph, projectName string, opts RenderOptions) (output string, tokens int, err error) {
+	if graph == nil {
+		return "", 0, fmt.Errorf("render: graph is nil")
+	}
 	if opts.MaxTokens <= 0 {
 		opts.MaxTokens = DefaultMaxTokens
 	}
