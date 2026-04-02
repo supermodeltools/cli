@@ -46,6 +46,7 @@ func Run(ctx context.Context, cfg *config.Config, dir string, targets []string, 
 	return printResults(os.Stdout, result, ui.ParseFormat(opts.Output))
 }
 
+// printResults writes the impact analysis result in the requested format.
 func printResults(w io.Writer, result *api.ImpactResult, fmt_ ui.Format) error {
 	if fmt_ == ui.FormatJSON {
 		return ui.JSON(w, result)
