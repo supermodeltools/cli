@@ -48,8 +48,8 @@ linters:
       # fmt.Fprintf/Fprintln to stdout/stderr — write errors are not actionable.
       - text: 'Error return value of `fmt\.Fp?rint'
         linters: [errcheck]
-      # Best-effort temp file cleanup.
-      - text: 'Error return value of `os\.Remove` is not checked'
+      # Best-effort temp file/dir cleanup.
+      - text: 'Error return value of `os\.RemoveAll?` is not checked'
         linters: [errcheck]
       # Test files get more latitude.
       - path: _test\.go
