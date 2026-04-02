@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+{{template "_head.html"}}
+<title>{{.Taxonomy.Label}} — {{.Site.Name}}</title>
+<meta name="description" content="Browse architecture documentation by {{.Taxonomy.Label | lower}}. {{len .Taxonomy.Entries}} categories available.">
+<link rel="canonical" href="{{.Site.BaseURL}}/{{.Taxonomy.Name}}/index.html">
+{{template "_og.html" .}}
+<style>{{template "_styles.css"}}</style>
+{{.JsonLD}}
+</head>
+<body>
+{{template "_header.html" .}}
+
+<main id="main-content">
+  <div class="container">
+    <div class="hub-header">
+      <div class="entity-breadcrumb">
+        <a href="/">Home</a>
+        <span class="sep">/</span>
+        <span>{{.Taxonomy.Label}}</span>
+      </div>
+      <h1>{{.Taxonomy.Label}}</h1>
+      <p>{{.Taxonomy.Config.IndexDescription}} &middot; {{len .Taxonomy.Entries}} categories</p>
+    </div>
+
+    <div class="chart-panel">
+      <h3>Distribution</h3>
+      <div id="taxonomy-chart"></div>
+      <script type="application/json" id="taxonomy-chart-data">{{.ChartData}}</script>
+    </div>
+
+    <div class="tax-grid">
+      {{range .Taxonomy.Entries}}
+      <a href="/{{$.Taxonomy.Name}}/{{.Slug}}.html" class="tax-entry">
+        <span>{{.Name}}</span>
+        <span class="tax-count">{{len .Entities}}</span>
+      </a>
+      {{end}}
+    </div>
+  </div>
+
+  {{if .CTA.Enabled}}
+  <div class="cta-section">
+    <h2 class="cta-heading">{{.CTA.Heading}}</h2>
+    <p class="cta-description">{{.CTA.Description}}</p>
+    <a href="{{.CTA.ButtonURL}}" class="cta-button" rel="noopener">{{.CTA.ButtonText}}</a>
+  </div>
+  {{end}}
+</main>
+
+{{template "_footer.html"}}
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="/main.js"></script>
+</body>
+</html>

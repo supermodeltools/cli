@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+{{template "_head.html"}}
+<title>{{.Taxonomy.Label}} — {{.Letter}} | {{.Site.Name}}</title>
+<meta name="description" content="Browse {{.Taxonomy.Label | lower}} entries starting with {{.Letter}} in the {{.Site.Name}} architecture documentation.">
+<link rel="canonical" href="{{.OG.URL}}">
+{{template "_og.html" .}}
+<style>{{template "_styles.css"}}</style>
+{{.JsonLD}}
+</head>
+<body>
+{{template "_header.html" .}}
+
+<main id="main-content">
+  <div class="container">
+    <div class="hub-header">
+      <div class="entity-breadcrumb">
+        <a href="/">Home</a>
+        <span class="sep">/</span>
+        <a href="/{{.Taxonomy.Name}}/index.html">{{.Taxonomy.Label}}</a>
+        <span class="sep">/</span>
+        <span>{{.Letter}}</span>
+      </div>
+      <h1>{{.Taxonomy.Label}} — {{.Letter}}</h1>
+      <p class="hub-desc">{{len .Entries}} entries starting with {{.Letter}}</p>
+    </div>
+
+    <div class="letter-nav">
+      {{range .Letters}}
+      {{if eq . $.Letter}}<span class="letter-link letter-active">{{.}}</span>
+      {{else}}<a href="/{{$.Taxonomy.Name}}/letter-{{. | lower}}.html" class="letter-link">{{.}}</a>{{end}}
+      {{end}}
+    </div>
+
+    <div class="chart-panel">
+      <h3>Entry Sizes</h3>
+      <div id="letter-chart"></div>
+      <script type="application/json" id="letter-chart-data">{{.ChartData}}</script>
+    </div>
+
+    <div class="tax-grid">
+      {{range .Entries}}
+      <a href="/{{$.Taxonomy.Name}}/{{.Slug}}.html" class="tax-entry">
+        <span>{{.Name}}</span>
+        <span class="tax-count">{{len .Entities}}</span>
+      </a>
+      {{end}}
+    </div>
+  </div>
+
+  {{if .CTA.Enabled}}
+  <div class="cta-section">
+    <h2 class="cta-heading">{{.CTA.Heading}}</h2>
+    <p class="cta-description">{{.CTA.Description}}</p>
+    <a href="{{.CTA.ButtonURL}}" class="cta-button" rel="noopener">{{.CTA.ButtonText}}</a>
+  </div>
+  {{end}}
+</main>
+
+{{template "_footer.html"}}
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+{{template "_head.html"}}
+<title>{{.Entity.GetString "title"}} | {{.Site.Name}}</title>
+<meta name="description" content="{{.Entity.GetString "description"}}">
+<link rel="canonical" href="{{.Site.BaseURL}}/{{.Entity.Slug}}/">
+{{template "_og.html" .}}
+<style>{{template "_styles.css"}}</style>
+{{.JsonLD}}
+</head>
+<body>
+{{template "_header.html" .}}
+
+<main class="entity-page" id="main-content">
+  <div class="container">
+    <div class="entity-header">
+      <div class="entity-breadcrumb">
+        <a href="/">Home</a>
+        <span class="sep">/</span>
+        {{if .Entity.GetString "node_type"}}<a href="/node_type/{{.Entity.GetString "node_type" | slug}}.html">{{.Entity.GetString "node_type"}}</a><span class="sep">/</span>{{end}}
+        <span>{{.Entity.GetString "title"}}</span>
+      </div>
+      <h1 class="entity-title">{{.Entity.GetString "title"}}</h1>
+      {{if not (.Entity.GetString "summary")}}<p class="entity-desc">{{.Entity.GetString "description"}}</p>{{end}}
+
+      <div class="entity-meta">
+        {{if .Entity.GetString "node_type"}}<a href="/node_type/{{.Entity.GetString "node_type" | slug}}.html" class="pill pill-accent">{{.Entity.GetString "node_type"}}</a>{{end}}
+        {{if .Entity.GetString "language"}}<a href="/language/{{.Entity.GetString "language" | slug}}.html" class="pill pill-blue">{{.Entity.GetString "language"}}</a>{{end}}
+        {{if .Entity.GetString "domain"}}<a href="/domain/{{.Entity.GetString "domain" | slug}}.html" class="pill pill-green">{{.Entity.GetString "domain"}}</a>{{end}}
+        {{if .Entity.GetString "subdomain"}}<a href="/subdomain/{{.Entity.GetString "subdomain" | slug}}.html" class="pill pill-orange">{{.Entity.GetString "subdomain"}}</a>{{end}}
+        {{if .Entity.GetInt "import_count"}}<span class="pill">{{.Entity.GetInt "import_count"}} imports</span>{{end}}
+        {{if .Entity.GetInt "imported_by_count"}}<span class="pill">{{.Entity.GetInt "imported_by_count"}} dependents</span>{{end}}
+        {{if .Entity.GetInt "call_count"}}<span class="pill">calls {{.Entity.GetInt "call_count"}}</span>{{end}}
+        {{if .Entity.GetInt "called_by_count"}}<span class="pill">called by {{.Entity.GetInt "called_by_count"}}</span>{{end}}
+        {{if .Entity.GetInt "function_count"}}<span class="pill">{{.Entity.GetInt "function_count"}} functions</span>{{end}}
+        {{if .Entity.GetInt "class_count"}}<span class="pill">{{.Entity.GetInt "class_count"}} classes</span>{{end}}
+        {{if .Entity.GetInt "file_count"}}<span class="pill">{{.Entity.GetInt "file_count"}} files</span>{{end}}
+      </div>
+
+      {{if .Entity.GetString "summary"}}
+      <div class="entity-summary">
+        <p>{{.Entity.GetString "summary"}}</p>
+      </div>
+      {{end}}
+    </div>
+
+    <div class="chart-panel entity-profile-panel">
+      <h3>Entity Profile</h3>
+      <div id="entity-profile-chart"></div>
+      <script type="application/json" id="entity-profile-data">{{.ChartData}}</script>
+    </div>
+
+    {{if or (.Entity.GetString "arch_map") (.Entity.GetString "mermaid_diagram") (.Entity.GetString "graph_data")}}
+    <div class="visuals-panel">
+      {{if .Entity.GetString "arch_map"}}
+      <div class="visuals-archmap" id="arch-map-container">
+        <div class="arch-map-svg"></div>
+        <script type="application/json" id="arch-map-data">{{.Entity.GetString "arch_map" | safeJS}}</script>
+        <noscript>
+          <div class="arch-map-fallback">
+            {{if .Entity.GetString "domain"}}<a href="/{{.Entity.GetString "domain" | slug}}.html">{{.Entity.GetString "domain"}}</a><span class="arch-sep">&rarr;</span>{{end}}
+            {{if .Entity.GetString "subdomain"}}<a href="/{{.Entity.GetString "subdomain" | slug}}.html">{{.Entity.GetString "subdomain"}}</a><span class="arch-sep">&rarr;</span>{{end}}
+            <span>{{.Entity.GetString "title"}}</span>
+          </div>
+        </noscript>
+      </div>
+      {{end}}
+
+      {{if or (.Entity.GetString "mermaid_diagram") (.Entity.GetString "graph_data")}}
+      <div class="visuals-row">
+        {{if .Entity.GetString "mermaid_diagram"}}
+        <div class="visuals-cell mermaid-container">
+          <h3>Dependency Diagram</h3>
+          <pre class="mermaid">{{.Entity.GetString "mermaid_diagram" | safeHTML}}</pre>
+        </div>
+        {{end}}
+
+        {{if .Entity.GetString "graph_data"}}
+        <div class="visuals-cell force-graph-container">
+          <h3>Relationship Graph</h3>
+          <div id="force-graph" data-center="{{.Entity.Slug}}"></div>
+          <script type="application/json" id="graph-data">{{.Entity.GetString "graph_data" | safeJS}}</script>
+          <noscript><p class="text-muted">Enable JavaScript to view the interactive relationship graph.</p></noscript>
+        </div>
+        {{end}}
+      </div>
+      {{end}}
+    </div>
+    {{end}}
+
+    {{if .SourceCode}}
+    <div class="entity-section source-code-section">
+      <h2>Source Code</h2>
+      {{if .Entity.GetInt "start_line"}}<p class="source-location">{{.Entity.GetString "file_path"}} lines {{.Entity.GetInt "start_line"}}–{{.Entity.GetInt "end_line"}}</p>{{end}}
+      <pre class="source-code"><code class="language-{{.SourceLang}}">{{.SourceCode}}</code></pre>
+    </div>
+    {{end}}
+
+    {{$sections := .Entity.Sections}}
+
+    {{with index $sections "Domain"}}
+    <div class="entity-section">
+      <h2>Domain</h2>
+      <ul>{{range .}}<li>{{. | safeHTML}}</li>{{end}}</ul>
+    </div>
+    {{end}}
+
+    {{with index $sections "Subdomains"}}
+    <div class="entity-section">
+      <h2>Subdomains</h2>
+      <ul>{{range .}}<li>{{. | safeHTML}}</li>{{end}}</ul>
+    </div>
+    {{end}}
+
+    {{with index $sections "Defined In"}}
+    <div class="entity-section">
+      <h2>Defined In</h2>
+      <ul>{{range .}}<li>{{. | safeHTML}}</li>{{end}}</ul>
+    </div>
+    {{end}}
+
+    {{with index $sections "Functions"}}
+    <div class="entity-section">
+      <h2>Functions</h2>
+      <ul>{{range .}}<li>{{. | safeHTML}}</li>{{end}}</ul>
+    </div>
+    {{end}}
+
+    {{with index $sections "Classes"}}
+    <div class="entity-section">
+      <h2>Classes</h2>
+      <ul>{{range .}}<li>{{. | safeHTML}}</li>{{end}}</ul>
+    </div>
+    {{end}}
+
+    {{with index $sections "Types"}}
+    <div class="entity-section">
+      <h2>Types</h2>
+      <ul>{{range .}}<li>{{. | safeHTML}}</li>{{end}}</ul>
+    </div>
+    {{end}}
+
+    {{with index $sections "Dependencies"}}
+    <div class="entity-section">
+      <h2>Dependencies</h2>
+      <ul>{{range .}}<li>{{. | safeHTML}}</li>{{end}}</ul>
+    </div>
+    {{end}}
+
+    {{with index $sections "Imported By"}}
+    <div class="entity-section">
+      <h2>Imported By</h2>
+      <ul>{{range .}}<li>{{. | safeHTML}}</li>{{end}}</ul>
+    </div>
+    {{end}}
+
+    {{with index $sections "Calls"}}
+    <div class="entity-section">
+      <h2>Calls</h2>
+      <ul>{{range .}}<li>{{. | safeHTML}}</li>{{end}}</ul>
+    </div>
+    {{end}}
+
+    {{with index $sections "Called By"}}
+    <div class="entity-section">
+      <h2>Called By</h2>
+      <ul>{{range .}}<li>{{. | safeHTML}}</li>{{end}}</ul>
+    </div>
+    {{end}}
+
+    {{with index $sections "Source Files"}}
+    <div class="entity-section">
+      <h2>Source Files</h2>
+      <ul>{{range .}}<li>{{. | safeHTML}}</li>{{end}}</ul>
+    </div>
+    {{end}}
+
+    {{with index $sections "Subdirectories"}}
+    <div class="entity-section">
+      <h2>Subdirectories</h2>
+      <ul>{{range .}}<li>{{. | safeHTML}}</li>{{end}}</ul>
+    </div>
+    {{end}}
+
+    {{with index $sections "Files"}}
+    <div class="entity-section">
+      <h2>Files</h2>
+      <ul>{{range .}}<li>{{. | safeHTML}}</li>{{end}}</ul>
+    </div>
+    {{end}}
+
+    {{with index $sections "Extends"}}
+    <div class="entity-section">
+      <h2>Extends</h2>
+      <ul>{{range .}}<li>{{. | safeHTML}}</li>{{end}}</ul>
+    </div>
+    {{end}}
+
+    {{with index $sections "Source"}}
+    <div class="entity-section">
+      <h2>Source</h2>
+      <ul>{{range .}}<li>{{. | safeHTML}}</li>{{end}}</ul>
+    </div>
+    {{end}}
+
+    {{with .Entity.GetFAQs}}
+    <div class="entity-section entity-faqs">
+      <h2>Frequently Asked Questions</h2>
+      {{range .}}
+      <details class="faq-item">
+        <summary class="faq-question">{{.Question}}</summary>
+        <div class="faq-answer">{{.Answer | safeHTML}}</div>
+      </details>
+      {{end}}
+    </div>
+    {{end}}
+
+    {{if .CTA.Enabled}}
+    <div class="cta-section">
+      <h2 class="cta-heading">{{.CTA.Heading}}</h2>
+      <p class="cta-description">{{.CTA.Description}}</p>
+      <a href="{{.CTA.ButtonURL}}" class="cta-button" rel="noopener">{{.CTA.ButtonText}}</a>
+    </div>
+    {{end}}
+
+  </div>
+</main>
+
+{{template "_footer.html"}}
+{{if .Entity.GetString "mermaid_diagram"}}<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>{{end}}
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="/main.js"></script>
+</body>
+</html>

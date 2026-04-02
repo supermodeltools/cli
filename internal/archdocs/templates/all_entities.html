@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+{{template "_head.html"}}
+<title>All Entities{{if gt .Pagination.CurrentPage 1}} — Page {{.Pagination.CurrentPage}}{{end}} | {{.Site.Name}}</title>
+<meta name="description" content="Browse all {{.TotalEntities}} entities in the {{.Site.Name}} architecture documentation.">
+{{$curPage := index .Pagination.PageURLs (sub .Pagination.CurrentPage 1)}}<link rel="canonical" href="{{.Site.BaseURL}}{{$curPage.URL}}">
+{{template "_og.html" .}}
+<style>{{template "_styles.css"}}</style>
+{{.JsonLD}}
+</head>
+<body>
+{{template "_header.html" .}}
+
+<main id="main-content">
+  <div class="container">
+    <div class="hub-header">
+      <div class="entity-breadcrumb">
+        <a href="/">Home</a>
+        <span class="sep">/</span>
+        <span>All Entities</span>
+      </div>
+      <h1>All Entities</h1>
+      <p class="hub-desc">Browse all {{.TotalEntities | formatNumber}} entities in the {{.Site.Name}} architecture documentation — every file, function, class, type, domain, and directory.</p>
+      <p class="hub-meta">{{.TotalEntities | formatNumber}} entities &middot; Page {{.Pagination.CurrentPage}} of {{.Pagination.TotalPages}}</p>
+    </div>
+
+    {{if eq .Pagination.CurrentPage 1}}
+    <div class="chart-panel">
+      <h3>Entity Types</h3>
+      <div id="all-entities-chart"></div>
+      <script type="application/json" id="all-entities-chart-data">{{.ChartData}}</script>
+    </div>
+    {{end}}
+
+    <div class="card-grid">
+      {{range .Entities}}
+      <a href="/{{.Slug}}.html" class="card">
+        <div class="card-title">{{.GetString "title"}}</div>
+        <div class="card-desc">{{.GetString "description"}}</div>
+        <div class="card-meta">
+          {{if .GetString "node_type"}}<span class="pill pill-accent">{{.GetString "node_type"}}</span>{{end}}
+          {{if .GetString "language"}}<span class="pill pill-blue">{{.GetString "language"}}</span>{{end}}
+        </div>
+      </a>
+      {{end}}
+    </div>
+
+    {{if gt .Pagination.TotalPages 1}}
+    <div class="pagination">
+      {{if .Pagination.PrevURL}}
+      <a href="{{.Pagination.PrevURL}}">&laquo; Prev</a>
+      {{end}}
+      {{range .Pagination.PageURLs}}
+      {{if eq .Number $.Pagination.CurrentPage}}
+      <span class="current">{{.Number}}</span>
+      {{else if le .Number 5}}
+      <a href="{{.URL}}">{{.Number}}</a>
+      {{else if gt .Number (sub $.Pagination.TotalPages 2)}}
+      <a href="{{.URL}}">{{.Number}}</a>
+      {{end}}
+      {{end}}
+      {{if .Pagination.NextURL}}
+      <a href="{{.Pagination.NextURL}}">Next &raquo;</a>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+
+  {{if .CTA.Enabled}}
+  <div class="cta-section">
+    <h2 class="cta-heading">{{.CTA.Heading}}</h2>
+    <p class="cta-description">{{.CTA.Description}}</p>
+    <a href="{{.CTA.ButtonURL}}" class="cta-button" rel="noopener">{{.CTA.ButtonText}}</a>
+  </div>
+  {{end}}
+</main>
+
+{{template "_footer.html"}}
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="/main.js"></script>
+</body>
+</html>

@@ -28,6 +28,12 @@ var skipDirs = map[string]bool{
 	".tox":         true,
 }
 
+// CreateZip is the exported form of createZip, used by packages outside
+// this one that need to archive a repository directory.
+func CreateZip(dir string) (string, error) {
+	return createZip(dir)
+}
+
 // createZip archives the repository at dir into a temporary ZIP file and
 // returns its path. The caller is responsible for removing the file.
 //

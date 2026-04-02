@@ -50,6 +50,17 @@ func (c *Client) Analyze(ctx context.Context, zipPath, idempotencyKey string) (*
 	return &result.Graph, nil
 }
 
+// AnalyzeRaw uploads a repository ZIP and runs the full analysis pipeline,
+// returning the raw result JSON from the completed job. Use this when you need
+// the full response payload (e.g. for graph2md / arch-docs generation).
+func (c *Client) AnalyzeRaw(ctx context.Context, zipPath, idempotencyKey string) (json.RawMessage, error) {
+	job, err := c.pollUntilComplete(ctx, zipPath, idempotencyKey)
+	if err != nil {
+		return nil, err
+	}
+	return job.Result, nil
+}
+
 // AnalyzeDomains uploads a repository ZIP and runs the full analysis pipeline,
 // returning the complete SupermodelIR response (domains, summary, metadata, graph).
 // Use this instead of Analyze when you need high-level domain information.
