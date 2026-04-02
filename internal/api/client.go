@@ -39,12 +39,39 @@ const analyzeEndpoint = "/v1/graphs/supermodel"
 // Analyze uploads a repository ZIP and runs the full analysis pipeline,
 // polling until the async job completes and returning the Graph.
 func (c *Client) Analyze(ctx context.Context, zipPath, idempotencyKey string) (*Graph, error) {
+	job, err := c.pollUntilComplete(ctx, zipPath, idempotencyKey)
+	if err != nil {
+		return nil, err
+	}
+	var result jobResult
+	if err := json.Unmarshal(job.Result, &result); err != nil {
+		return nil, fmt.Errorf("decode graph result: %w", err)
+	}
+	return &result.Graph, nil
+}
+
+// AnalyzeDomains uploads a repository ZIP and runs the full analysis pipeline,
+// returning the complete SupermodelIR response (domains, summary, metadata, graph).
+// Use this instead of Analyze when you need high-level domain information.
+func (c *Client) AnalyzeDomains(ctx context.Context, zipPath, idempotencyKey string) (*SupermodelIR, error) {
+	job, err := c.pollUntilComplete(ctx, zipPath, idempotencyKey)
+	if err != nil {
+		return nil, err
+	}
+	var ir SupermodelIR
+	if err := json.Unmarshal(job.Result, &ir); err != nil {
+		return nil, fmt.Errorf("decode domain result: %w", err)
+	}
+	return &ir, nil
+}
+
+// pollUntilComplete submits a ZIP to the analyze endpoint and polls until the
+// async job reaches "completed" status, then returns the raw JobResponse.
+func (c *Client) pollUntilComplete(ctx context.Context, zipPath, idempotencyKey string) (*JobResponse, error) {
 	job, err := c.postZip(ctx, zipPath, idempotencyKey)
 	if err != nil {
 		return nil, err
 	}
-
-	// Poll until the job completes.
 	for job.Status == "pending" || job.Status == "processing" {
 		wait := time.Duration(job.RetryAfter) * time.Second
 		if wait <= 0 {
@@ -55,25 +82,18 @@ func (c *Client) Analyze(ctx context.Context, zipPath, idempotencyKey string) (*
 			return nil, ctx.Err()
 		case <-time.After(wait):
 		}
-
 		job, err = c.postZip(ctx, zipPath, idempotencyKey)
 		if err != nil {
 			return nil, err
 		}
 	}
-
 	if job.Error != nil {
 		return nil, fmt.Errorf("analysis failed: %s", *job.Error)
 	}
 	if job.Status != "completed" {
 		return nil, fmt.Errorf("unexpected job status: %s", job.Status)
 	}
-
-	var result jobResult
-	if err := json.Unmarshal(job.Result, &result); err != nil {
-		return nil, fmt.Errorf("decode graph result: %w", err)
-	}
-	return &result.Graph, nil
+	return job, nil
 }
 
 // postZip sends the repository ZIP to the analyze endpoint and returns the

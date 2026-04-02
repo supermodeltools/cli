@@ -93,6 +93,57 @@ func (g *Graph) NodeByID(id string) (Node, bool) {
 	return Node{}, false
 }
 
+// SupermodelIR is the full structured response returned inside a completed job
+// result from /v1/graphs/supermodel. It contains high-level domain information
+// in addition to the raw node/edge graph captured by Graph.
+type SupermodelIR struct {
+	Repo     string         `json:"repo"`
+	Summary  map[string]any `json:"summary"`
+	Metadata IRMetadata     `json:"metadata"`
+	Domains  []IRDomain     `json:"domains"`
+	Graph    IRGraph        `json:"graph"`
+}
+
+// IRMetadata holds file-count and language statistics from the API response.
+type IRMetadata struct {
+	FileCount int      `json:"fileCount"`
+	Languages []string `json:"languages"`
+}
+
+// IRGraph is the raw node/relationship sub-graph embedded in SupermodelIR.
+type IRGraph struct {
+	Nodes         []IRNode         `json:"nodes"`
+	Relationships []IRRelationship `json:"relationships"`
+}
+
+// IRNode is a single node in the IRGraph.
+type IRNode struct {
+	Type string `json:"type"`
+	Name string `json:"name"`
+}
+
+// IRRelationship is a directed edge in the IRGraph.
+type IRRelationship struct {
+	Type   string `json:"type"`
+	Source string `json:"source"`
+	Target string `json:"target"`
+}
+
+// IRDomain is the raw representation of a semantic domain from the API.
+type IRDomain struct {
+	Name               string        `json:"name"`
+	DescriptionSummary string        `json:"descriptionSummary"`
+	KeyFiles           []string      `json:"keyFiles"`
+	Responsibilities   []string      `json:"responsibilities"`
+	Subdomains         []IRSubdomain `json:"subdomains"`
+}
+
+// IRSubdomain is a named sub-area within an IRDomain.
+type IRSubdomain struct {
+	Name               string `json:"name"`
+	DescriptionSummary string `json:"descriptionSummary"`
+}
+
 // JobResponse is the async envelope returned by the API for long-running jobs.
 type JobResponse struct {
 	Status     string          `json:"status"`
