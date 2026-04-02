@@ -23,7 +23,7 @@ type Options struct {
 }
 
 // Run uploads the repo and runs dead code analysis via the dedicated API endpoint.
-func Run(ctx context.Context, cfg *config.Config, dir string, opts Options) error {
+func Run(ctx context.Context, cfg *config.Config, dir string, opts *Options) error {
 	spin := ui.Start("Creating repository archive…")
 	zipPath, err := createZip(dir)
 	spin.Stop()

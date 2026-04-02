@@ -43,7 +43,7 @@ explanations for why each function was flagged.`,
 				ctx, cancel = context.WithTimeout(ctx, time.Duration(opts.Timeout)*time.Second)
 				defer cancel()
 			}
-			if err := deadcode.Run(ctx, cfg, dir, opts); err != nil {
+			if err := deadcode.Run(ctx, cfg, dir, &opts); err != nil {
 				if ctx.Err() == context.DeadlineExceeded {
 					return fmt.Errorf("analysis timed out after %ds (increase with --timeout)", opts.Timeout)
 				}
