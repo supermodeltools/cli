@@ -1,88 +1,118 @@
 package blastradius
 
 import (
+	"bytes"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/supermodeltools/cli/internal/api"
+	"github.com/supermodeltools/cli/internal/ui"
 )
 
-func TestPathMatches(t *testing.T) {
-	tests := []struct {
-		nodePath string
-		target   string
-		want     bool
-	}{
-		{"internal/api/client.go", "internal/api/client.go", true},
-		{"./internal/api/client.go", "internal/api/client.go", true},
-		{"/repo/internal/api/client.go", "internal/api/client.go", true},
-		{"internal/auth/handler.go", "internal/api/client.go", false},
-		{"internal/apifoo/client.go", "internal/api/client.go", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.nodePath+"→"+tt.target, func(t *testing.T) {
-			got := pathMatches(tt.nodePath, tt.target)
-			if got != tt.want {
-				t.Errorf("pathMatches(%q, %q) = %v, want %v", tt.nodePath, tt.target, got, tt.want)
-			}
-		})
+func sampleImpact() *api.ImpactResult {
+	return &api.ImpactResult{
+		Metadata: api.ImpactMetadata{
+			TotalFiles:      100,
+			TotalFunctions:  500,
+			TargetsAnalyzed: 1,
+			AnalysisMethod:  "call_graph + dependency_graph",
+		},
+		Impacts: []api.ImpactTarget{
+			{
+				Target: api.ImpactTargetInfo{File: "src/auth/login.ts", Type: "file"},
+				BlastRadius: api.BlastRadius{
+					DirectDependents:     3,
+					TransitiveDependents: 7,
+					AffectedFiles:        5,
+					RiskScore:            "high",
+					RiskFactors:          []string{"Affects authentication flow"},
+				},
+				AffectedFiles: []api.AffectedFile{
+					{File: "src/api/routes.ts", DirectDependencies: 2, TransitiveDependencies: 0},
+					{File: "src/middleware/auth.ts", DirectDependencies: 1, TransitiveDependencies: 3},
+				},
+				EntryPointsAffected: []api.AffectedEntryPoint{
+					{File: "src/api/routes.ts", Name: "/api/login", Type: "route_handler"},
+				},
+			},
+		},
 	}
 }
 
-func TestFindBlastRadius(t *testing.T) {
-	// Dependency chain: c → a → b (a imports b, c imports a)
-	g := &api.Graph{
-		Nodes: []api.Node{
-			fileNode("a", "internal/a/a.go"),
-			fileNode("b", "internal/b/b.go"),
-			fileNode("c", "internal/c/c.go"),
-		},
-		Relationships: []api.Relationship{
-			{ID: "r1", Type: "imports", StartNode: "a", EndNode: "b"},
-			{ID: "r2", Type: "imports", StartNode: "c", EndNode: "a"},
-		},
+func TestPrintResults_Human(t *testing.T) {
+	var buf bytes.Buffer
+	if err := printResults(&buf, sampleImpact(), ui.FormatHuman); err != nil {
+		t.Fatal(err)
 	}
+	out := buf.String()
 
-	t.Run("blast radius of b", func(t *testing.T) {
-		results, err := findBlastRadius(g, ".", "internal/b/b.go", 0)
-		if err != nil {
-			t.Fatal(err)
+	for _, want := range []string{
+		"src/auth/login.ts",
+		"high",
+		"Direct: 3",
+		"Transitive: 7",
+		"Affects authentication flow",
+		"src/api/routes.ts",
+		"/api/login",
+		"route_handler",
+		"1 target(s) analyzed",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in output, got:\n%s", want, out)
 		}
-		if len(results) != 2 {
-			t.Fatalf("expected 2 affected files, got %d: %v", len(results), results)
-		}
-		if results[0].File != "internal/a/a.go" || results[0].Depth != 1 {
-			t.Errorf("expected a at depth 1, got %+v", results[0])
-		}
-		if results[1].File != "internal/c/c.go" || results[1].Depth != 2 {
-			t.Errorf("expected c at depth 2, got %+v", results[1])
-		}
-	})
-
-	t.Run("depth cap", func(t *testing.T) {
-		results, err := findBlastRadius(g, ".", "internal/b/b.go", 1)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(results) != 1 {
-			t.Fatalf("expected 1 result at depth 1, got %d", len(results))
-		}
-		if results[0].File != "internal/a/a.go" {
-			t.Errorf("expected a, got %q", results[0].File)
-		}
-	})
-
-	t.Run("unknown file", func(t *testing.T) {
-		_, err := findBlastRadius(g, ".", "internal/z/z.go", 0)
-		if err == nil {
-			t.Fatal("expected error for unknown file")
-		}
-	})
+	}
 }
 
-func fileNode(id, path string) api.Node {
-	return api.Node{
-		ID:         id,
-		Labels:     []string{"File"},
-		Properties: map[string]any{"path": path},
+func TestPrintResults_Empty(t *testing.T) {
+	result := &api.ImpactResult{
+		Metadata: api.ImpactMetadata{TotalFiles: 100},
+	}
+	var buf bytes.Buffer
+	if err := printResults(&buf, result, ui.FormatHuman); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "No impact detected") {
+		t.Errorf("expected 'No impact detected', got:\n%s", buf.String())
+	}
+}
+
+func TestPrintResults_JSON(t *testing.T) {
+	var buf bytes.Buffer
+	if err := printResults(&buf, sampleImpact(), ui.FormatJSON); err != nil {
+		t.Fatal(err)
+	}
+	var decoded api.ImpactResult
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(decoded.Impacts) != 1 {
+		t.Errorf("expected 1 impact, got %d", len(decoded.Impacts))
+	}
+	if decoded.Impacts[0].BlastRadius.RiskScore != "high" {
+		t.Errorf("expected risk=high, got %q", decoded.Impacts[0].BlastRadius.RiskScore)
+	}
+}
+
+func TestPrintResults_GlobalCouplingMap(t *testing.T) {
+	result := &api.ImpactResult{
+		Metadata: api.ImpactMetadata{TotalFiles: 100},
+		GlobalMetrics: api.ImpactGlobalMetrics{
+			MostCriticalFiles: []api.CriticalFileMetric{
+				{File: "src/core/db.ts", DependentCount: 42},
+				{File: "src/core/auth.ts", DependentCount: 31},
+			},
+		},
+	}
+	var buf bytes.Buffer
+	if err := printResults(&buf, result, ui.FormatHuman); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "Most critical files") {
+		t.Errorf("expected global coupling header, got:\n%s", out)
+	}
+	if !strings.Contains(out, "42") {
+		t.Errorf("expected dependent count 42, got:\n%s", out)
 	}
 }

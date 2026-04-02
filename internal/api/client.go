@@ -191,6 +191,98 @@ func (c *Client) postZipTo(ctx context.Context, zipPath, idempotencyKey, endpoin
 	return &job, nil
 }
 
+// impactEndpoint is the API path for impact analysis.
+const impactEndpoint = "/v1/analysis/impact"
+
+// Impact uploads a repository ZIP (and optional diff) and runs impact analysis,
+// polling until the async job completes and returning the result.
+func (c *Client) Impact(ctx context.Context, zipPath, idempotencyKey, targets, diffPath string) (*ImpactResult, error) {
+	endpoint := impactEndpoint
+	if targets != "" {
+		endpoint += "?targets=" + targets
+	}
+
+	job, err := c.postImpact(ctx, zipPath, diffPath, idempotencyKey, endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	for job.Status == "pending" || job.Status == "processing" {
+		wait := time.Duration(job.RetryAfter) * time.Second
+		if wait <= 0 {
+			wait = 5 * time.Second
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(wait):
+		}
+		job, err = c.postImpact(ctx, zipPath, diffPath, idempotencyKey, endpoint)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if job.Error != nil {
+		return nil, fmt.Errorf("impact analysis failed: %s", *job.Error)
+	}
+	if job.Status != "completed" {
+		return nil, fmt.Errorf("unexpected job status: %s", job.Status)
+	}
+
+	var result ImpactResult
+	if err := json.Unmarshal(job.Result, &result); err != nil {
+		return nil, fmt.Errorf("decode impact result: %w", err)
+	}
+	return &result, nil
+}
+
+// postImpact sends the repo ZIP and optional diff to the impact endpoint.
+func (c *Client) postImpact(ctx context.Context, zipPath, diffPath, idempotencyKey, endpoint string) (*JobResponse, error) {
+	if diffPath == "" {
+		return c.postZipTo(ctx, zipPath, idempotencyKey, endpoint)
+	}
+
+	// Multipart with both zip and diff.
+	zipFile, err := os.Open(zipPath)
+	if err != nil {
+		return nil, err
+	}
+	defer zipFile.Close()
+
+	diffFile, err := os.Open(diffPath)
+	if err != nil {
+		return nil, err
+	}
+	defer diffFile.Close()
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+
+	fw, err := mw.CreateFormFile("file", filepath.Base(zipPath))
+	if err != nil {
+		return nil, err
+	}
+	if _, err = io.Copy(fw, zipFile); err != nil {
+		return nil, err
+	}
+
+	dw, err := mw.CreateFormFile("diff", filepath.Base(diffPath))
+	if err != nil {
+		return nil, err
+	}
+	if _, err = io.Copy(dw, diffFile); err != nil {
+		return nil, err
+	}
+	mw.Close()
+
+	var job JobResponse
+	if err := c.request(ctx, http.MethodPost, endpoint, mw.FormDataContentType(), &buf, idempotencyKey, &job); err != nil {
+		return nil, err
+	}
+	return &job, nil
+}
+
 // DisplayGraph fetches the composed display graph for an already-analyzed repo.
 func (c *Client) DisplayGraph(ctx context.Context, repoID, idempotencyKey string) (*Graph, error) {
 	var g Graph

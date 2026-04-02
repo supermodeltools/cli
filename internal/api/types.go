@@ -200,6 +200,94 @@ type EntryPoint struct {
 	File string `json:"file"`
 }
 
+// ImpactResult is the result from /v1/analysis/impact.
+type ImpactResult struct {
+	Metadata      ImpactMetadata      `json:"metadata"`
+	Impacts       []ImpactTarget      `json:"impacts"`
+	GlobalMetrics ImpactGlobalMetrics `json:"globalMetrics"`
+}
+
+// ImpactMetadata holds summary stats for an impact analysis.
+type ImpactMetadata struct {
+	TotalFiles        int    `json:"totalFiles"`
+	TotalFunctions    int    `json:"totalFunctions"`
+	TargetsAnalyzed   int    `json:"targetsAnalyzed"`
+	AnalysisMethod    string `json:"analysisMethod"`
+	AnalysisStartTime string `json:"analysisStartTime"`
+	AnalysisEndTime   string `json:"analysisEndTime"`
+}
+
+// ImpactTarget is the impact analysis result for a single target.
+type ImpactTarget struct {
+	Target              ImpactTargetInfo    `json:"target"`
+	BlastRadius         BlastRadius         `json:"blastRadius"`
+	AffectedFunctions   []AffectedFunction  `json:"affectedFunctions"`
+	AffectedFiles       []AffectedFile      `json:"affectedFiles"`
+	EntryPointsAffected []AffectedEntryPoint `json:"entryPointsAffected"`
+}
+
+// ImpactTargetInfo identifies the file or function being analyzed.
+type ImpactTargetInfo struct {
+	File string `json:"file"`
+	Name string `json:"name,omitempty"`
+	Line int    `json:"line,omitempty"`
+	Type string `json:"type"`
+}
+
+// BlastRadius holds blast radius metrics for a target.
+type BlastRadius struct {
+	DirectDependents     int      `json:"directDependents"`
+	TransitiveDependents int      `json:"transitiveDependents"`
+	AffectedFiles        int      `json:"affectedFiles"`
+	AffectedDomains      []string `json:"affectedDomains,omitempty"`
+	RiskScore            string   `json:"riskScore"`
+	RiskFactors          []string `json:"riskFactors,omitempty"`
+}
+
+// AffectedFunction is a function affected by changes to the target.
+type AffectedFunction struct {
+	File         string `json:"file"`
+	Name         string `json:"name"`
+	Line         int    `json:"line,omitempty"`
+	Type         string `json:"type"`
+	Distance     int    `json:"distance"`
+	Relationship string `json:"relationship"`
+}
+
+// AffectedFile is a file affected by changes to the target.
+type AffectedFile struct {
+	File                    string `json:"file"`
+	DirectDependencies      int    `json:"directDependencies"`
+	TransitiveDependencies  int    `json:"transitiveDependencies"`
+}
+
+// AffectedEntryPoint is an entry point affected by changes to the target.
+type AffectedEntryPoint struct {
+	File string `json:"file"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+// ImpactGlobalMetrics holds global metrics across all analyzed targets.
+type ImpactGlobalMetrics struct {
+	MostCriticalFiles       []CriticalFileMetric     `json:"mostCriticalFiles,omitempty"`
+	CrossDomainDependencies []CrossDomainDependency `json:"crossDomainDependencies,omitempty"`
+}
+
+// CriticalFileMetric identifies a high-dependent-count file.
+type CriticalFileMetric struct {
+	File           string `json:"file"`
+	DependentCount int    `json:"dependentCount"`
+}
+
+// CrossDomainDependency identifies a dependency crossing domain boundaries.
+type CrossDomainDependency struct {
+	Source       string `json:"source"`
+	Target       string `json:"target"`
+	SourceDomain string `json:"sourceDomain"`
+	TargetDomain string `json:"targetDomain"`
+}
+
 // Error represents a non-2xx response from the API.
 type Error struct {
 	StatusCode int    `json:"-"`
