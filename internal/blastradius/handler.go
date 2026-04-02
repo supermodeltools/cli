@@ -66,8 +66,9 @@ func printResults(w io.Writer, result *api.ImpactResult, fmt_ ui.Format) error {
 		return nil
 	}
 
-	for _, impact := range result.Impacts {
-		br := impact.BlastRadius
+	for i := range result.Impacts {
+		impact := &result.Impacts[i]
+		br := &impact.BlastRadius
 		fmt.Fprintf(w, "Target: %s", impact.Target.File)
 		if impact.Target.Name != "" {
 			fmt.Fprintf(w, ":%s", impact.Target.Name)

@@ -219,10 +219,10 @@ type ImpactMetadata struct {
 
 // ImpactTarget is the impact analysis result for a single target.
 type ImpactTarget struct {
-	Target              ImpactTargetInfo    `json:"target"`
-	BlastRadius         BlastRadius         `json:"blastRadius"`
-	AffectedFunctions   []AffectedFunction  `json:"affectedFunctions"`
-	AffectedFiles       []AffectedFile      `json:"affectedFiles"`
+	Target              ImpactTargetInfo     `json:"target"`
+	BlastRadius         BlastRadius          `json:"blastRadius"`
+	AffectedFunctions   []AffectedFunction   `json:"affectedFunctions"`
+	AffectedFiles       []AffectedFile       `json:"affectedFiles"`
 	EntryPointsAffected []AffectedEntryPoint `json:"entryPointsAffected"`
 }
 
@@ -256,9 +256,9 @@ type AffectedFunction struct {
 
 // AffectedFile is a file affected by changes to the target.
 type AffectedFile struct {
-	File                    string `json:"file"`
-	DirectDependencies      int    `json:"directDependencies"`
-	TransitiveDependencies  int    `json:"transitiveDependencies"`
+	File                   string `json:"file"`
+	DirectDependencies     int    `json:"directDependencies"`
+	TransitiveDependencies int    `json:"transitiveDependencies"`
 }
 
 // AffectedEntryPoint is an entry point affected by changes to the target.
@@ -270,7 +270,7 @@ type AffectedEntryPoint struct {
 
 // ImpactGlobalMetrics holds global metrics across all analyzed targets.
 type ImpactGlobalMetrics struct {
-	MostCriticalFiles       []CriticalFileMetric     `json:"mostCriticalFiles,omitempty"`
+	MostCriticalFiles       []CriticalFileMetric    `json:"mostCriticalFiles,omitempty"`
 	CrossDomainDependencies []CrossDomainDependency `json:"crossDomainDependencies,omitempty"`
 }
 
