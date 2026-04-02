@@ -104,7 +104,7 @@ func compactDir(errOut io.Writer, dir, outDir string, dryRun bool) error {
 		if err != nil {
 			return err
 		}
-		defer os.RemoveAll(tmp)
+		defer func() { _ = os.RemoveAll(tmp) }()
 		stats, walkErr = compact.CompactDir(dir, tmp)
 		if walkErr != nil {
 			return walkErr

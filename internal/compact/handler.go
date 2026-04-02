@@ -17,6 +17,7 @@ import (
 // Language is a recognised source language.
 type Language string
 
+// Supported language values for Language.
 const (
 	Go         Language = "go"
 	Python     Language = "python"
@@ -191,7 +192,7 @@ func shortenIdents(f *ast.File) {
 }
 
 // shortenFuncLocals renames long local identifiers inside fn.
-func shortenFuncLocals(fn *ast.FuncDecl) {
+func shortenFuncLocals(fn *ast.FuncDecl) { //nolint:gocyclo
 	// Phase 1: collect all existing identifier names to avoid collisions.
 	existing := map[string]bool{}
 	ast.Inspect(fn, func(n ast.Node) bool {
@@ -316,7 +317,7 @@ func nextShortName(counter *int, existing map[string]bool) string {
 		} else {
 			n -= len(letters)
 			rows := len(letters)
-			name = string([]byte{letters[(n/rows) % rows], letters[n%rows]})
+			name = string([]byte{letters[(n/rows)%rows], letters[n%rows]})
 		}
 		if !existing[name] && !goBuiltins[name] {
 			return name
@@ -333,7 +334,7 @@ func compactGeneric(src []byte, lang Language) []byte {
 // stripComments removes line and block comments from src.
 // It tracks string literal state to avoid treating comment-like sequences
 // inside strings as comments.
-func stripComments(src []byte, lang Language) []byte {
+func stripComments(src []byte, lang Language) []byte { //nolint:gocyclo
 	out := make([]byte, 0, len(src))
 	i, n := 0, len(src)
 
@@ -482,11 +483,11 @@ func CompactDir(dir, outDir string) (Stats, error) {
 		if outDir != "" {
 			rel, _ := filepath.Rel(dir, path)
 			dest = filepath.Join(outDir, rel)
-			if mkErr := os.MkdirAll(filepath.Dir(dest), 0o755); mkErr != nil {
+			if mkErr := os.MkdirAll(filepath.Dir(dest), 0o750); mkErr != nil {
 				return mkErr
 			}
 		}
-		return os.WriteFile(dest, compacted, 0o644)
+		return os.WriteFile(dest, compacted, 0o600)
 	})
 	return stats, err
 }
