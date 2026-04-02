@@ -52,7 +52,7 @@ func (c *Client) Analyze(ctx context.Context, zipPath, idempotencyKey string) (*
 
 // AnalyzeRaw uploads a repository ZIP and runs the full analysis pipeline,
 // returning the raw result JSON from the completed job. Use this when you need
-// the full response payload (e.g. for graph2md / arch-docs generation).
+// the full response payload (e.g. for graph2md / docs generation).
 func (c *Client) AnalyzeRaw(ctx context.Context, zipPath, idempotencyKey string) (json.RawMessage, error) {
 	job, err := c.pollUntilComplete(ctx, zipPath, idempotencyKey)
 	if err != nil {
