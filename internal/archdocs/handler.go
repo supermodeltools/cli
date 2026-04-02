@@ -250,7 +250,7 @@ extra:
 `
 
 // Run generates architecture documentation for the repository at dir.
-func Run(ctx context.Context, cfg *config.Config, dir string, opts Options) error { //nolint:gocyclo // sequential pipeline with many error checks; splitting would obscure the flow
+func Run(ctx context.Context, cfg *config.Config, dir string, opts Options) error { //nolint:gocyclo,gocritic // sequential pipeline; opts is a value-semantic config struct
 	// Resolve absolute path
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
