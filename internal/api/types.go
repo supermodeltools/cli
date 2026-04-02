@@ -1,6 +1,9 @@
 package api
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // Node represents a graph node returned by the Supermodel API.
 type Node struct {
@@ -88,6 +91,20 @@ func (g *Graph) NodeByID(id string) (Node, bool) {
 		}
 	}
 	return Node{}, false
+}
+
+// JobResponse is the async envelope returned by the API for long-running jobs.
+type JobResponse struct {
+	Status     string          `json:"status"`
+	JobID      string          `json:"jobId"`
+	RetryAfter int             `json:"retryAfter"`
+	Error      *string         `json:"error"`
+	Result     json.RawMessage `json:"result"`
+}
+
+// jobResult is the inner result object containing the graph.
+type jobResult struct {
+	Graph Graph `json:"graph"`
 }
 
 // Error represents a non-2xx response from the API.
