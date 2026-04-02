@@ -79,6 +79,63 @@ func (c *Client) Analyze(ctx context.Context, zipPath, idempotencyKey string) (*
 // postZip sends the repository ZIP to the analyze endpoint and returns the
 // raw job response (which may be pending, processing, or completed).
 func (c *Client) postZip(ctx context.Context, zipPath, idempotencyKey string) (*JobResponse, error) {
+	return c.postZipTo(ctx, zipPath, idempotencyKey, analyzeEndpoint)
+}
+
+// deadCodeEndpoint is the API path for dead code analysis.
+const deadCodeEndpoint = "/v1/analysis/dead-code"
+
+// DeadCode uploads a repository ZIP and runs dead code analysis,
+// polling until the async job completes and returning the result.
+func (c *Client) DeadCode(ctx context.Context, zipPath, idempotencyKey string, minConfidence string, limit int) (*DeadCodeResult, error) {
+	endpoint := deadCodeEndpoint
+	sep := "?"
+	if minConfidence != "" {
+		endpoint += sep + "min_confidence=" + minConfidence
+		sep = "&"
+	}
+	if limit > 0 {
+		endpoint += sep + fmt.Sprintf("limit=%d", limit)
+	}
+
+	job, err := c.postZipTo(ctx, zipPath, idempotencyKey, endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	for job.Status == "pending" || job.Status == "processing" {
+		wait := time.Duration(job.RetryAfter) * time.Second
+		if wait <= 0 {
+			wait = 5 * time.Second
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(wait):
+		}
+
+		job, err = c.postZipTo(ctx, zipPath, idempotencyKey, endpoint)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if job.Error != nil {
+		return nil, fmt.Errorf("dead code analysis failed: %s", *job.Error)
+	}
+	if job.Status != "completed" {
+		return nil, fmt.Errorf("unexpected job status: %s", job.Status)
+	}
+
+	var result DeadCodeResult
+	if err := json.Unmarshal(job.Result, &result); err != nil {
+		return nil, fmt.Errorf("decode dead code result: %w", err)
+	}
+	return &result, nil
+}
+
+// postZipTo sends a repository ZIP to the given endpoint and returns the job response.
+func (c *Client) postZipTo(ctx context.Context, zipPath, idempotencyKey, endpoint string) (*JobResponse, error) {
 	f, err := os.Open(zipPath)
 	if err != nil {
 		return nil, err
@@ -97,7 +154,7 @@ func (c *Client) postZip(ctx context.Context, zipPath, idempotencyKey string) (*
 	mw.Close()
 
 	var job JobResponse
-	if err := c.request(ctx, http.MethodPost, analyzeEndpoint, mw.FormDataContentType(), &buf, idempotencyKey, &job); err != nil {
+	if err := c.request(ctx, http.MethodPost, endpoint, mw.FormDataContentType(), &buf, idempotencyKey, &job); err != nil {
 		return nil, err
 	}
 	return &job, nil
