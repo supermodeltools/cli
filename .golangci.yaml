@@ -49,7 +49,7 @@ linters:
       - text: 'Error return value of `fmt\.Fp?rint'
         linters: [errcheck]
       # Best-effort temp file/dir cleanup.
-      - text: 'Error return value of `os\.RemoveAll?` is not checked'
+      - text: 'Error return value of `os\.Remove(All)?` is not checked'
         linters: [errcheck]
       # Test files get more latitude.
       - path: _test\.go
