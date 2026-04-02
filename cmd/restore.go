@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -133,7 +134,9 @@ func restoreViaAPI(cmd *cobra.Command, cfg *config.Config, rootDir, projectName 
 
 // restoreCreateZip creates a temporary ZIP of the repository at dir.
 // It tries git archive first (respects .gitignore), then falls back to a
-// simple directory walk.
+// simple directory walk. Each vertical slice owns its own zip helper so that
+// slice-specific behavior (file-size limits, skip lists) can diverge without
+// coordination; see internal/analyze/zip.go for the canonical reference.
 func restoreCreateZip(dir string) (string, error) {
 	f, err := os.CreateTemp("", "supermodel-restore-*.zip")
 	if err != nil {
@@ -175,11 +178,11 @@ func restoreWalkZip(dir, dest string) error {
 
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil
+			return err
 		}
 		rel, err := filepath.Rel(dir, path)
 		if err != nil {
-			return nil
+			return err
 		}
 		if info.IsDir() {
 			if skipDirs[info.Name()] {
@@ -187,7 +190,7 @@ func restoreWalkZip(dir, dest string) error {
 			}
 			return nil
 		}
-		if info.Size() > 10<<20 {
+		if strings.HasPrefix(info.Name(), ".") || info.Size() > 10<<20 {
 			return nil
 		}
 		w, err := zw.Create(filepath.ToSlash(rel))

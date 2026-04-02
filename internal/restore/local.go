@@ -282,6 +282,9 @@ func DetectExternalDeps(rootDir string) []string { //nolint:gocyclo // manifest-
 		}
 	}
 
+	// Priority: non-npm manifest deps (go.mod, Cargo.toml, requirements.txt, etc.)
+	// fill the budget first; npm runtime deps are appended if space remains, dev
+	// deps last. This keeps the most-structured manifests dominant.
 	sort.Strings(deps)
 	if len(deps) > maxDeps {
 		deps = deps[:maxDeps]
