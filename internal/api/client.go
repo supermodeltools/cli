@@ -33,9 +33,52 @@ func New(cfg *config.Config) *Client {
 	}
 }
 
+// analyzeEndpoint is the API path for the supermodel graph analysis.
+const analyzeEndpoint = "/v1/graphs/supermodel"
+
 // Analyze uploads a repository ZIP and runs the full analysis pipeline,
-// returning the DisplayGraphResponse.
+// polling until the async job completes and returning the Graph.
 func (c *Client) Analyze(ctx context.Context, zipPath, idempotencyKey string) (*Graph, error) {
+	job, err := c.postZip(ctx, zipPath, idempotencyKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// Poll until the job completes.
+	for job.Status == "pending" || job.Status == "processing" {
+		wait := time.Duration(job.RetryAfter) * time.Second
+		if wait <= 0 {
+			wait = 5 * time.Second
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(wait):
+		}
+
+		job, err = c.postZip(ctx, zipPath, idempotencyKey)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if job.Error != nil {
+		return nil, fmt.Errorf("analysis failed: %s", *job.Error)
+	}
+	if job.Status != "completed" {
+		return nil, fmt.Errorf("unexpected job status: %s", job.Status)
+	}
+
+	var result jobResult
+	if err := json.Unmarshal(job.Result, &result); err != nil {
+		return nil, fmt.Errorf("decode graph result: %w", err)
+	}
+	return &result.Graph, nil
+}
+
+// postZip sends the repository ZIP to the analyze endpoint and returns the
+// raw job response (which may be pending, processing, or completed).
+func (c *Client) postZip(ctx context.Context, zipPath, idempotencyKey string) (*JobResponse, error) {
 	f, err := os.Open(zipPath)
 	if err != nil {
 		return nil, err
@@ -53,11 +96,11 @@ func (c *Client) Analyze(ctx context.Context, zipPath, idempotencyKey string) (*
 	}
 	mw.Close()
 
-	var g Graph
-	if err := c.request(ctx, http.MethodPost, "/v1/graphs/supermodel", mw.FormDataContentType(), &buf, idempotencyKey, &g); err != nil {
+	var job JobResponse
+	if err := c.request(ctx, http.MethodPost, analyzeEndpoint, mw.FormDataContentType(), &buf, idempotencyKey, &job); err != nil {
 		return nil, err
 	}
-	return &g, nil
+	return &job, nil
 }
 
 // DisplayGraph fetches the composed display graph for an already-analyzed repo.
