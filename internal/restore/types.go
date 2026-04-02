@@ -133,7 +133,8 @@ func computeCriticalFiles(domains []Domain, n int) []CriticalFile {
 		return nil
 	}
 	counts := make(map[string]int)
-	for _, d := range domains {
+	for i := range domains {
+		d := &domains[i]
 		seen := make(map[string]struct{}, len(d.KeyFiles))
 		for _, f := range d.KeyFiles {
 			if _, exists := seen[f]; exists {

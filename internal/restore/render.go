@@ -85,7 +85,7 @@ type RenderOptions struct {
 
 // Render produces the context bomb Markdown, respecting the token budget.
 // Returns the rendered text, estimated token count, and any template error.
-func Render(graph *ProjectGraph, projectName string, opts RenderOptions) (string, int, error) {
+func Render(graph *ProjectGraph, projectName string, opts RenderOptions) (output string, tokens int, err error) {
 	if opts.MaxTokens <= 0 {
 		opts.MaxTokens = DefaultMaxTokens
 	}
@@ -130,16 +130,16 @@ func Render(graph *ProjectGraph, projectName string, opts RenderOptions) (string
 		return "", 0, fmt.Errorf("rendering template: %w", err)
 	}
 
-	fullText := full.String()
-	tokens := CountTokens(fullText)
+	output = full.String()
+	tokens = CountTokens(output)
 	if tokens <= opts.MaxTokens {
-		return fullText, tokens, nil
+		return output, tokens, nil
 	}
 	return truncateToTokenBudget(graph, projectName, opts)
 }
 
 // truncateToTokenBudget progressively drops lower-priority content to fit.
-func truncateToTokenBudget(graph *ProjectGraph, projectName string, opts RenderOptions) (string, int, error) { //nolint:gocyclo // progressive truncation strategy; splitting would obscure priority ordering
+func truncateToTokenBudget(graph *ProjectGraph, projectName string, opts RenderOptions) (output string, tokens int, err error) { //nolint:gocyclo // progressive truncation strategy; splitting would obscure priority ordering
 	now := time.Now().UTC()
 	staleDuration := ""
 	if opts.Stale && opts.StaleAt != nil {
@@ -147,7 +147,7 @@ func truncateToTokenBudget(graph *ProjectGraph, projectName string, opts RenderO
 	}
 
 	var hdr strings.Builder
-	hdr.WriteString(fmt.Sprintf("# Supermodel Context — %s\n\n", projectName))
+	fmt.Fprintf(&hdr, "# Supermodel Context — %s\n\n", projectName)
 	banner := fmt.Sprintf("> Restored by `supermodel restore` at %s", now.Format("2006-01-02 15:04:05 UTC"))
 	if opts.LocalMode {
 		banner += " | local mode (run `supermodel login` for AI-powered features)"
@@ -161,12 +161,12 @@ func truncateToTokenBudget(graph *ProjectGraph, projectName string, opts RenderO
 		if graph.Stats.CircularDependencyCycles == 1 {
 			label = "cycle"
 		}
-		hdr.WriteString(fmt.Sprintf("> ⚠️ %d circular dependency %s detected\n", graph.Stats.CircularDependencyCycles, label))
+		fmt.Fprintf(&hdr, "> ⚠️ %d circular dependency %s detected\n", graph.Stats.CircularDependencyCycles, label)
 	}
-	hdr.WriteString(fmt.Sprintf(
+	fmt.Fprintf(&hdr,
 		"\n**Language:** %s · **Files:** %d · **Functions:** %d",
 		graph.Language, graph.Stats.TotalFiles, graph.Stats.TotalFunctions,
-	))
+	)
 	required := hdr.String()
 
 	reqTokens := CountTokens(required)
@@ -205,8 +205,8 @@ func truncateToTokenBudget(graph *ProjectGraph, projectName string, opts RenderO
 	if ht := CountTokens(header); ht <= remaining {
 		sectionBudget := remaining - ht
 		var sections []string
-		for _, d := range graph.Domains {
-			s := buildDomainSection(d)
+		for i := range graph.Domains {
+			s := buildDomainSection(&graph.Domains[i])
 			if st := CountTokens(s); st <= sectionBudget {
 				sections = append(sections, s)
 				sectionBudget -= st
@@ -245,30 +245,30 @@ func truncateToTokenBudget(graph *ProjectGraph, projectName string, opts RenderO
 	return result, CountTokens(result), nil
 }
 
-func buildDomainSection(d Domain) string {
+func buildDomainSection(d *Domain) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("\n### %s\n%s\n", d.Name, d.Description))
+	fmt.Fprintf(&sb, "\n### %s\n%s\n", d.Name, d.Description)
 	if len(d.KeyFiles) > 0 {
-		sb.WriteString(fmt.Sprintf("**Key files:** %s\n", strings.Join(d.KeyFiles, ", ")))
+		fmt.Fprintf(&sb, "**Key files:** %s\n", strings.Join(d.KeyFiles, ", "))
 	}
 	if len(d.Responsibilities) > 0 {
 		sb.WriteString("**Responsibilities:**\n")
 		for _, r := range d.Responsibilities {
-			sb.WriteString(fmt.Sprintf("- %s\n", r))
+			fmt.Fprintf(&sb, "- %s\n", r)
 		}
 	}
 	if len(d.Subdomains) > 0 {
 		sb.WriteString("**Subdomains:**\n")
 		for _, s := range d.Subdomains {
 			if s.Description != "" {
-				sb.WriteString(fmt.Sprintf("- %s: %s\n", s.Name, s.Description))
+				fmt.Fprintf(&sb, "- %s: %s\n", s.Name, s.Description)
 			} else {
-				sb.WriteString(fmt.Sprintf("- %s\n", s.Name))
+				fmt.Fprintf(&sb, "- %s\n", s.Name)
 			}
 		}
 	}
 	if len(d.DependsOn) > 0 {
-		sb.WriteString(fmt.Sprintf("**Depends on:** %s\n", strings.Join(d.DependsOn, ", ")))
+		fmt.Fprintf(&sb, "**Depends on:** %s\n", strings.Join(d.DependsOn, ", "))
 	}
 	return sb.String()
 }

@@ -499,8 +499,8 @@ func buildDomains(dirFiles map[string][]string) []Domain {
 func localTopFiles(domains []Domain, n int) []CriticalFile {
 	seen := make(map[string]struct{})
 	var files []CriticalFile
-	for _, d := range domains {
-		for _, f := range d.KeyFiles {
+	for i := range domains {
+		for _, f := range domains[i].KeyFiles {
 			if _, ok := seen[f]; ok {
 				continue
 			}
