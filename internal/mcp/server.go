@@ -339,7 +339,7 @@ type deadFn struct{ name, file string }
 func findDeadFunctions(g *api.Graph, includeExports bool) []deadFn {
 	called := make(map[string]bool)
 	for _, rel := range g.Rels() {
-		if rel.Type == "CALLS" || rel.Type == "CONTAINS_CALL" {
+		if rel.Type == "calls" || rel.Type == "contains_call" {
 			called[rel.EndNode] = true
 		}
 	}
@@ -366,7 +366,7 @@ type affected struct {
 func findAffected(g *api.Graph, target string) []affected {
 	importedBy := make(map[string][]string)
 	for _, rel := range g.Rels() {
-		if rel.Type == "IMPORTS" || rel.Type == "WILDCARD_IMPORTS" {
+		if rel.Type == "imports" || rel.Type == "wildcard_imports" {
 			importedBy[rel.EndNode] = append(importedBy[rel.EndNode], rel.StartNode)
 		}
 	}
