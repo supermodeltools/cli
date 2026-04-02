@@ -9,6 +9,8 @@ import (
 
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("SUPERMODEL_API_KEY", "")
+	t.Setenv("SUPERMODEL_API_BASE", "")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -23,6 +25,8 @@ func TestLoadDefaults(t *testing.T) {
 
 func TestSaveAndLoad(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("SUPERMODEL_API_KEY", "")
+	t.Setenv("SUPERMODEL_API_BASE", "")
 	cfg := &Config{APIKey: "test-key", APIBase: DefaultAPIBase, Output: "json"}
 	if err := cfg.Save(); err != nil {
 		t.Fatal(err)

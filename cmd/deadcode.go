@@ -40,6 +40,7 @@ explanations for why each function was flagged.`,
 	c.Flags().BoolVar(&opts.Force, "force", false, "re-analyze even if a cached result exists")
 	c.Flags().StringVar(&opts.MinConfidence, "min-confidence", "", "minimum confidence: high, medium, or low")
 	c.Flags().IntVar(&opts.Limit, "limit", 0, "maximum number of candidates to return")
+	c.Flags().StringArrayVar(&opts.Ignore, "ignore", nil, "glob pattern to exclude from results (repeatable, supports **)")
 	c.Flags().StringVarP(&opts.Output, "output", "o", "", "output format: human|json")
 
 	rootCmd.AddCommand(c)

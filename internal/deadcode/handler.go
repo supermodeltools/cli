@@ -14,10 +14,11 @@ import (
 
 // Options configures the dead-code command.
 type Options struct {
-	Force         bool   // bypass cache
-	Output        string // "human" | "json"
-	MinConfidence string // "high" | "medium" | "low"
-	Limit         int    // max candidates to return; 0 = all
+	Force         bool     // bypass cache
+	Output        string   // "human" | "json"
+	MinConfidence string   // "high" | "medium" | "low"
+	Limit         int      // max candidates to return; 0 = all
+	Ignore        []string // glob patterns to exclude (supports **)
 }
 
 // Run uploads the repo and runs dead code analysis via the dedicated API endpoint.
@@ -41,6 +42,10 @@ func Run(ctx context.Context, cfg *config.Config, dir string, opts Options) erro
 	spin.Stop()
 	if err != nil {
 		return err
+	}
+
+	if len(opts.Ignore) > 0 {
+		result.DeadCodeCandidates = filterIgnored(result.DeadCodeCandidates, opts.Ignore)
 	}
 
 	return printResults(os.Stdout, result, ui.ParseFormat(opts.Output))
@@ -67,8 +72,25 @@ func printResults(w io.Writer, result *api.DeadCodeResult, fmt_ ui.Format) error
 	}
 	ui.Table(w, []string{"FILE", "LINE", "FUNCTION", "CONFIDENCE", "REASON"}, rows)
 
-	meta := result.Metadata
 	fmt.Fprintf(w, "\n%d dead code candidate(s) out of %d total declarations.\n",
-		meta.DeadCodeCandidates, meta.TotalDeclarations)
+		len(candidates), result.Metadata.TotalDeclarations)
 	return nil
+}
+
+// filterIgnored removes candidates whose file path matches any of the given glob patterns.
+func filterIgnored(candidates []api.DeadCodeCandidate, patterns []string) []api.DeadCodeCandidate {
+	out := candidates[:0:0]
+	for _, c := range candidates {
+		ignored := false
+		for _, p := range patterns {
+			if matchGlob(p, c.File) {
+				ignored = true
+				break
+			}
+		}
+		if !ignored {
+			out = append(out, c)
+		}
+	}
+	return out
 }

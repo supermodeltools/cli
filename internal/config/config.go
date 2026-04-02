@@ -32,10 +32,15 @@ func Path() string {
 }
 
 // Load reads the config file. Returns defaults when the file does not exist.
+// Environment variables override file values:
+//   - SUPERMODEL_API_KEY overrides api_key
+//   - SUPERMODEL_API_BASE overrides api_base
 func Load() (*Config, error) {
 	data, err := os.ReadFile(Path())
 	if os.IsNotExist(err) {
-		return defaults(), nil
+		cfg := defaults()
+		cfg.applyEnv()
+		return cfg, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read config: %w", err)
@@ -45,6 +50,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
 	cfg.applyDefaults()
+	cfg.applyEnv()
 	return &cfg, nil
 }
 
@@ -82,5 +88,14 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Output == "" {
 		c.Output = defaultOutput
+	}
+}
+
+func (c *Config) applyEnv() {
+	if key := os.Getenv("SUPERMODEL_API_KEY"); key != "" {
+		c.APIKey = key
+	}
+	if base := os.Getenv("SUPERMODEL_API_BASE"); base != "" {
+		c.APIBase = base
 	}
 }

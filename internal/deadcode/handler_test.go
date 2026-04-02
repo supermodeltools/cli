@@ -10,6 +10,78 @@ import (
 	"github.com/supermodeltools/cli/internal/ui"
 )
 
+// ---- glob matching ----
+
+func TestMatchGlob(t *testing.T) {
+	cases := []struct {
+		pattern string
+		path    string
+		want    bool
+	}{
+		// exact
+		{"src/utils.ts", "src/utils.ts", true},
+		{"src/utils.ts", "src/other.ts", false},
+		// single-segment wildcard
+		{"src/*.ts", "src/utils.ts", true},
+		{"src/*.ts", "src/nested/utils.ts", false},
+		// ** at end
+		{"dist/**", "dist/index.js", true},
+		{"dist/**", "dist/sub/index.js", true},
+		{"dist/**", "src/index.js", false},
+		// ** at start
+		{"**/generated/**", "src/generated/api.go", true},
+		{"**/generated/**", "generated/api.go", true},
+		{"**/generated/**", "src/other/api.go", false},
+		// ** matching extension
+		{"**/*.test.ts", "src/foo.test.ts", true},
+		{"**/*.test.ts", "src/nested/foo.test.ts", true},
+		{"**/*.test.ts", "src/foo.ts", false},
+		// no match on empty path tail
+		{"src/**", "src", false},
+		{"src/**", "src/a", true},
+	}
+
+	for _, tc := range cases {
+		got := matchGlob(tc.pattern, tc.path)
+		if got != tc.want {
+			t.Errorf("matchGlob(%q, %q) = %v, want %v", tc.pattern, tc.path, got, tc.want)
+		}
+	}
+}
+
+// ---- filterIgnored ----
+
+func TestFilterIgnored_NoPatterns(t *testing.T) {
+	candidates := sampleResult().DeadCodeCandidates
+	got := filterIgnored(candidates, nil)
+	if len(got) != len(candidates) {
+		t.Errorf("expected %d candidates, got %d", len(candidates), len(got))
+	}
+}
+
+func TestFilterIgnored_MatchesPattern(t *testing.T) {
+	candidates := []api.DeadCodeCandidate{
+		{File: "src/generated/api.ts", Name: "fn1", Confidence: "high"},
+		{File: "src/utils.ts", Name: "fn2", Confidence: "high"},
+	}
+	got := filterIgnored(candidates, []string{"**/generated/**"})
+	if len(got) != 1 || got[0].Name != "fn2" {
+		t.Errorf("unexpected filtered result: %+v", got)
+	}
+}
+
+func TestFilterIgnored_MultiplePatterns(t *testing.T) {
+	candidates := []api.DeadCodeCandidate{
+		{File: "src/generated/api.ts", Name: "fn1", Confidence: "high"},
+		{File: "src/migrations/001.ts", Name: "fn2", Confidence: "high"},
+		{File: "src/utils.ts", Name: "fn3", Confidence: "high"},
+	}
+	got := filterIgnored(candidates, []string{"**/generated/**", "**/migrations/**"})
+	if len(got) != 1 || got[0].Name != "fn3" {
+		t.Errorf("unexpected filtered result: %+v", got)
+	}
+}
+
 func sampleResult() *api.DeadCodeResult {
 	return &api.DeadCodeResult{
 		Metadata: api.DeadCodeMetadata{
