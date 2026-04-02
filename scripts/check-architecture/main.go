@@ -46,7 +46,7 @@ var sharedKernel = map[string]bool{
 }
 
 // --- Supermodel API response types -------------------------------------------
-// Schema: DisplayGraphResponse from api.supermodeltools.com/v1/supermodel
+// Schema: DisplayGraphResponse from api.supermodeltools.com/v1/graphs/supermodel
 
 type graphResponse struct {
 	Nodes         []graphNode    `json:"nodes"`
@@ -235,7 +235,7 @@ func callAPI(apiBase, apiKey, zipPath string) (*graphResponse, error) {
 	}
 	mw.Close()
 
-	req, err := http.NewRequest(http.MethodPost, apiBase+"/v1/supermodel", &buf)
+	req, err := http.NewRequest(http.MethodPost, apiBase+"/v1/graphs/supermodel", &buf)
 	if err != nil {
 		return nil, err
 	}

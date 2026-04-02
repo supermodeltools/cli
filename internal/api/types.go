@@ -40,7 +40,7 @@ type Relationship struct {
 	Properties map[string]any `json:"properties,omitempty"`
 }
 
-// Graph is the unified response type for /v1/supermodel and
+// Graph is the unified response type for /v1/graphs/supermodel and
 // /v1/repos/{id}/graph/display. The API serialises relationships as either
 // "edges" or "relationships" depending on the endpoint; Rels() unifies both.
 type Graph struct {

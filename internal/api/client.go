@@ -54,7 +54,7 @@ func (c *Client) Analyze(ctx context.Context, zipPath, idempotencyKey string) (*
 	mw.Close()
 
 	var g Graph
-	if err := c.request(ctx, http.MethodPost, "/v1/supermodel", mw.FormDataContentType(), &buf, idempotencyKey, &g); err != nil {
+	if err := c.request(ctx, http.MethodPost, "/v1/graphs/supermodel", mw.FormDataContentType(), &buf, idempotencyKey, &g); err != nil {
 		return nil, err
 	}
 	return &g, nil
