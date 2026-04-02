@@ -19,6 +19,7 @@ type Options struct {
 	MinConfidence string   // "high" | "medium" | "low"
 	Limit         int      // max candidates to return; 0 = all
 	Ignore        []string // glob patterns to exclude (supports **)
+	Timeout       int      // max seconds; 0 = no limit (context deadline applied by cmd layer)
 }
 
 // Run uploads the repo and runs dead code analysis via the dedicated API endpoint.

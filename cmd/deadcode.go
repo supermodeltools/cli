@@ -1,6 +1,10 @@
 package cmd
 
 import (
+	"context"
+	"fmt"
+	"time"
+
 	"github.com/spf13/cobra"
 
 	"github.com/supermodeltools/cli/internal/config"
@@ -33,7 +37,19 @@ explanations for why each function was flagged.`,
 			if len(args) > 0 {
 				dir = args[0]
 			}
-			return deadcode.Run(cmd.Context(), cfg, dir, opts)
+			ctx := cmd.Context()
+			if opts.Timeout > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, time.Duration(opts.Timeout)*time.Second)
+				defer cancel()
+			}
+			if err := deadcode.Run(ctx, cfg, dir, opts); err != nil {
+				if ctx.Err() == context.DeadlineExceeded {
+					return fmt.Errorf("analysis timed out after %ds (increase with --timeout)", opts.Timeout)
+				}
+				return err
+			}
+			return nil
 		},
 	}
 
@@ -42,6 +58,7 @@ explanations for why each function was flagged.`,
 	c.Flags().IntVar(&opts.Limit, "limit", 0, "maximum number of candidates to return")
 	c.Flags().StringArrayVar(&opts.Ignore, "ignore", nil, "glob pattern to exclude from results (repeatable, supports **)")
 	c.Flags().StringVarP(&opts.Output, "output", "o", "", "output format: human|json")
+	c.Flags().IntVar(&opts.Timeout, "timeout", 7200, "maximum seconds to wait for analysis (0 = no limit)")
 
 	rootCmd.AddCommand(c)
 }
