@@ -43,17 +43,10 @@ Examples:
 	var healthDir string
 	healthCmd := &cobra.Command{
 		Use:   "health",
-		Short: "Analyse codebase health using graph intelligence",
-		Long: `Health analyses the codebase via the Supermodel API and produces a structured
-Markdown report covering:
-
-  - Overall status (HEALTHY / DEGRADED / CRITICAL)
-  - Circular dependency detection
-  - Domain coupling metrics
-  - High blast-radius files
-  - Prioritised recommendations`,
+		Short: "Alias for 'supermodel audit'",
+		Long:  "Health is an alias for 'supermodel audit'. See 'supermodel audit --help' for full documentation.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runFactoryHealth(cmd, healthDir)
+			return runAudit(cmd, healthDir)
 		},
 		SilenceUsage: true,
 	}
@@ -109,24 +102,6 @@ Pipe it into an agent session:
 
 	factoryCmd.AddCommand(healthCmd, runCmd, improveCmd)
 	rootCmd.AddCommand(factoryCmd)
-}
-
-// ── health ───────────────────────────────────────────────────────────────────
-
-func runFactoryHealth(cmd *cobra.Command, dir string) error {
-	rootDir, projectName, err := resolveFactoryDir(dir)
-	if err != nil {
-		return err
-	}
-
-	ir, err := factoryAnalyze(cmd, rootDir, projectName)
-	if err != nil {
-		return err
-	}
-
-	report := factory.Analyze(ir, projectName)
-	factory.RenderHealth(cmd.OutOrStdout(), report)
-	return nil
 }
 
 // ── run ───────────────────────────────────────────────────────────────────────
@@ -195,7 +170,7 @@ func factoryAnalyze(cmd *cobra.Command, rootDir, projectName string) (*api.Super
 	if err != nil {
 		return nil, fmt.Errorf("create archive: %w", err)
 	}
-	defer os.Remove(zipPath)
+	defer func() { _ = os.Remove(zipPath) }()
 
 	hash, err := cache.HashFile(zipPath)
 	if err != nil {

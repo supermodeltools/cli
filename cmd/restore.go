@@ -116,7 +116,7 @@ func restoreViaAPI(cmd *cobra.Command, cfg *config.Config, rootDir, projectName 
 	if err != nil {
 		return nil, fmt.Errorf("create archive: %w", err)
 	}
-	defer os.Remove(zipPath)
+	defer func() { _ = os.Remove(zipPath) }()
 
 	hash, err := cache.HashFile(zipPath)
 	if err != nil {

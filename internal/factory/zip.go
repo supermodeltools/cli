@@ -30,8 +30,9 @@ var skipDirs = map[string]bool{
 // CreateZip archives the repository at dir into a temporary ZIP file and
 // returns its path. The caller is responsible for removing the file.
 //
-// Strategy: use git archive when inside a Git repo (respects .gitignore,
-// deterministic output). Falls back to a manual directory walk otherwise.
+// Strategy: use git archive when the repo is clean (committed state matches
+// working tree, so the archive reflects what the user is actually looking at).
+// Falls back to a manual directory walk otherwise.
 func CreateZip(dir string) (string, error) {
 	f, err := os.CreateTemp("", "supermodel-factory-*.zip")
 	if err != nil {
@@ -40,7 +41,7 @@ func CreateZip(dir string) (string, error) {
 	dest := f.Name()
 	f.Close()
 
-	if isGitRepo(dir) {
+	if isGitRepo(dir) && isWorktreeClean(dir) {
 		if err := gitArchive(dir, dest); err == nil {
 			return dest, nil
 		}
@@ -58,14 +59,22 @@ func isGitRepo(dir string) bool {
 	return err == nil
 }
 
+// isWorktreeClean reports whether there are no uncommitted changes. When the
+// worktree is dirty, git archive HEAD would silently omit local edits, so we
+// fall back to the directory walk instead.
+func isWorktreeClean(dir string) bool {
+	out, err := exec.Command("git", "-C", dir, "status", "--porcelain").Output() //nolint:gosec // dir is user-supplied cwd
+	return err == nil && strings.TrimSpace(string(out)) == ""
+}
+
 func gitArchive(dir, dest string) error {
 	cmd := exec.Command("git", "-C", dir, "archive", "--format=zip", "-o", dest, "HEAD") //nolint:gosec // dir is user-supplied cwd; dest is temp file
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
-// walkZip creates a ZIP of dir, excluding skipDirs, hidden files, and
-// files larger than 10 MB.
+// walkZip creates a ZIP of dir, excluding skipDirs, hidden files, symlinks,
+// and files larger than 10 MB.
 func walkZip(dir, dest string) error {
 	out, err := os.Create(dest) //nolint:gosec // dest is a temp file path from os.CreateTemp
 	if err != nil {
@@ -79,6 +88,10 @@ func walkZip(dir, dest string) error {
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
+		}
+		// Skip symlinks: os.Open follows them, which could read files outside dir.
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil
 		}
 		rel, err := filepath.Rel(dir, path)
 		if err != nil {
@@ -102,7 +115,7 @@ func walkZip(dir, dest string) error {
 }
 
 func copyFile(path string, w io.Writer) error {
-	f, err := os.Open(path) //nolint:gosec // path is from filepath.Walk within dir
+	f, err := os.Open(path) //nolint:gosec // path is from filepath.Walk within dir; symlinks already excluded above
 	if err != nil {
 		return err
 	}

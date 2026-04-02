@@ -56,12 +56,21 @@ func buildExternalDeps(ir *api.SupermodelIR) []string {
 func buildCouplingMaps(ir *api.SupermodelIR) (incoming, outgoing map[string][]string) {
 	incoming = make(map[string][]string)
 	outgoing = make(map[string][]string)
+	// Deduplicate edges: the graph may emit the same source→target pair multiple
+	// times, which would inflate coupling counts and trigger false recommendations.
+	seen := make(map[string]bool)
 	for i := range ir.Graph.Relationships {
 		rel := &ir.Graph.Relationships[i]
-		if rel.Type == "DOMAIN_RELATES" && rel.Source != "" && rel.Target != "" {
-			outgoing[rel.Source] = append(outgoing[rel.Source], rel.Target)
-			incoming[rel.Target] = append(incoming[rel.Target], rel.Source)
+		if rel.Type != "DOMAIN_RELATES" || rel.Source == "" || rel.Target == "" {
+			continue
 		}
+		key := rel.Source + "→" + rel.Target
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		outgoing[rel.Source] = append(outgoing[rel.Source], rel.Target)
+		incoming[rel.Target] = append(incoming[rel.Target], rel.Source)
 	}
 	return incoming, outgoing
 }
@@ -167,7 +176,7 @@ func generateRecommendations(r *HealthReport) []Recommendation {
 
 	for i := range r.Domains {
 		d := &r.Domains[i]
-		if len(d.IncomingDeps) >= 5 {
+		if len(d.IncomingDeps) >= 3 { // matches CouplingStatus warning threshold
 			recs = append(recs, Recommendation{
 				Priority: 2,
 				Message: fmt.Sprintf(
