@@ -970,3 +970,139 @@ func TestRenderImprovePrompt_NoHealthReport(t *testing.T) {
 		t.Error("should produce output even without HealthReport")
 	}
 }
+
+// ── EnrichWithImpact ─────────────────────────────────────────────────────────
+
+func TestEnrichWithImpact_AddsFiles(t *testing.T) {
+	r := &HealthReport{Status: StatusHealthy}
+	impact := &api.ImpactResult{
+		Impacts: []api.ImpactTarget{
+			{
+				Target:      api.ImpactTargetInfo{File: "src/db.ts", Type: "file"},
+				BlastRadius: api.BlastRadius{DirectDependents: 50, TransitiveDependents: 100, AffectedFiles: 10, RiskScore: "high"},
+			},
+		},
+	}
+	EnrichWithImpact(r, impact)
+	if len(r.ImpactFiles) != 1 {
+		t.Fatalf("expected 1 impact file, got %d", len(r.ImpactFiles))
+	}
+	if r.ImpactFiles[0].Path != "src/db.ts" {
+		t.Errorf("expected src/db.ts, got %s", r.ImpactFiles[0].Path)
+	}
+	if r.ImpactFiles[0].Direct != 50 {
+		t.Errorf("expected 50 direct, got %d", r.ImpactFiles[0].Direct)
+	}
+}
+
+func TestEnrichWithImpact_CriticalDegrades(t *testing.T) {
+	r := &HealthReport{Status: StatusHealthy}
+	impact := &api.ImpactResult{
+		Impacts: []api.ImpactTarget{
+			{
+				Target:      api.ImpactTargetInfo{File: "src/core.ts", Type: "file"},
+				BlastRadius: api.BlastRadius{DirectDependents: 200, TransitiveDependents: 500, AffectedFiles: 30, RiskScore: "critical"},
+			},
+		},
+	}
+	EnrichWithImpact(r, impact)
+	if r.Status != StatusDegraded {
+		t.Errorf("expected DEGRADED, got %s", r.Status)
+	}
+}
+
+func TestEnrichWithImpact_NonCriticalStaysHealthy(t *testing.T) {
+	r := &HealthReport{Status: StatusHealthy}
+	impact := &api.ImpactResult{
+		Impacts: []api.ImpactTarget{
+			{
+				Target:      api.ImpactTargetInfo{File: "src/util.ts", Type: "file"},
+				BlastRadius: api.BlastRadius{DirectDependents: 5, TransitiveDependents: 10, AffectedFiles: 2, RiskScore: "low"},
+			},
+		},
+	}
+	EnrichWithImpact(r, impact)
+	if r.Status != StatusHealthy {
+		t.Errorf("expected HEALTHY, got %s", r.Status)
+	}
+}
+
+func TestEnrichWithImpact_CapsAt10(t *testing.T) {
+	r := &HealthReport{Status: StatusHealthy}
+	var impacts []api.ImpactTarget
+	for i := 0; i < 15; i++ {
+		impacts = append(impacts, api.ImpactTarget{
+			Target:      api.ImpactTargetInfo{File: fmt.Sprintf("src/file%d.ts", i), Type: "file"},
+			BlastRadius: api.BlastRadius{DirectDependents: 100 - i, RiskScore: "high"},
+		})
+	}
+	EnrichWithImpact(r, &api.ImpactResult{Impacts: impacts})
+	if len(r.ImpactFiles) != 10 {
+		t.Errorf("expected 10 impact files (capped), got %d", len(r.ImpactFiles))
+	}
+}
+
+func TestEnrichWithImpact_GeneratesRecommendations(t *testing.T) {
+	r := &HealthReport{Status: StatusHealthy}
+	impact := &api.ImpactResult{
+		Impacts: []api.ImpactTarget{
+			{
+				Target:      api.ImpactTargetInfo{File: "src/auth.ts", Type: "file"},
+				BlastRadius: api.BlastRadius{DirectDependents: 100, TransitiveDependents: 200, AffectedFiles: 20, RiskScore: "critical"},
+			},
+		},
+	}
+	EnrichWithImpact(r, impact)
+	found := false
+	for _, rec := range r.Recommendations {
+		if strings.Contains(rec.Message, "src/auth.ts") && rec.Priority == 1 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected critical recommendation for src/auth.ts")
+	}
+}
+
+func TestEnrichWithImpact_EmptyImpact(t *testing.T) {
+	r := &HealthReport{Status: StatusHealthy}
+	EnrichWithImpact(r, &api.ImpactResult{})
+	if r.Status != StatusHealthy {
+		t.Errorf("expected HEALTHY with empty impact, got %s", r.Status)
+	}
+	if len(r.ImpactFiles) != 0 {
+		t.Errorf("expected 0 impact files, got %d", len(r.ImpactFiles))
+	}
+}
+
+func TestRenderHealth_ImpactSection(t *testing.T) {
+	r := &HealthReport{
+		ProjectName: "test",
+		Status:      StatusDegraded,
+		ImpactFiles: []ImpactFile{
+			{Path: "src/core.ts", RiskScore: "critical", Direct: 100, Transitive: 200, Files: 15},
+		},
+	}
+	var buf bytes.Buffer
+	RenderHealth(&buf, r)
+	out := buf.String()
+	if !strings.Contains(out, "## Impact Analysis") {
+		t.Error("expected Impact Analysis section")
+	}
+	if !strings.Contains(out, "src/core.ts") {
+		t.Error("expected file path in impact table")
+	}
+	if !strings.Contains(out, "critical") {
+		t.Error("expected risk score in impact table")
+	}
+}
+
+func TestRenderHealth_NoImpactSection(t *testing.T) {
+	r := &HealthReport{ProjectName: "test", Status: StatusHealthy}
+	var buf bytes.Buffer
+	RenderHealth(&buf, r)
+	if strings.Contains(buf.String(), "## Impact Analysis") {
+		t.Error("should not render Impact Analysis when no impact files")
+	}
+}
