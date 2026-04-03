@@ -29,9 +29,24 @@ func Run(ctx context.Context, cfg *config.Config, dir string, opts Options) erro
 }
 
 // GetGraph returns the display graph for dir, running analysis if the cache
-// is cold or force is true. It returns the graph and the zip hash used as the
-// cache key (useful for downstream commands).
+// is cold or force is true. It returns the graph and the cache key.
+//
+// Uses git-based fingerprinting (~1ms for clean repos) to check the cache
+// before creating a zip. Only creates and uploads the zip on cache miss.
 func GetGraph(ctx context.Context, cfg *config.Config, dir string, force bool) (*api.Graph, string, error) {
+	// Fast path: check cache using git fingerprint before creating zip.
+	if !force {
+		fingerprint, err := cache.RepoFingerprint(dir)
+		if err == nil {
+			key := cache.AnalysisKey(fingerprint, "graph")
+			if g, _ := cache.Get(key); g != nil {
+				ui.Success("Using cached analysis (repoId: %s)", g.RepoID())
+				return g, key, nil
+			}
+		}
+	}
+
+	// Cache miss: create zip and upload.
 	spin := ui.Start("Creating repository archive…")
 	zipPath, err := createZip(dir)
 	spin.Stop()
@@ -45,6 +60,7 @@ func GetGraph(ctx context.Context, cfg *config.Config, dir string, force bool) (
 		return nil, "", err
 	}
 
+	// Also check by zip hash (covers non-git repos and fingerprint edge cases).
 	if !force {
 		if g, _ := cache.Get(hash); g != nil {
 			ui.Success("Using cached analysis (repoId: %s)", g.RepoID())
@@ -60,6 +76,14 @@ func GetGraph(ctx context.Context, cfg *config.Config, dir string, force bool) (
 		return nil, hash, err
 	}
 
+	// Cache under both keys: fingerprint (fast lookup) and zip hash (fallback).
+	fingerprint, fpErr := cache.RepoFingerprint(dir)
+	if fpErr == nil {
+		fpKey := cache.AnalysisKey(fingerprint, "graph")
+		if err := cache.Put(fpKey, g); err != nil {
+			ui.Warn("could not write cache: %v", err)
+		}
+	}
 	if err := cache.Put(hash, g); err != nil {
 		ui.Warn("could not write cache: %v", err)
 	}
