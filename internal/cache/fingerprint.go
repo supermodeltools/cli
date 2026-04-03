@@ -37,6 +37,7 @@ func RepoFingerprint(dir string) (string, error) {
 	return commitSHA + ":" + hex.EncodeToString(h[:8]), nil
 }
 
+// gitOutput runs a git command in dir and returns its trimmed stdout.
 func gitOutput(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
 	out, err := cmd.Output()
