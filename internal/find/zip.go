@@ -1,7 +1,5 @@
 package find
 
-// zip.go duplicates archive helpers to preserve vertical slice isolation.
-
 import (
 	"archive/zip"
 	"fmt"
@@ -12,25 +10,53 @@ import (
 	"strings"
 )
 
+// skipDirs are directory names that should never be included in the archive.
 var skipDirs = map[string]bool{
-	".git": true, "node_modules": true, "vendor": true,
-	"__pycache__": true, ".venv": true, "venv": true,
-	"dist": true, "build": true, "target": true,
-	".next": true, ".terraform": true,
+	".git":             true,
+	".claude":          true,
+	".idea":            true,
+	".vscode":          true,
+	".cache":           true,
+	".turbo":           true,
+	".nx":              true,
+	".next":            true,
+	".nuxt":            true,
+	".terraform":       true,
+	".tox":             true,
+	".venv":            true,
+	".pnpm-store":      true,
+	"__pycache__":      true,
+	"__snapshots__":    true,
+	"bower_components": true,
+	"build":            true,
+	"coverage":         true,
+	"dist":             true,
+	"node_modules":     true,
+	"out":              true,
+	"target":           true,
+	"vendor":           true,
+	"venv":             true,
 }
 
+// createZip archives the repository at dir into a temporary ZIP file and
+// returns its path. The caller is responsible for removing the file.
+//
+// Strategy: use git archive when inside a Git repo (respects .gitignore,
+// deterministic output). Falls back to a manual directory walk otherwise.
 func createZip(dir string) (string, error) {
-	f, err := os.CreateTemp("", "supermodel-find-*.zip")
+	f, err := os.CreateTemp("", "supermodel-*.zip")
 	if err != nil {
-		return "", fmt.Errorf("create temp: %w", err)
+		return "", fmt.Errorf("create temp file: %w", err)
 	}
 	dest := f.Name()
 	f.Close()
+
 	if isGitRepo(dir) {
 		if err := gitArchive(dir, dest); err == nil {
 			return dest, nil
 		}
 	}
+
 	if err := walkZip(dir, dest); err != nil {
 		os.Remove(dest)
 		return "", err
@@ -51,19 +77,26 @@ func gitArchive(dir, dest string) error {
 	return cmd.Run()
 }
 
+// walkZip creates a ZIP of dir, excluding skipDirs, hidden files, and
+// files larger than 10 MB.
 func walkZip(dir, dest string) error {
 	out, err := os.Create(dest)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
+
 	zw := zip.NewWriter(out)
 	defer zw.Close()
+
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		rel, _ := filepath.Rel(dir, path)
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
 		if info.IsDir() {
 			if skipDirs[info.Name()] {
 				return filepath.SkipDir
