@@ -81,25 +81,22 @@ var tools = []tool{
 	},
 	{
 		Name:        "dead_code",
-		Description: "List functions in the repository that have no callers. Returns function names and their source files.",
+		Description: "Find unreachable functions using multi-phase static analysis. Returns candidates with confidence levels (high/medium/low), line numbers, and explanations.",
 		InputSchema: toolSchema{
 			Type: "object",
 			Properties: map[string]schemaProp{
-				"include_exports": {Type: "boolean", Description: "Include exported (public) functions, which may be called by external packages."},
-				"force":           {Type: "boolean", Description: "Re-analyze even if a cached result exists."},
+				"min_confidence": {Type: "string", Description: "Minimum confidence level: high, medium, or low."},
+				"limit":          {Type: "integer", Description: "Maximum number of candidates to return. 0 = all."},
 			},
 		},
 	},
 	{
 		Name:        "blast_radius",
-		Description: "Given a file path, return all files that transitively import it — i.e., the set of files that would be affected by a change to that file.",
+		Description: "Analyze the impact of changing a file or function. Returns risk score, affected files and functions, entry points impacted, and risk factors.",
 		InputSchema: toolSchema{
-			Type:     "object",
-			Required: []string{"file"},
+			Type: "object",
 			Properties: map[string]schemaProp{
-				"file":  {Type: "string", Description: "Repo-relative path to the file (e.g. internal/api/client.go)."},
-				"depth": {Type: "integer", Description: "Maximum traversal depth. 0 = unlimited."},
-				"force": {Type: "boolean", Description: "Re-analyze even if a cached result exists."},
+				"file": {Type: "string", Description: "Repo-relative path to the file (e.g. internal/api/client.go). Omit for global coupling map."},
 			},
 		},
 	},
@@ -110,7 +107,7 @@ var tools = []tool{
 			Type: "object",
 			Properties: map[string]schemaProp{
 				"label":    {Type: "string", Description: "Filter nodes by label: File, Function, Class, etc."},
-				"rel_type": {Type: "string", Description: "Filter relationships by type: IMPORTS, CALLS, DEFINES_FUNCTION, etc."},
+				"rel_type": {Type: "string", Description: "Filter relationships by type: imports, calls, defines_function, etc."},
 				"force":    {Type: "boolean", Description: "Re-analyze even if a cached result exists."},
 			},
 		},
@@ -217,79 +214,151 @@ func (s *server) handleToolCall(ctx context.Context, params json.RawMessage) (an
 }
 
 func (s *server) callTool(ctx context.Context, name string, args map[string]any) (string, error) {
-	force := boolArg(args, "force")
-
 	switch name {
 	case "analyze":
-		g, hash, err := s.getOrAnalyze(ctx, force)
-		if err != nil {
-			return "", err
-		}
-		s.graph = g
-		s.hash = hash
-		return fmt.Sprintf("Analysis complete.\nRepo ID: %s\nFiles: %d\nFunctions: %d\nRelationships: %d",
-			g.RepoID(),
-			len(g.NodesByLabel("File")),
-			len(g.NodesByLabel("Function")),
-			len(g.Rels()),
-		), nil
-
+		return s.toolAnalyze(ctx, args)
 	case "dead_code":
-		g, _, err := s.getOrAnalyze(ctx, force)
-		if err != nil {
-			return "", err
-		}
-		includeExports := boolArg(args, "include_exports")
-		results := findDeadFunctions(g, includeExports)
-		if len(results) == 0 {
-			return "No dead code detected.", nil
-		}
-		var sb strings.Builder
-		fmt.Fprintf(&sb, "%d unreachable function(s):\n\n", len(results))
-		for _, r := range results {
-			fmt.Fprintf(&sb, "- %s  (%s)\n", r.name, r.file)
-		}
-		return sb.String(), nil
-
+		return s.toolDeadCode(ctx, args)
 	case "blast_radius":
-		fileArg, _ := args["file"].(string)
-		if fileArg == "" {
-			return "", fmt.Errorf("required argument 'file' is missing")
-		}
-		g, _, err := s.getOrAnalyze(ctx, force)
-		if err != nil {
-			return "", err
-		}
-		affected := findAffected(g, fileArg)
-		if len(affected) == 0 {
-			return fmt.Sprintf("No files are affected by changes to %s.", fileArg), nil
-		}
-		var sb strings.Builder
-		fmt.Fprintf(&sb, "%d file(s) affected by changes to %s:\n\n", len(affected), fileArg)
-		for _, f := range affected {
-			fmt.Fprintf(&sb, "- %s  (depth %d)\n", f.file, f.depth)
-		}
-		return sb.String(), nil
-
+		return s.toolBlastRadius(ctx, args)
 	case "get_graph":
-		g, _, err := s.getOrAnalyze(ctx, force)
-		if err != nil {
-			return "", err
-		}
-		label, _ := args["label"].(string)
-		relType, _ := args["rel_type"].(string)
-
-		out := filterGraph(g, label, relType)
-		data, err := json.MarshalIndent(out, "", "  ")
-		if err != nil {
-			return "", err
-		}
-		return string(data), nil
-
+		return s.toolGetGraph(ctx, args)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
 }
+
+// toolAnalyze uploads the repo and runs the full analysis pipeline.
+func (s *server) toolAnalyze(ctx context.Context, args map[string]any) (string, error) {
+	force := boolArg(args, "force")
+	g, hash, err := s.getOrAnalyze(ctx, force)
+	if err != nil {
+		return "", err
+	}
+	s.graph = g
+	s.hash = hash
+	return fmt.Sprintf("Analysis complete.\nRepo ID: %s\nFiles: %d\nFunctions: %d\nRelationships: %d",
+		g.RepoID(),
+		len(g.NodesByLabel("File")),
+		len(g.NodesByLabel("Function")),
+		len(g.Rels()),
+	), nil
+}
+
+// toolDeadCode calls the dedicated /v1/analysis/dead-code endpoint.
+func (s *server) toolDeadCode(ctx context.Context, args map[string]any) (string, error) {
+	zipPath, hash, err := s.ensureZip()
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(zipPath)
+
+	minConfidence, _ := args["min_confidence"].(string)
+	limit := intArg(args, "limit")
+
+	client := api.New(s.cfg)
+	result, err := client.DeadCode(ctx, zipPath, "mcp-dc-"+hash[:16], minConfidence, limit)
+	if err != nil {
+		return "", err
+	}
+
+	if len(result.DeadCodeCandidates) == 0 {
+		return "No dead code detected.", nil
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%d dead code candidate(s) out of %d total declarations:\n\n",
+		result.Metadata.DeadCodeCandidates, result.Metadata.TotalDeclarations)
+	for i := range result.DeadCodeCandidates {
+		c := &result.DeadCodeCandidates[i]
+		fmt.Fprintf(&sb, "- [%s] %s:%d %s — %s\n", c.Confidence, c.File, c.Line, c.Name, c.Reason)
+	}
+	return sb.String(), nil
+}
+
+// toolBlastRadius calls the dedicated /v1/analysis/impact endpoint.
+func (s *server) toolBlastRadius(ctx context.Context, args map[string]any) (string, error) {
+	zipPath, hash, err := s.ensureZip()
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(zipPath)
+
+	target, _ := args["file"].(string)
+	idempotencyKey := "mcp-impact-" + hash[:16]
+	if target != "" {
+		idempotencyKey += "-" + target
+	}
+
+	client := api.New(s.cfg)
+	result, err := client.Impact(ctx, zipPath, idempotencyKey, target, "")
+	if err != nil {
+		return "", err
+	}
+
+	if len(result.Impacts) == 0 {
+		if len(result.GlobalMetrics.MostCriticalFiles) > 0 {
+			var sb strings.Builder
+			sb.WriteString("Most critical files (by dependent count):\n\n")
+			for i := range result.GlobalMetrics.MostCriticalFiles {
+				f := &result.GlobalMetrics.MostCriticalFiles[i]
+				fmt.Fprintf(&sb, "- %s (%d dependents)\n", f.File, f.DependentCount)
+			}
+			return sb.String(), nil
+		}
+		return "No impact detected.", nil
+	}
+
+	var sb strings.Builder
+	for i := range result.Impacts {
+		imp := &result.Impacts[i]
+		br := &imp.BlastRadius
+		fmt.Fprintf(&sb, "Target: %s\n", imp.Target.File)
+		fmt.Fprintf(&sb, "Risk: %s | Direct: %d | Transitive: %d | Files: %d\n",
+			br.RiskScore, br.DirectDependents, br.TransitiveDependents, br.AffectedFiles)
+		for _, rf := range br.RiskFactors {
+			fmt.Fprintf(&sb, "  → %s\n", rf)
+		}
+		if len(imp.AffectedFiles) > 0 {
+			sb.WriteString("\nAffected files:\n")
+			for j := range imp.AffectedFiles {
+				f := &imp.AffectedFiles[j]
+				fmt.Fprintf(&sb, "- %s (direct: %d, transitive: %d)\n", f.File, f.DirectDependencies, f.TransitiveDependencies)
+			}
+		}
+		if len(imp.EntryPointsAffected) > 0 {
+			sb.WriteString("\nEntry points affected:\n")
+			for j := range imp.EntryPointsAffected {
+				ep := &imp.EntryPointsAffected[j]
+				fmt.Fprintf(&sb, "- %s %s (%s)\n", ep.File, ep.Name, ep.Type)
+			}
+		}
+		sb.WriteString("\n")
+	}
+	fmt.Fprintf(&sb, "%d target(s) analyzed across %d files and %d functions.\n",
+		result.Metadata.TargetsAnalyzed, result.Metadata.TotalFiles, result.Metadata.TotalFunctions)
+	return sb.String(), nil
+}
+
+// toolGetGraph returns a filtered graph slice.
+func (s *server) toolGetGraph(ctx context.Context, args map[string]any) (string, error) {
+	force := boolArg(args, "force")
+	g, _, err := s.getOrAnalyze(ctx, force)
+	if err != nil {
+		return "", err
+	}
+	label, _ := args["label"].(string)
+	relType, _ := args["rel_type"].(string)
+
+	out := filterGraph(g, label, relType)
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// --- Shared helpers ----------------------------------------------------------
 
 // getOrAnalyze returns the cached graph or runs a fresh analysis.
 func (s *server) getOrAnalyze(ctx context.Context, force bool) (*api.Graph, string, error) {
@@ -332,77 +401,24 @@ func (s *server) getOrAnalyze(ctx context.Context, force bool) (*api.Graph, stri
 	return g, hash, nil
 }
 
-// --- Inline helpers (duplicated from slices to preserve VSA) -----------------
+// ensureZip creates a repo zip and returns its path and hash.
+// The caller is responsible for removing the zip file.
+func (s *server) ensureZip() (string, string, error) {
+	if err := s.cfg.RequireAPIKey(); err != nil {
+		return "", "", err
+	}
 
-type deadFn struct{ name, file string }
+	zipPath, err := createZip(s.dir)
+	if err != nil {
+		return "", "", err
+	}
 
-func findDeadFunctions(g *api.Graph, includeExports bool) []deadFn {
-	called := make(map[string]bool)
-	for _, rel := range g.Rels() {
-		if rel.Type == "calls" || rel.Type == "contains_call" {
-			called[rel.EndNode] = true
-		}
+	hash, err := cache.HashFile(zipPath)
+	if err != nil {
+		os.Remove(zipPath)
+		return "", "", err
 	}
-	var out []deadFn
-	for _, n := range g.NodesByLabel("Function") {
-		if called[n.ID] {
-			continue
-		}
-		name := n.Prop("name", "qualifiedName")
-		file := n.Prop("file", "path")
-		if isEntryPoint(name, file, includeExports) {
-			continue
-		}
-		out = append(out, deadFn{name, file})
-	}
-	return out
-}
-
-type affected struct {
-	file  string
-	depth int
-}
-
-func findAffected(g *api.Graph, target string) []affected {
-	importedBy := make(map[string][]string)
-	for _, rel := range g.Rels() {
-		if rel.Type == "imports" || rel.Type == "wildcard_imports" {
-			importedBy[rel.EndNode] = append(importedBy[rel.EndNode], rel.StartNode)
-		}
-	}
-	var seeds []string
-	for _, n := range g.NodesByLabel("File") {
-		if pathMatches(n.Prop("path", "name", "file"), target) {
-			seeds = append(seeds, n.ID)
-		}
-	}
-	visited := make(map[string]int)
-	queue := append([]string(nil), seeds...)
-	for _, s := range seeds {
-		visited[s] = 0
-	}
-	var results []affected
-	for len(queue) > 0 {
-		cur := queue[0]
-		queue = queue[1:]
-		for _, parent := range importedBy[cur] {
-			if _, seen := visited[parent]; seen {
-				continue
-			}
-			d := visited[cur] + 1
-			visited[parent] = d
-			queue = append(queue, parent)
-			n, ok := g.NodeByID(parent)
-			if !ok {
-				continue
-			}
-			f := n.Prop("path", "name", "file")
-			if f != "" && !pathMatches(f, target) {
-				results = append(results, affected{f, d})
-			}
-		}
-	}
-	return results
+	return zipPath, hash, nil
 }
 
 type graphSlice struct {
@@ -433,27 +449,7 @@ func boolArg(args map[string]any, key string) bool {
 	return v
 }
 
-func isEntryPoint(name, file string, includeExports bool) bool {
-	bare := name
-	if idx := strings.LastIndex(name, "."); idx >= 0 {
-		bare = name[idx+1:]
-	}
-	if bare == "main" || bare == "init" {
-		return true
-	}
-	for _, prefix := range []string{"Test", "Benchmark", "Fuzz", "Example"} {
-		if strings.HasPrefix(bare, prefix) {
-			return true
-		}
-	}
-	if !includeExports && bare != "" && bare[0] >= 'A' && bare[0] <= 'Z' {
-		return true
-	}
-	return strings.HasSuffix(file, "_test.go")
-}
-
-func pathMatches(nodePath, target string) bool {
-	target = strings.TrimPrefix(target, "./")
-	nodePath = strings.TrimPrefix(nodePath, "./")
-	return nodePath == target || strings.HasSuffix(nodePath, "/"+target)
+func intArg(args map[string]any, key string) int {
+	v, _ := args[key].(float64)
+	return int(v)
 }
