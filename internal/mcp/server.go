@@ -262,18 +262,7 @@ func (s *server) toolDeadCode(ctx context.Context, args map[string]any) (string,
 		return "", err
 	}
 
-	if len(result.DeadCodeCandidates) == 0 {
-		return "No dead code detected.", nil
-	}
-
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "%d dead code candidate(s) out of %d total declarations:\n\n",
-		result.Metadata.DeadCodeCandidates, result.Metadata.TotalDeclarations)
-	for i := range result.DeadCodeCandidates {
-		c := &result.DeadCodeCandidates[i]
-		fmt.Fprintf(&sb, "- [%s] %s:%d %s — %s\n", c.Confidence, c.File, c.Line, c.Name, c.Reason)
-	}
-	return sb.String(), nil
+	return formatDeadCode(result), nil
 }
 
 // toolBlastRadius calls the dedicated /v1/analysis/impact endpoint.
@@ -296,6 +285,46 @@ func (s *server) toolBlastRadius(ctx context.Context, args map[string]any) (stri
 		return "", err
 	}
 
+	return formatImpact(result), nil
+}
+
+// toolGetGraph returns a filtered graph slice.
+func (s *server) toolGetGraph(ctx context.Context, args map[string]any) (string, error) {
+	force := boolArg(args, "force")
+	g, _, err := s.getOrAnalyze(ctx, force)
+	if err != nil {
+		return "", err
+	}
+	label, _ := args["label"].(string)
+	relType, _ := args["rel_type"].(string)
+
+	out := filterGraph(g, label, relType)
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// --- Formatting helpers ------------------------------------------------------
+
+// formatDeadCode formats a DeadCodeResult as human-readable text.
+func formatDeadCode(result *api.DeadCodeResult) string {
+	if len(result.DeadCodeCandidates) == 0 {
+		return "No dead code detected."
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%d dead code candidate(s) out of %d total declarations:\n\n",
+		result.Metadata.DeadCodeCandidates, result.Metadata.TotalDeclarations)
+	for i := range result.DeadCodeCandidates {
+		c := &result.DeadCodeCandidates[i]
+		fmt.Fprintf(&sb, "- [%s] %s:%d %s — %s\n", c.Confidence, c.File, c.Line, c.Name, c.Reason)
+	}
+	return sb.String()
+}
+
+// formatImpact formats an ImpactResult as human-readable text.
+func formatImpact(result *api.ImpactResult) string {
 	if len(result.Impacts) == 0 {
 		if len(result.GlobalMetrics.MostCriticalFiles) > 0 {
 			var sb strings.Builder
@@ -304,9 +333,9 @@ func (s *server) toolBlastRadius(ctx context.Context, args map[string]any) (stri
 				f := &result.GlobalMetrics.MostCriticalFiles[i]
 				fmt.Fprintf(&sb, "- %s (%d dependents)\n", f.File, f.DependentCount)
 			}
-			return sb.String(), nil
+			return sb.String()
 		}
-		return "No impact detected.", nil
+		return "No impact detected."
 	}
 
 	var sb strings.Builder
@@ -337,25 +366,7 @@ func (s *server) toolBlastRadius(ctx context.Context, args map[string]any) (stri
 	}
 	fmt.Fprintf(&sb, "%d target(s) analyzed across %d files and %d functions.\n",
 		result.Metadata.TargetsAnalyzed, result.Metadata.TotalFiles, result.Metadata.TotalFunctions)
-	return sb.String(), nil
-}
-
-// toolGetGraph returns a filtered graph slice.
-func (s *server) toolGetGraph(ctx context.Context, args map[string]any) (string, error) {
-	force := boolArg(args, "force")
-	g, _, err := s.getOrAnalyze(ctx, force)
-	if err != nil {
-		return "", err
-	}
-	label, _ := args["label"].(string)
-	relType, _ := args["rel_type"].(string)
-
-	out := filterGraph(g, label, relType)
-	data, err := json.MarshalIndent(out, "", "  ")
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
+	return sb.String()
 }
 
 // --- Shared helpers ----------------------------------------------------------
