@@ -5,6 +5,7 @@
 //
 //  1. Slice packages must not import other slice packages.
 //  2. Slice packages may only import the shared kernel or external dependencies.
+//  3. SkipDirs must only be declared in internal/archive (no duplicate definitions in slices).
 //
 // A "slice" is any package under internal/ that is NOT listed in sharedKernel.
 //
@@ -38,11 +39,12 @@ const module = "github.com/supermodeltools/cli"
 // sharedKernel lists internal packages that slices are permitted to import.
 // When adding a new cross-cutting infrastructure package, add it here.
 var sharedKernel = map[string]bool{
-	"internal/api":    true,
-	"internal/build":  true,
-	"internal/cache":  true,
-	"internal/config": true,
-	"internal/ui":     true,
+	"internal/api":     true,
+	"internal/archive": true,
+	"internal/build":   true,
+	"internal/cache":   true,
+	"internal/config":  true,
+	"internal/ui":      true,
 	// pkg/ is a public SDK, not subject to slice rules.
 }
 
@@ -141,6 +143,46 @@ func main() {
 	}
 
 	fmt.Println("✓  Architecture check passed — no cross-slice imports found.")
+
+	// Rule 3: Slices must not declare their own SkipDirs — use internal/archive.
+	if dupes := checkDuplicateSkipDirs(); len(dupes) > 0 {
+		fmt.Fprintln(os.Stderr, "\n✗  Duplicate skipDirs declarations found:")
+		for _, d := range dupes {
+			fmt.Fprintf(os.Stderr, "  %s\n", d)
+		}
+		fmt.Fprintln(os.Stderr, "\nSkipDirs must only be declared in internal/archive/archive.go.")
+		fmt.Fprintln(os.Stderr, "Slice zip.go files should import internal/archive instead.")
+		os.Exit(1)
+	}
+	fmt.Println("✓  No duplicate skipDirs — single source of truth in internal/archive.")
+}
+
+// checkDuplicateSkipDirs scans Go source files for skipDirs/SkipDirs variable
+// declarations outside of internal/archive. Returns file paths of violators.
+func checkDuplicateSkipDirs() []string {
+	var dupes []string
+	_ = filepath.Walk("internal", func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		// Skip the canonical location.
+		if strings.HasPrefix(filepath.ToSlash(path), "internal/archive/") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		content := string(data)
+		if strings.Contains(content, "var skipDirs") || strings.Contains(content, "var SkipDirs") {
+			dupes = append(dupes, path)
+		}
+		return nil
+	})
+	return dupes
 }
 
 // buildPackageMap maps each node ID to an "internal/X" package path.
