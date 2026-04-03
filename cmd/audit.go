@@ -1,8 +1,16 @@
 package cmd
 
 import (
+	"context"
+	"fmt"
+	"os"
+	"time"
+
 	"github.com/spf13/cobra"
 
+	"github.com/supermodeltools/cli/internal/api"
+	"github.com/supermodeltools/cli/internal/cache"
+	"github.com/supermodeltools/cli/internal/config"
 	"github.com/supermodeltools/cli/internal/factory"
 )
 
@@ -52,6 +60,41 @@ func runAudit(cmd *cobra.Command, dir string) error {
 	}
 
 	report := factory.Analyze(ir, projectName)
+
+	// Run impact analysis (global mode) to enrich the health report.
+	impact, err := runImpactForAudit(cmd, rootDir)
+	if err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: impact analysis unavailable: %v\n", err)
+	} else {
+		factory.EnrichWithImpact(report, impact)
+	}
+
 	factory.RenderHealth(cmd.OutOrStdout(), report)
 	return nil
+}
+
+// runImpactForAudit runs global impact analysis for the audit report.
+func runImpactForAudit(cmd *cobra.Command, rootDir string) (*api.ImpactResult, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+
+	zipPath, err := factory.CreateZip(rootDir)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = os.Remove(zipPath) }()
+
+	hash, err := cache.HashFile(zipPath)
+	if err != nil {
+		return nil, err
+	}
+
+	client := api.New(cfg)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	fmt.Fprintln(cmd.ErrOrStderr(), "Running impact analysis…")
+	return client.Impact(ctx, zipPath, "audit-impact-"+hash[:16], "", "")
 }
