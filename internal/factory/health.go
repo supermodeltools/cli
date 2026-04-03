@@ -37,6 +37,39 @@ func Analyze(ir *api.SupermodelIR, projectName string) *HealthReport {
 	return r
 }
 
+// EnrichWithImpact adds impact analysis results to an existing HealthReport
+// and re-scores status and recommendations.
+func EnrichWithImpact(r *HealthReport, impact *api.ImpactResult) {
+	for i := range impact.Impacts {
+		imp := &impact.Impacts[i]
+		r.ImpactFiles = append(r.ImpactFiles, ImpactFile{
+			Path:       imp.Target.File,
+			RiskScore:  imp.BlastRadius.RiskScore,
+			Direct:     imp.BlastRadius.DirectDependents,
+			Transitive: imp.BlastRadius.TransitiveDependents,
+			Files:      imp.BlastRadius.AffectedFiles,
+		})
+	}
+	// Also pull in global critical files if the API returned them.
+	for i := range impact.GlobalMetrics.MostCriticalFiles {
+		cf := &impact.GlobalMetrics.MostCriticalFiles[i]
+		r.ImpactFiles = append(r.ImpactFiles, ImpactFile{
+			Path:   cf.File,
+			Direct: cf.DependentCount,
+		})
+	}
+	// Cap to top 10 by direct dependents.
+	sort.Slice(r.ImpactFiles, func(i, j int) bool {
+		return r.ImpactFiles[i].Direct > r.ImpactFiles[j].Direct
+	})
+	if len(r.ImpactFiles) > 10 {
+		r.ImpactFiles = r.ImpactFiles[:10]
+	}
+	// Re-score and regenerate recommendations with impact data.
+	r.Status = scoreStatus(r)
+	r.Recommendations = generateRecommendations(r)
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func buildExternalDeps(ir *api.SupermodelIR) []string {
@@ -147,6 +180,11 @@ func scoreStatus(r *HealthReport) HealthStatus {
 	if r.CircularDeps > 0 {
 		return StatusCritical
 	}
+	for i := range r.ImpactFiles {
+		if r.ImpactFiles[i].RiskScore == "critical" {
+			return StatusDegraded
+		}
+	}
 	for i := range r.Domains {
 		if len(r.Domains[i].IncomingDeps) >= 5 {
 			return StatusDegraded
@@ -203,6 +241,16 @@ func generateRecommendations(r *HealthReport) []Recommendation {
 			recs = append(recs, Recommendation{
 				Priority: 2,
 				Message:  fmt.Sprintf("File %q is referenced by %d domains — high blast radius; protect its public interface.", f.Path, f.RelationshipCount),
+			})
+		}
+	}
+
+	for i := range r.ImpactFiles {
+		f := &r.ImpactFiles[i]
+		if f.RiskScore == "critical" {
+			recs = append(recs, Recommendation{
+				Priority: 1,
+				Message:  fmt.Sprintf("File %q has critical blast radius (%d direct, %d transitive dependents) — changes here affect %d files.", f.Path, f.Direct, f.Transitive, f.Files),
 			})
 		}
 	}

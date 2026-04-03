@@ -32,8 +32,11 @@ type HealthReport struct {
 	// Per-domain health
 	Domains []DomainHealth
 
-	// Highest blast-radius files
+	// Highest blast-radius files (from domain key file overlap)
 	CriticalFiles []CriticalFile
+
+	// Impact analysis results (from /v1/analysis/impact)
+	ImpactFiles []ImpactFile
 
 	// Prioritised action items
 	Recommendations []Recommendation
@@ -69,6 +72,15 @@ func (d *DomainHealth) CouplingStatus() string {
 type CriticalFile struct {
 	Path              string
 	RelationshipCount int
+}
+
+// ImpactFile is a file with its blast radius risk from impact analysis.
+type ImpactFile struct {
+	Path       string
+	RiskScore  string
+	Direct     int
+	Transitive int
+	Files      int
 }
 
 // Recommendation is a prioritised actionable finding.

@@ -62,6 +62,21 @@ func RenderHealth(w io.Writer, r *HealthReport) {
 		}
 	}
 
+	// Impact analysis
+	if len(r.ImpactFiles) > 0 {
+		fmt.Fprint(w, "\n## Impact Analysis\n\n")
+		fmt.Fprintln(w, "| File | Risk | Direct | Transitive | Affected Files |")
+		fmt.Fprintln(w, "|------|------|--------|------------|----------------|")
+		for i := range r.ImpactFiles {
+			f := &r.ImpactFiles[i]
+			risk := f.RiskScore
+			if risk == "" {
+				risk = "-"
+			}
+			fmt.Fprintf(w, "| %s | %s | %d | %d | %d |\n", f.Path, risk, f.Direct, f.Transitive, f.Files)
+		}
+	}
+
 	// Domain health
 	if len(r.Domains) > 0 {
 		fmt.Fprint(w, "\n## Domain Health\n\n")
