@@ -403,17 +403,17 @@ func (s *server) getOrAnalyze(ctx context.Context, force bool) (*api.Graph, stri
 
 // ensureZip creates a repo zip and returns its path and hash.
 // The caller is responsible for removing the zip file.
-func (s *server) ensureZip() (string, string, error) {
-	if err := s.cfg.RequireAPIKey(); err != nil {
+func (s *server) ensureZip() (zipPath string, hash string, err error) {
+	if err = s.cfg.RequireAPIKey(); err != nil {
 		return "", "", err
 	}
 
-	zipPath, err := createZip(s.dir)
+	zipPath, err = createZip(s.dir)
 	if err != nil {
 		return "", "", err
 	}
 
-	hash, err := cache.HashFile(zipPath)
+	hash, err = cache.HashFile(zipPath)
 	if err != nil {
 		os.Remove(zipPath)
 		return "", "", err
