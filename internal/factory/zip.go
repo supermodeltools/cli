@@ -11,20 +11,30 @@ import (
 
 // skipDirs are directory names that should never be included in the archive.
 var skipDirs = map[string]bool{
-	".git":         true,
-	"node_modules": true,
-	"vendor":       true,
-	"__pycache__":  true,
-	".venv":        true,
-	"venv":         true,
-	"dist":         true,
-	"build":        true,
-	"target":       true,
-	".next":        true,
-	".nuxt":        true,
-	"coverage":     true,
-	".terraform":   true,
-	".tox":         true,
+	".git":             true,
+	".claude":          true,
+	".idea":            true,
+	".vscode":          true,
+	".cache":           true,
+	".turbo":           true,
+	".nx":              true,
+	".next":            true,
+	".nuxt":            true,
+	".terraform":       true,
+	".tox":             true,
+	".venv":            true,
+	".pnpm-store":      true,
+	"__pycache__":      true,
+	"__snapshots__":    true,
+	"bower_components": true,
+	"build":            true,
+	"coverage":         true,
+	"dist":             true,
+	"node_modules":     true,
+	"out":              true,
+	"target":           true,
+	"vendor":           true,
+	"venv":             true,
 }
 
 // CreateZip archives the repository at dir into a temporary ZIP file and
@@ -33,6 +43,7 @@ var skipDirs = map[string]bool{
 // Strategy: use git archive when the repo is clean (committed state matches
 // working tree, so the archive reflects what the user is actually looking at).
 // Falls back to a manual directory walk otherwise.
+// In both cases, skipDirs entries are excluded.
 func CreateZip(dir string) (string, error) {
 	f, err := os.CreateTemp("", "supermodel-factory-*.zip")
 	if err != nil {
@@ -43,6 +54,10 @@ func CreateZip(dir string) (string, error) {
 
 	if isGitRepo(dir) && isWorktreeClean(dir) {
 		if err := gitArchive(dir, dest); err == nil {
+			if err := filterSkipDirs(dest); err != nil {
+				_ = os.Remove(dest)
+				return "", err
+			}
 			return dest, nil
 		}
 	}
@@ -71,6 +86,56 @@ func gitArchive(dir, dest string) error {
 	cmd := exec.Command("git", "-C", dir, "archive", "--format=zip", "-o", dest, "HEAD") //nolint:gosec // dir is user-supplied cwd; dest is temp file
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// filterSkipDirs removes entries from a ZIP whose path contains a skipDirs segment.
+func filterSkipDirs(zipPath string) error {
+	data, err := os.ReadFile(zipPath) //nolint:gosec // zipPath is a temp file from os.CreateTemp
+	if err != nil {
+		return err
+	}
+
+	r, err := zip.NewReader(strings.NewReader(string(data)), int64(len(data)))
+	if err != nil {
+		return err
+	}
+
+	out, err := os.Create(zipPath) //nolint:gosec // zipPath is a temp file
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	zw := zip.NewWriter(out)
+	for _, f := range r.File {
+		if shouldSkip(f.Name) {
+			continue
+		}
+		w, err := zw.Create(f.Name)
+		if err != nil {
+			return err
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(w, rc)
+		rc.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return zw.Close()
+}
+
+// shouldSkip reports whether a zip entry path contains a skipDirs segment.
+func shouldSkip(path string) bool {
+	for _, seg := range strings.Split(filepath.ToSlash(path), "/") {
+		if skipDirs[seg] {
+			return true
+		}
+	}
+	return false
 }
 
 // walkZip creates a ZIP of dir, excluding skipDirs, hidden files, symlinks,
