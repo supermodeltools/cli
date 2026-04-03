@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/supermodeltools/cli/internal/archive"
 )
 
 func TestIsGitRepo_WithDotGit(t *testing.T) {
@@ -17,7 +19,7 @@ func TestIsGitRepo_WithDotGit(t *testing.T) {
 	// isGitRepo uses `git rev-parse --git-dir` which needs an actual git repo;
 	// fall back to checking directory creation only — the factory version
 	// (os.Stat) is simpler, but here we just ensure non-git dir returns false.
-	if isGitRepo(t.TempDir()) {
+	if archive.IsGitRepo(t.TempDir()) {
 		t.Error("empty temp dir should not be a git repo")
 	}
 }
@@ -29,7 +31,7 @@ func TestWalkZip_IncludesFiles(t *testing.T) {
 	}
 
 	dest := filepath.Join(t.TempDir(), "out.zip")
-	if err := walkZip(src, dest); err != nil {
+	if err := archive.WalkZip(src, dest); err != nil {
 		t.Fatalf("walkZip: %v", err)
 	}
 	entries := readZipEntries(t, dest)
@@ -48,7 +50,7 @@ func TestWalkZip_SkipsHiddenFiles(t *testing.T) {
 	}
 
 	dest := filepath.Join(t.TempDir(), "out.zip")
-	if err := walkZip(src, dest); err != nil {
+	if err := archive.WalkZip(src, dest); err != nil {
 		t.Fatal(err)
 	}
 	entries := readZipEntries(t, dest)
@@ -74,7 +76,7 @@ func TestWalkZip_SkipsSkipDirs(t *testing.T) {
 	}
 
 	dest := filepath.Join(t.TempDir(), "out.zip")
-	if err := walkZip(src, dest); err != nil {
+	if err := archive.WalkZip(src, dest); err != nil {
 		t.Fatal(err)
 	}
 	entries := readZipEntries(t, dest)

@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/supermodeltools/cli/internal/archive"
 )
 
 func TestIsGitRepo_NotGit(t *testing.T) {
-	if isGitRepo(t.TempDir()) {
+	if archive.IsGitRepo(t.TempDir()) {
 		t.Error("empty temp dir should not be a git repo")
 	}
 }
@@ -21,7 +23,7 @@ func TestWalkZip_IncludesFiles(t *testing.T) {
 	}
 
 	dest := filepath.Join(t.TempDir(), "out.zip")
-	if err := walkZip(src, dest); err != nil {
+	if err := archive.WalkZip(src, dest); err != nil {
 		t.Fatalf("walkZip: %v", err)
 	}
 	entries := readZipEntries(t, dest)
@@ -40,7 +42,7 @@ func TestWalkZip_SkipsHiddenFiles(t *testing.T) {
 	}
 
 	dest := filepath.Join(t.TempDir(), "out.zip")
-	if err := walkZip(src, dest); err != nil {
+	if err := archive.WalkZip(src, dest); err != nil {
 		t.Fatal(err)
 	}
 	entries := readZipEntries(t, dest)
@@ -63,7 +65,7 @@ func TestWalkZip_SkipsSkipDirs(t *testing.T) {
 	}
 
 	dest := filepath.Join(t.TempDir(), "out.zip")
-	if err := walkZip(src, dest); err != nil {
+	if err := archive.WalkZip(src, dest); err != nil {
 		t.Fatal(err)
 	}
 	entries := readZipEntries(t, dest)

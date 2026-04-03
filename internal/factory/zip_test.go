@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/supermodeltools/cli/internal/archive"
 )
 
 // ── isGitRepo ─────────────────────────────────────────────────────────────────
@@ -35,7 +37,7 @@ func TestWalkZip_IncludesRegularFiles(t *testing.T) {
 	writeFile(t, filepath.Join(src, "README.md"), "# readme")
 
 	dest := filepath.Join(t.TempDir(), "out.zip")
-	if err := walkZip(src, dest); err != nil {
+	if err := archive.WalkZip(src, dest); err != nil {
 		t.Fatalf("walkZip: %v", err)
 	}
 
@@ -54,7 +56,7 @@ func TestWalkZip_SkipsHiddenFiles(t *testing.T) {
 	writeFile(t, filepath.Join(src, "main.go"), "package main")
 
 	dest := filepath.Join(t.TempDir(), "out.zip")
-	if err := walkZip(src, dest); err != nil {
+	if err := archive.WalkZip(src, dest); err != nil {
 		t.Fatalf("walkZip: %v", err)
 	}
 
@@ -77,7 +79,7 @@ func TestWalkZip_SkipsNodeModules(t *testing.T) {
 	writeFile(t, filepath.Join(src, "index.js"), "console.log('hi')")
 
 	dest := filepath.Join(t.TempDir(), "out.zip")
-	if err := walkZip(src, dest); err != nil {
+	if err := archive.WalkZip(src, dest); err != nil {
 		t.Fatalf("walkZip: %v", err)
 	}
 
@@ -94,7 +96,7 @@ func TestWalkZip_SkipsNodeModules(t *testing.T) {
 
 func TestWalkZip_SkipsAllSkipDirs(t *testing.T) {
 	src := t.TempDir()
-	for dir := range skipDirs {
+	for dir := range archive.SkipDirs {
 		d := filepath.Join(src, dir)
 		if err := os.Mkdir(d, 0750); err != nil {
 			t.Fatal(err)
@@ -104,7 +106,7 @@ func TestWalkZip_SkipsAllSkipDirs(t *testing.T) {
 	writeFile(t, filepath.Join(src, "real.go"), "package main")
 
 	dest := filepath.Join(t.TempDir(), "out.zip")
-	if err := walkZip(src, dest); err != nil {
+	if err := archive.WalkZip(src, dest); err != nil {
 		t.Fatalf("walkZip: %v", err)
 	}
 
@@ -120,7 +122,7 @@ func TestWalkZip_SkipsAllSkipDirs(t *testing.T) {
 func TestWalkZip_EmptyDir(t *testing.T) {
 	src := t.TempDir()
 	dest := filepath.Join(t.TempDir(), "out.zip")
-	if err := walkZip(src, dest); err != nil {
+	if err := archive.WalkZip(src, dest); err != nil {
 		t.Fatalf("walkZip on empty dir: %v", err)
 	}
 	entries := zipEntries(t, dest)
@@ -138,7 +140,7 @@ func TestWalkZip_NestedFiles(t *testing.T) {
 	writeFile(t, filepath.Join(sub, "client.go"), "package api")
 
 	dest := filepath.Join(t.TempDir(), "out.zip")
-	if err := walkZip(src, dest); err != nil {
+	if err := archive.WalkZip(src, dest); err != nil {
 		t.Fatalf("walkZip: %v", err)
 	}
 
