@@ -40,6 +40,9 @@ func Analyze(ir *api.SupermodelIR, projectName string) *HealthReport {
 // EnrichWithImpact adds impact analysis results to an existing HealthReport
 // and re-scores status and recommendations.
 func EnrichWithImpact(r *HealthReport, impact *api.ImpactResult) {
+	if impact == nil {
+		return
+	}
 	for i := range impact.Impacts {
 		imp := &impact.Impacts[i]
 		r.ImpactFiles = append(r.ImpactFiles, ImpactFile{
