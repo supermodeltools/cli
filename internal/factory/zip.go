@@ -1,7 +1,6 @@
 package factory
 
 import (
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -50,12 +49,3 @@ func isWorktreeClean(dir string) bool {
 	return err == nil && strings.TrimSpace(string(out)) == ""
 }
 
-func copyFile(path string, w io.Writer) error {
-	f, err := os.Open(path) //nolint:gosec // path is from filepath.Walk; symlinks excluded by caller
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(w, f)
-	f.Close()
-	return err
-}

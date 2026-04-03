@@ -116,7 +116,7 @@ func FilterSkipDirs(zipPath string) error {
 		if err != nil {
 			return err
 		}
-		_, err = io.Copy(w, rc)
+		_, err = io.Copy(w, rc) //nolint:gosec // source is our own git archive output, not untrusted
 		rc.Close()
 		if err != nil {
 			return err
