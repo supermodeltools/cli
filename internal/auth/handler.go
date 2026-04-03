@@ -61,7 +61,7 @@ func Login(ctx context.Context) error {
 		keyCh <- key
 	})
 
-	srv := &http.Server{Handler: mux}
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second} //nolint:gosec // localhost-only server
 	go func() {
 		if err := srv.Serve(listener); err != nil && err != http.ErrServerClosed {
 			errCh <- err
