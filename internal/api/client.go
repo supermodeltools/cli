@@ -107,6 +107,88 @@ func (c *Client) pollUntilComplete(ctx context.Context, zipPath, idempotencyKey 
 	return job, nil
 }
 
+// AnalyzeSidecars uploads a repository ZIP and runs the full analysis pipeline,
+// returning the complete SidecarIR response with full Node/Relationship data
+// required for sidecar rendering (IDs, labels, properties preserved).
+func (c *Client) AnalyzeSidecars(ctx context.Context, zipPath, idempotencyKey string) (*SidecarIR, error) {
+	job, err := c.pollUntilComplete(ctx, zipPath, idempotencyKey)
+	if err != nil {
+		return nil, err
+	}
+	var ir SidecarIR
+	if err := json.Unmarshal(job.Result, &ir); err != nil {
+		return nil, fmt.Errorf("decode sidecar result: %w", err)
+	}
+	return &ir, nil
+}
+
+// AnalyzeIncremental uploads a zip of changed files and requests an incremental
+// graph update from the API. changedFiles is sent as a form field so the server
+// can scope its analysis to only those files.
+func (c *Client) AnalyzeIncremental(ctx context.Context, zipPath string, changedFiles []string, idempotencyKey string) (*SidecarIR, error) {
+	f, err := os.Open(zipPath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+
+	fw, err := mw.CreateFormFile("file", filepath.Base(zipPath))
+	if err != nil {
+		return nil, err
+	}
+	if _, err = io.Copy(fw, f); err != nil {
+		return nil, err
+	}
+
+	// Encode changed files as a JSON array in a form field.
+	changedJSON, err := json.Marshal(changedFiles)
+	if err != nil {
+		return nil, err
+	}
+	if err := mw.WriteField("changedFiles", string(changedJSON)); err != nil {
+		return nil, err
+	}
+	mw.Close()
+
+	var job JobResponse
+	if err := c.request(ctx, http.MethodPost, analyzeEndpoint, mw.FormDataContentType(), &buf, idempotencyKey, &job); err != nil {
+		return nil, err
+	}
+
+	// Poll until complete (reuse pollUntilComplete logic inline since we already have the first response).
+	for job.Status == "pending" || job.Status == "processing" {
+		wait := time.Duration(job.RetryAfter) * time.Second
+		if wait <= 0 {
+			wait = 5 * time.Second
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(wait):
+		}
+		nextJob, err := c.postZipTo(ctx, zipPath, idempotencyKey, analyzeEndpoint)
+		if err != nil {
+			return nil, err
+		}
+		job = *nextJob
+	}
+	if job.Error != nil {
+		return nil, fmt.Errorf("incremental analysis failed: %s", *job.Error)
+	}
+	if job.Status != "completed" {
+		return nil, fmt.Errorf("unexpected job status: %s", job.Status)
+	}
+
+	var ir SidecarIR
+	if err := json.Unmarshal(job.Result, &ir); err != nil {
+		return nil, fmt.Errorf("decode incremental sidecar result: %w", err)
+	}
+	return &ir, nil
+}
+
 // postZip sends the repository ZIP to the analyze endpoint and returns the
 // raw job response (which may be pending, processing, or completed).
 func (c *Client) postZip(ctx context.Context, zipPath, idempotencyKey string) (*JobResponse, error) {
