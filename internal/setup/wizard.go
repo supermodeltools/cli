@@ -117,13 +117,14 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 			if confirmYN("Install Claude Code hook?", true) {
 				installed, err := installHook(repoDir)
-				if err != nil {
+				switch {
+				case err != nil:
 					fmt.Fprintf(os.Stderr, "  %sWarning: could not install hook: %v%s\n", yellow, err, reset)
-				} else if installed {
+				case installed:
 					hookInstalled = true
 					hookNote = "installed in .claude/settings.json"
 					fmt.Printf("  %s✓%s  Hook installed\n", green, reset)
-				} else {
+				default:
 					fmt.Printf("  %s✓%s  Hook already installed\n", green, reset)
 					hookInstalled = true
 					hookNote = "already in .claude/settings.json"
