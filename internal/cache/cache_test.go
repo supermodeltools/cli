@@ -107,6 +107,7 @@ func TestGetPut_RoundTrip(t *testing.T) {
 	}
 	if got == nil {
 		t.Fatal("Get returned nil after Put")
+		return
 	}
 	if len(got.Nodes) != 1 || got.Nodes[0].ID != "n1" {
 		t.Errorf("round-trip nodes: got %v", got.Nodes)
