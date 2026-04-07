@@ -25,7 +25,10 @@ type DaemonConfig struct {
 	FSWatch      bool
 	PollInterval time.Duration
 	LogFunc      func(string, ...interface{})
-	OnReady      func()
+	// OnReady is called once after the initial generate completes.
+	OnReady func(GraphStats)
+	// OnUpdate is called after each incremental update completes.
+	OnUpdate func(GraphStats)
 }
 
 // Daemon watches for file changes and keeps sidecars fresh.
@@ -35,9 +38,10 @@ type Daemon struct {
 	cache  *Cache
 	logf   func(string, ...interface{})
 
-	mu       sync.Mutex
-	ir       *api.SidecarIR
-	notifyCh chan string
+	mu          sync.Mutex
+	ir          *api.SidecarIR
+	notifyCh    chan string
+	loadedCache bool // true if startup data came from local cache
 }
 
 // NewDaemon creates a daemon with the given config and API client.
@@ -70,6 +74,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 	if err := d.loadOrGenerate(ctx); err != nil {
 		return fmt.Errorf("startup: %w", err)
 	}
+
+	d.mu.Lock()
+	stats := computeStats(d.ir, d.cache)
+	stats.FromCache = d.loadedCache
+	d.mu.Unlock()
 	d.writeStatus(fmt.Sprintf("ready — %s — %d nodes",
 		time.Now().Format(time.RFC3339), len(d.ir.Graph.Nodes)))
 
@@ -90,7 +99,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		d.logf("[step:3] Ready — listening on UDP :%d (debounce %s)", d.cfg.NotifyPort, d.cfg.Debounce)
 	}
 	if d.cfg.OnReady != nil {
-		d.cfg.OnReady()
+		d.cfg.OnReady(stats)
 	}
 
 	var (
@@ -147,6 +156,7 @@ func (d *Daemon) loadOrGenerate(ctx context.Context) error {
 			d.ir = &ir
 			d.cache = NewCache()
 			d.cache.Build(&ir)
+			d.loadedCache = true
 			d.mu.Unlock()
 
 			files := d.cache.SourceFiles()
@@ -163,6 +173,7 @@ func (d *Daemon) loadOrGenerate(ctx context.Context) error {
 	d.writeStatus("building graph...")
 	return d.fullGenerate(ctx)
 }
+
 
 // fullGenerate does a complete fetch + render.
 func (d *Daemon) fullGenerate(ctx context.Context) error {
@@ -241,16 +252,20 @@ func (d *Daemon) incrementalUpdate(ctx context.Context, changedFiles []string) {
 
 	d.logf("Updated %d sidecars", written)
 
-	var nodeCount int
+	var updateStats GraphStats
 	func() {
 		d.mu.Lock()
 		defer d.mu.Unlock()
 		d.saveCache()
-		nodeCount = len(d.ir.Graph.Nodes)
+		updateStats = computeStats(d.ir, d.cache)
 	}()
 
 	d.writeStatus(fmt.Sprintf("ready — %s — %d nodes",
-		time.Now().Format(time.RFC3339), nodeCount))
+		time.Now().Format(time.RFC3339), updateStats.SourceFiles))
+
+	if d.cfg.OnUpdate != nil {
+		d.cfg.OnUpdate(updateStats)
+	}
 }
 
 // saveCache writes the current merged SidecarIR to the cache file. Must be called with d.mu held.

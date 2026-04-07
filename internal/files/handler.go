@@ -16,6 +16,15 @@ import (
 	"github.com/supermodeltools/cli/internal/ui"
 )
 
+// ANSI helpers used only for watch summary output.
+const (
+	ansiReset  = "\033[0m"
+	ansiBold   = "\033[1m"
+	ansiGreen  = "\033[32m"
+	ansiBGreen = "\033[1;32m"
+	ansiDim    = "\033[2m"
+)
+
 // GenerateOptions configures the generate command.
 type GenerateOptions struct {
 	Force     bool
@@ -161,6 +170,27 @@ func Watch(ctx context.Context, cfg *config.Config, dir string, opts WatchOption
 		FSWatch:      opts.FSWatch,
 		PollInterval: pollInterval,
 		LogFunc:      logf,
+		OnReady: func(s GraphStats) {
+			src := "fetched"
+			if s.FromCache {
+				src = "cached"
+			}
+			fmt.Printf("\n  %s✓%s  %s%d files%s · %s%d functions%s · %s%d relationships%s  %s(%s)%s\n\n",
+				ansiBGreen, ansiReset,
+				ansiBold, s.SourceFiles, ansiReset,
+				ansiBold, s.Functions, ansiReset,
+				ansiBold, s.Relationships, ansiReset,
+				ansiDim, src, ansiReset,
+			)
+		},
+		OnUpdate: func(s GraphStats) {
+			fmt.Printf("  %s✓%s  Updated — %s%d files%s · %s%d functions%s · %s%d relationships%s\n",
+				ansiGreen, ansiReset,
+				ansiBold, s.SourceFiles, ansiReset,
+				ansiBold, s.Functions, ansiReset,
+				ansiBold, s.Relationships, ansiReset,
+			)
+		},
 	}
 
 	d := NewDaemon(daemonCfg, client)
