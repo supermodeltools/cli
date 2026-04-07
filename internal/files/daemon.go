@@ -84,7 +84,14 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	d.logf("[step:2] Starting listeners")
 	if d.cfg.NotifyPort > 0 {
-		go d.listenUDP(ctx)
+		udpReady := make(chan error, 1)
+		go d.listenUDP(ctx, udpReady)
+		if err := <-udpReady; err != nil {
+			if !d.cfg.FSWatch {
+				return fmt.Errorf("UDP port %d already in use — is `supermodel watch` already running? (%w)", d.cfg.NotifyPort, err)
+			}
+			d.logf("Warning: UDP listener failed (FSWatch active, continuing): %v", err)
+		}
 	}
 
 	if d.cfg.FSWatch {
@@ -525,14 +532,15 @@ func (d *Daemon) computeAffectedFiles(changedFiles []string) []string {
 	return daemonSortedKeys(affected)
 }
 
-func (d *Daemon) listenUDP(ctx context.Context) {
+func (d *Daemon) listenUDP(ctx context.Context, ready chan<- error) {
 	addr := fmt.Sprintf("127.0.0.1:%d", d.cfg.NotifyPort)
 	conn, err := net.ListenPacket("udp", addr)
 	if err != nil {
-		d.logf("UDP listener failed: %v", err)
+		ready <- err
 		return
 	}
 	defer conn.Close()
+	ready <- nil
 	d.logf("UDP listener on %s", addr)
 
 	go func() {
