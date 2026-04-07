@@ -11,9 +11,9 @@ import (
 
 	"github.com/manifoldco/promptui"
 
-	"github.com/supermodeltools/cli/internal/analyze"
 	"github.com/supermodeltools/cli/internal/auth"
 	"github.com/supermodeltools/cli/internal/config"
+	"github.com/supermodeltools/cli/internal/files"
 )
 
 // ANSI color codes
@@ -121,31 +121,63 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	}
 	fmt.Println()
 
+	// ── Step 4: File mode ─────────────────────────────────────────
+	fmt.Printf("  %s◆%s  File mode\n", cyan, reset)
+	fmt.Println()
+	fmt.Printf("  %sWrites a .graph file next to each source file in your repo.%s\n", dWhite, reset)
+	fmt.Printf("  %sAgents read them automatically via grep and cat — no extra%s\n", dWhite, reset)
+	fmt.Printf("  %sprompt changes, no new tools to learn.%s\n", dWhite, reset)
+	fmt.Println()
+	fmt.Printf("  %sDisable at any time with:%s %ssupermodel clean%s\n", dWhite, reset, bWhite, reset)
+	fmt.Println()
+
+	filesEnabled := confirmYN("Enable file mode?", true)
+	fmt.Println()
+
+	cfg.Files = boolPtr(filesEnabled)
+	if err := cfg.Save(); err != nil {
+		fmt.Fprintf(os.Stderr, "  %sWarning: could not save config: %v%s\n", yellow, err, reset)
+	}
+
+	if filesEnabled {
+		fmt.Printf("  %s✓%s  File mode enabled\n", green, reset)
+	} else {
+		fmt.Printf("  %s–%s  File mode disabled\n", dim, reset)
+	}
+	fmt.Println()
+
 	// ── Summary ────────────────────────────────────────────────────
 	fmt.Printf("  %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n", dim, reset)
 	fmt.Println()
 	fmt.Printf("  %s✓%s  Setup complete\n", bGreen, reset)
 	fmt.Println()
-	fmt.Printf("     %sFile mode%s    %senabled%s\n", dim, reset, bWhite, reset)
+	fileModeStr := "disabled"
+	if filesEnabled {
+		fileModeStr = "enabled"
+	}
+	fmt.Printf("     %sFile mode%s    %s%s%s\n", dim, reset, bWhite, fileModeStr, reset)
 	if hookNote != "" {
 		fmt.Printf("     %sHook%s         %s%s%s\n", dim, reset, bWhite, hookNote, reset)
 	}
 	fmt.Println()
-	fmt.Printf("  %sNext steps:%s\n", dWhite, reset)
-	fmt.Println()
-	fmt.Printf("     %ssupermodel analyze%s        %sgenerate graph files now%s\n", bWhite, reset, dim, reset)
-	fmt.Printf("     %ssupermodel watch%s          %skeep files updated as you code%s\n", bWhite, reset, dim, reset)
-	fmt.Println()
 	fmt.Printf("  %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n", dim, reset)
 	fmt.Println()
 
-	if confirmYN("Run 'supermodel analyze' now?", true) {
-		fmt.Println()
-		return analyze.Run(ctx, cfg, repoDir, analyze.Options{})
-	}
+	// ── Start watch ────────────────────────────────────────────────
+	fmt.Printf("  %sStarting watch mode…%s\n", bWhite, reset)
+	fmt.Println()
+	fmt.Printf("  %sGenerates your graph now, then stays running to keep it%s\n", dWhite, reset)
+	fmt.Printf("  %supdated as you edit files. Your agent reads the result via%s\n", dWhite, reset)
+	fmt.Printf("  %sgrep and cat — no extra steps needed.%s\n", dWhite, reset)
+	fmt.Println()
+	fmt.Printf("  %sPress %sCtrl+C%s%s to stop.%s\n", dWhite, bWhite, reset, dWhite, reset)
+	fmt.Printf("  %sRun %ssupermodel watch%s%s to restart at any time.%s\n", dWhite, bWhite, reset, dWhite, reset)
+	fmt.Println()
 
-	return nil
+	return files.Watch(ctx, cfg, repoDir, files.WatchOptions{})
 }
+
+func boolPtr(b bool) *bool { return &b }
 
 // maskKey returns a display-safe version of the API key.
 func maskKey(key string) string {
