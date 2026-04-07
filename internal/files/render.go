@@ -112,7 +112,7 @@ func renderDepsSection(filePath string, cache *Cache, prefix string) string {
 	return strings.Join(lines, "\n")
 }
 
-func renderImpactSection(filePath string, cache *Cache, prefix string) string {
+func renderImpactSection(filePath string, cache *Cache, prefix string) string { //nolint:gocyclo // risk/domain/impact calculation has many branches by design; splitting would obscure the scoring logic
 	directImporters := cache.Importers[filePath]
 	directCallerFiles := make(map[string]bool)
 
@@ -170,14 +170,17 @@ func renderImpactSection(filePath string, cache *Cache, prefix string) string {
 		risk = "LOW"
 	}
 
-	var lines []string
-	lines = append(lines, fmt.Sprintf("%s [impact]", prefix))
-	lines = append(lines, fmt.Sprintf("%s risk        %s", prefix, risk))
+	lines := []string{
+		fmt.Sprintf("%s [impact]", prefix),
+		fmt.Sprintf("%s risk        %s", prefix, risk),
+	}
 	if len(domains) > 0 {
 		lines = append(lines, fmt.Sprintf("%s domains     %s", prefix, strings.Join(sortedBoolKeys(domains), " · ")))
 	}
-	lines = append(lines, fmt.Sprintf("%s direct      %d", prefix, directCount))
-	lines = append(lines, fmt.Sprintf("%s transitive  %d", prefix, transitiveCount))
+	lines = append(lines,
+		fmt.Sprintf("%s direct      %d", prefix, directCount),
+		fmt.Sprintf("%s transitive  %d", prefix, transitiveCount),
+	)
 	if directCount > 0 {
 		lines = append(lines, fmt.Sprintf("%s affects     %s", prefix, strings.Join(sortedBoolKeys(directFiles), " · ")))
 	}

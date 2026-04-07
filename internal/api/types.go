@@ -149,11 +149,11 @@ type IRSubdomain struct {
 // IRNode/IRRelationship stubs), SidecarIR preserves the complete node graph
 // with IDs, labels, and properties required for sidecar rendering.
 type SidecarIR struct {
-	Repo     string         `json:"repo"`
-	Summary  map[string]any `json:"summary"`
-	Metadata IRMetadata     `json:"metadata"`
+	Repo     string          `json:"repo"`
+	Summary  map[string]any  `json:"summary"`
+	Metadata IRMetadata      `json:"metadata"`
 	Domains  []SidecarDomain `json:"domains"`
-	Graph    SidecarGraph   `json:"graph"`
+	Graph    SidecarGraph    `json:"graph"`
 }
 
 // SidecarGraph is the full node/relationship graph embedded in SidecarIR.
@@ -164,10 +164,10 @@ type SidecarGraph struct {
 
 // SidecarDomain is a semantic domain from the API with file references.
 type SidecarDomain struct {
-	Name               string           `json:"name"`
-	DescriptionSummary string           `json:"descriptionSummary"`
-	KeyFiles           []string         `json:"keyFiles"`
-	Responsibilities   []string         `json:"responsibilities"`
+	Name               string             `json:"name"`
+	DescriptionSummary string             `json:"descriptionSummary"`
+	KeyFiles           []string           `json:"keyFiles"`
+	Responsibilities   []string           `json:"responsibilities"`
 	Subdomains         []SidecarSubdomain `json:"subdomains"`
 }
 

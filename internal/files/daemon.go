@@ -30,10 +30,10 @@ type DaemonConfig struct {
 
 // Daemon watches for file changes and keeps sidecars fresh.
 type Daemon struct {
-	cfg      DaemonConfig
-	client   *api.Client
-	cache    *Cache
-	logf     func(string, ...interface{})
+	cfg    DaemonConfig
+	client *api.Client
+	cache  *Cache
+	logf   func(string, ...interface{})
 
 	mu       sync.Mutex
 	ir       *api.SidecarIR
@@ -41,7 +41,7 @@ type Daemon struct {
 }
 
 // NewDaemon creates a daemon with the given config and API client.
-func NewDaemon(cfg DaemonConfig, client *api.Client) *Daemon {
+func NewDaemon(cfg DaemonConfig, client *api.Client) *Daemon { //nolint:gocritic // DaemonConfig is a value-semantic config struct; pointer would complicate call sites
 	if cfg.Debounce <= 0 {
 		cfg.Debounce = 2 * time.Second
 	}
@@ -282,7 +282,7 @@ func (d *Daemon) saveCache() {
 }
 
 // mergeGraph integrates incremental API results into the existing SidecarIR.
-func (d *Daemon) mergeGraph(incremental *api.SidecarIR, changedFiles []string) {
+func (d *Daemon) mergeGraph(incremental *api.SidecarIR, changedFiles []string) { //nolint:gocyclo // graph merge has inherent branching per node/rel type; splitting would obscure the algorithm
 	if d.ir == nil {
 		d.ir = incremental
 		return
@@ -471,8 +471,10 @@ func (d *Daemon) mergeGraph(incremental *api.SidecarIR, changedFiles []string) {
 		newRels = append(newRels, rel)
 	}
 
-	d.ir.Graph.Nodes = append(keptNodes, newNodes...)
-	d.ir.Graph.Relationships = append(keptRels, newRels...)
+	keptNodes = append(keptNodes, newNodes...)
+	d.ir.Graph.Nodes = keptNodes
+	keptRels = append(keptRels, newRels...)
+	d.ir.Graph.Relationships = keptRels
 
 	if len(incremental.Domains) > 0 {
 		d.ir.Domains = incremental.Domains
@@ -521,7 +523,7 @@ func (d *Daemon) listenUDP(ctx context.Context) {
 
 	go func() {
 		<-ctx.Done()
-		conn.SetReadDeadline(time.Now())
+		_ = conn.SetReadDeadline(time.Now())
 	}()
 
 	buf := make([]byte, 4096)

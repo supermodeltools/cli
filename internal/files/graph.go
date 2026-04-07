@@ -61,7 +61,7 @@ func NewCache() *Cache {
 // Build populates the cache from a SidecarIR result.
 // SidecarIR preserves the full Node/Relationship data (IDs, labels, properties)
 // required for sidecar rendering.
-func (c *Cache) Build(ir *api.SidecarIR) {
+func (c *Cache) Build(ir *api.SidecarIR) { //nolint:gocyclo // multi-pass graph indexing; each branch handles one node/rel label type
 	nodes := ir.Graph.Nodes
 	rels := ir.Graph.Relationships
 
@@ -70,13 +70,12 @@ func (c *Cache) Build(ir *api.SidecarIR) {
 		n := nodes[i]
 		props := n.Properties
 
-		if n.HasLabel("File") {
-			path := firstString(props, "filePath", "path", "name", n.ID)
-			c.IDToPath[n.ID] = path
-		} else if n.HasLabel("LocalDependency") {
-			path := firstString(props, "filePath", "name", n.ID)
-			c.IDToPath[n.ID] = path
-		} else if n.HasLabel("ExternalDependency") {
+		switch {
+		case n.HasLabel("File"):
+			c.IDToPath[n.ID] = firstString(props, "filePath", "path", "name", n.ID)
+		case n.HasLabel("LocalDependency"):
+			c.IDToPath[n.ID] = firstString(props, "filePath", "name", n.ID)
+		case n.HasLabel("ExternalDependency"):
 			name := n.Prop("name")
 			if name == "" {
 				name = n.ID

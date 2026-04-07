@@ -284,7 +284,7 @@ func Hook(port int) error {
 		return nil
 	}
 	defer conn.Close()
-	conn.SetWriteDeadline(time.Now().Add(500 * time.Millisecond))
+	_ = conn.SetWriteDeadline(time.Now().Add(500 * time.Millisecond))
 	_, _ = conn.Write([]byte(filePath))
 	return nil
 }
@@ -345,13 +345,13 @@ func updateGitignore(repoDir string) error {
 		}
 	}
 
-	f, err := os.OpenFile(gitignorePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(gitignorePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // .gitignore is a standard repo file; 0o600 satisfies gosec while remaining functional
 	if err != nil {
 		return nil // can't write, skip silently
 	}
 	defer f.Close()
 
-	if len(content) > 0 && !strings.HasSuffix(content, "\n") {
+	if content != "" && !strings.HasSuffix(content, "\n") {
 		fmt.Fprintln(f)
 	}
 	fmt.Fprintln(f, entry)
