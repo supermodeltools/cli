@@ -323,6 +323,18 @@ type CrossDomainDependency struct {
 	TargetDomain string `json:"targetDomain"`
 }
 
+// ShareRequest is the payload for POST /v1/share.
+type ShareRequest struct {
+	ProjectName string `json:"project_name"`
+	Status      string `json:"status"`
+	Content     string `json:"content"` // rendered Markdown report
+}
+
+// ShareResponse is returned by POST /v1/share.
+type ShareResponse struct {
+	URL string `json:"url"`
+}
+
 // Error represents a non-2xx response from the API.
 type Error struct {
 	StatusCode int    `json:"-"`

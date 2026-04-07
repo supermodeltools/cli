@@ -368,6 +368,22 @@ func (c *Client) DisplayGraph(ctx context.Context, repoID, idempotencyKey string
 	return &g, nil
 }
 
+// Share uploads a rendered report and returns a public URL.
+func (c *Client) Share(ctx context.Context, req ShareRequest) (string, error) {
+	var resp ShareResponse
+	if err := c.request(ctx, "POST", "/v1/share", "application/json",
+		jsonBody(req), "", &resp); err != nil {
+		return "", err
+	}
+	return resp.URL, nil
+}
+
+// jsonBody encodes v as JSON and returns it as an io.Reader.
+func jsonBody(v any) io.Reader {
+	b, _ := json.Marshal(v)
+	return bytes.NewReader(b)
+}
+
 func (c *Client) request(ctx context.Context, method, path, contentType string, body io.Reader, idempotencyKey string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
 	if err != nil {
