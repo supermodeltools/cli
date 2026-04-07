@@ -72,3 +72,9 @@ install -m755 "$TMP/$BINARY" "$INSTALL_DIR/$BINARY"
 
 echo "Installed: $INSTALL_DIR/$BINARY"
 "$INSTALL_DIR/$BINARY" version
+
+# Run the setup wizard when attached to a terminal (skip in piped/CI installs).
+if [ -t 1 ]; then
+  echo ""
+  "$INSTALL_DIR/$BINARY" setup
+fi

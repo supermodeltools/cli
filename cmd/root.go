@@ -5,7 +5,19 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"github.com/supermodeltools/cli/internal/config"
 )
+
+// noConfigCommands are subcommands that work without a config file.
+var noConfigCommands = map[string]bool{
+	"setup":      true,
+	"login":      true,
+	"logout":     true,
+	"version":    true,
+	"help":       true,
+	"completion": true,
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "supermodel",
@@ -15,6 +27,20 @@ providing call graphs, dead code detection, and blast radius analysis.
 
 See https://supermodeltools.com for documentation.`,
 	SilenceUsage: true,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Walk up to the root command name to get the subcommand.
+		name := cmd.Name()
+		if noConfigCommands[name] {
+			return nil
+		}
+
+		cfg, err := config.Load()
+		if err != nil || cfg.APIKey == "" {
+			fmt.Fprintln(os.Stderr, "Run 'supermodel setup' to get started.")
+			os.Exit(1)
+		}
+		return nil
+	},
 }
 
 // Execute is the entry point called by main.
