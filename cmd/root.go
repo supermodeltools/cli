@@ -12,14 +12,14 @@ import (
 // noConfigCommands are subcommands that work without a config file.
 // Includes Cobra's internal shell-completion helpers to avoid crashing them.
 var noConfigCommands = map[string]bool{
-	"setup":              true,
-	"login":              true,
-	"logout":             true,
-	"version":            true,
-	"help":               true,
-	"completion":         true,
-	"__complete":         true,
-	"__completeNoDesc":   true,
+	"setup":            true,
+	"login":            true,
+	"logout":           true,
+	"version":          true,
+	"help":             true,
+	"completion":       true,
+	"__complete":       true,
+	"__completeNoDesc": true,
 }
 
 var rootCmd = &cobra.Command{
