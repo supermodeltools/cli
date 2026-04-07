@@ -79,7 +79,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	stats := computeStats(d.ir, d.cache)
 	stats.FromCache = d.loadedCache
 	d.mu.Unlock()
-	d.writeStatus(fmt.Sprintf("ready — %s — %d nodes",
+	d.writeStatus(fmt.Sprintf("ready — %s — %d files",
 		time.Now().Format(time.RFC3339), len(d.ir.Graph.Nodes)))
 
 	d.logf("[step:2] Starting listeners")
@@ -259,7 +259,7 @@ func (d *Daemon) incrementalUpdate(ctx context.Context, changedFiles []string) {
 		updateStats = computeStats(d.ir, d.cache)
 	}()
 
-	d.writeStatus(fmt.Sprintf("ready — %s — %d nodes",
+	d.writeStatus(fmt.Sprintf("ready — %s — %d files",
 		time.Now().Format(time.RFC3339), updateStats.SourceFiles))
 
 	if d.cfg.OnUpdate != nil {

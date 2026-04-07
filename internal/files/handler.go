@@ -175,13 +175,17 @@ func Watch(ctx context.Context, cfg *config.Config, dir string, opts WatchOption
 			if s.FromCache {
 				src = "cached"
 			}
-			fmt.Printf("\n  %s✓%s  %s%d files%s · %s%d functions%s · %s%d relationships%s  %s(%s)%s\n\n",
+			line := fmt.Sprintf("\n  %s✓%s  %s%d files%s · %s%d functions%s · %s%d relationships%s",
 				ansiBGreen, ansiReset,
 				ansiBold, s.SourceFiles, ansiReset,
 				ansiBold, s.Functions, ansiReset,
 				ansiBold, s.Relationships, ansiReset,
-				ansiDim, src, ansiReset,
 			)
+			if s.DeadFunctionCount > 0 {
+				line += fmt.Sprintf(" · %s%d uncalled%s", ansiBold, s.DeadFunctionCount, ansiReset)
+			}
+			line += fmt.Sprintf("  %s(%s)%s\n\n", ansiDim, src, ansiReset)
+			fmt.Print(line)
 		},
 		OnUpdate: func(s GraphStats) {
 			fmt.Printf("  %s✓%s  Updated — %s%d files%s · %s%d functions%s · %s%d relationships%s\n",
