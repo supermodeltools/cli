@@ -3,10 +3,12 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/supermodeltools/cli/internal/config"
+	"github.com/supermodeltools/cli/internal/files"
 )
 
 // noConfigCommands are subcommands that work without a config file.
@@ -23,12 +25,16 @@ var noConfigCommands = map[string]bool{
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "supermodel",
+	Use:   "supermodel [path]",
 	Short: "Give your AI coding agent a map of your codebase",
-	Long: `Supermodel connects AI coding agents to the Supermodel API,
-providing call graphs, dead code detection, and blast radius analysis.
+	Long: `Runs a full generate on startup (using cached graph if available), then
+enters daemon mode. Listens for file-change notifications from the
+'supermodel hook' command and incrementally re-renders affected files.
+
+Press Ctrl+C to stop and remove graph files.
 
 See https://supermodeltools.com for documentation.`,
+	Args:         cobra.MaximumNArgs(1),
 	SilenceUsage: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Walk up to the root command name to get the subcommand.
@@ -48,6 +54,43 @@ See https://supermodeltools.com for documentation.`,
 		}
 		return nil
 	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := config.Load()
+		if err != nil {
+			return err
+		}
+		if err := cfg.RequireAPIKey(); err != nil {
+			return err
+		}
+		dir := "."
+		if len(args) > 0 {
+			dir = args[0]
+		}
+		opts := files.WatchOptions{
+			CacheFile:    watchCacheFile,
+			Debounce:     watchDebounce,
+			NotifyPort:   watchNotifyPort,
+			FSWatch:      watchFSWatch,
+			PollInterval: watchPollInterval,
+		}
+		return files.Watch(cmd.Context(), cfg, dir, opts)
+	},
+}
+
+var (
+	watchCacheFile    string
+	watchDebounce     time.Duration
+	watchNotifyPort   int
+	watchFSWatch      bool
+	watchPollInterval time.Duration
+)
+
+func init() {
+	rootCmd.Flags().StringVar(&watchCacheFile, "cache-file", "", "override cache file path")
+	rootCmd.Flags().DurationVar(&watchDebounce, "debounce", 2*time.Second, "debounce duration before processing changes")
+	rootCmd.Flags().IntVar(&watchNotifyPort, "notify-port", 7734, "UDP port for hook notifications")
+	rootCmd.Flags().BoolVar(&watchFSWatch, "fs-watch", false, "enable git-poll fallback")
+	rootCmd.Flags().DurationVar(&watchPollInterval, "poll-interval", 3*time.Second, "git poll interval when --fs-watch is enabled")
 }
 
 // Execute is the entry point called by main.

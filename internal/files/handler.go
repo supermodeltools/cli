@@ -159,7 +159,7 @@ func Watch(ctx context.Context, cfg *config.Config, dir string, opts WatchOption
 	}
 
 	logf := func(format string, args ...interface{}) {
-		fmt.Fprintf(os.Stderr, "[files] "+format+"\n", args...)
+		fmt.Fprintf(os.Stderr, "[supermodel] "+format+"\n", args...)
 	}
 
 	daemonCfg := DaemonConfig{
