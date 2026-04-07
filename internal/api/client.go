@@ -79,7 +79,15 @@ func (c *Client) AnalyzeDomains(ctx context.Context, zipPath, idempotencyKey str
 // pollUntilComplete submits a ZIP to the analyze endpoint and polls until the
 // async job reaches "completed" status, then returns the raw JobResponse.
 func (c *Client) pollUntilComplete(ctx context.Context, zipPath, idempotencyKey string) (*JobResponse, error) {
-	job, err := c.postZip(ctx, zipPath, idempotencyKey)
+	post := func() (*JobResponse, error) { return c.postZip(ctx, zipPath, idempotencyKey) }
+	return c.pollLoop(ctx, post)
+}
+
+// pollLoop calls post() for the initial submission, then keeps calling it until
+// the job reaches a terminal state. post() is called on every poll so all
+// request fields (including incremental changedFiles) are sent on each retry.
+func (c *Client) pollLoop(ctx context.Context, post func() (*JobResponse, error)) (*JobResponse, error) {
+	job, err := post()
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +101,7 @@ func (c *Client) pollUntilComplete(ctx context.Context, zipPath, idempotencyKey 
 			return nil, ctx.Err()
 		case <-time.After(wait):
 		}
-		job, err = c.postZip(ctx, zipPath, idempotencyKey)
+		job, err = post()
 		if err != nil {
 			return nil, err
 		}
@@ -123,63 +131,15 @@ func (c *Client) AnalyzeSidecars(ctx context.Context, zipPath, idempotencyKey st
 }
 
 // AnalyzeIncremental uploads a zip of changed files and requests an incremental
-// graph update from the API. changedFiles is sent as a form field so the server
-// can scope its analysis to only those files.
+// graph update from the API. changedFiles is sent on every request (initial and
+// retries) so the server always has the full context.
 func (c *Client) AnalyzeIncremental(ctx context.Context, zipPath string, changedFiles []string, idempotencyKey string) (*SidecarIR, error) {
-	f, err := os.Open(zipPath)
+	post := func() (*JobResponse, error) {
+		return c.postIncrementalZip(ctx, zipPath, changedFiles, idempotencyKey)
+	}
+	job, err := c.pollLoop(ctx, post)
 	if err != nil {
 		return nil, err
-	}
-	defer f.Close()
-
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-
-	fw, err := mw.CreateFormFile("file", filepath.Base(zipPath))
-	if err != nil {
-		return nil, err
-	}
-	if _, err = io.Copy(fw, f); err != nil {
-		return nil, err
-	}
-
-	// Encode changed files as a JSON array in a form field.
-	changedJSON, err := json.Marshal(changedFiles)
-	if err != nil {
-		return nil, err
-	}
-	if err := mw.WriteField("changedFiles", string(changedJSON)); err != nil {
-		return nil, err
-	}
-	mw.Close()
-
-	var job JobResponse
-	if err := c.request(ctx, http.MethodPost, analyzeEndpoint, mw.FormDataContentType(), &buf, idempotencyKey, &job); err != nil {
-		return nil, err
-	}
-
-	// Poll until complete (reuse pollUntilComplete logic inline since we already have the first response).
-	for job.Status == "pending" || job.Status == "processing" {
-		wait := time.Duration(job.RetryAfter) * time.Second
-		if wait <= 0 {
-			wait = 5 * time.Second
-		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(wait):
-		}
-		nextJob, err := c.postZipTo(ctx, zipPath, idempotencyKey, analyzeEndpoint)
-		if err != nil {
-			return nil, err
-		}
-		job = *nextJob
-	}
-	if job.Error != nil {
-		return nil, fmt.Errorf("incremental analysis failed: %s", *job.Error)
-	}
-	if job.Status != "completed" {
-		return nil, fmt.Errorf("unexpected job status: %s", job.Status)
 	}
 
 	var ir SidecarIR
@@ -193,6 +153,40 @@ func (c *Client) AnalyzeIncremental(ctx context.Context, zipPath string, changed
 // raw job response (which may be pending, processing, or completed).
 func (c *Client) postZip(ctx context.Context, zipPath, idempotencyKey string) (*JobResponse, error) {
 	return c.postZipTo(ctx, zipPath, idempotencyKey, analyzeEndpoint)
+}
+
+// postIncrementalZip builds a multipart form with both the ZIP and the
+// changedFiles JSON array, then submits it to the analyze endpoint.
+func (c *Client) postIncrementalZip(ctx context.Context, zipPath string, changedFiles []string, idempotencyKey string) (*JobResponse, error) {
+	f, err := os.Open(zipPath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, err := mw.CreateFormFile("file", filepath.Base(zipPath))
+	if err != nil {
+		return nil, err
+	}
+	if _, err = io.Copy(fw, f); err != nil {
+		return nil, err
+	}
+	changedJSON, err := json.Marshal(changedFiles)
+	if err != nil {
+		return nil, err
+	}
+	if err := mw.WriteField("changedFiles", string(changedJSON)); err != nil {
+		return nil, err
+	}
+	mw.Close()
+
+	var job JobResponse
+	if err := c.request(ctx, http.MethodPost, analyzeEndpoint, mw.FormDataContentType(), &buf, idempotencyKey, &job); err != nil {
+		return nil, err
+	}
+	return &job, nil
 }
 
 // deadCodeEndpoint is the API path for dead code analysis.
