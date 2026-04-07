@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/manifoldco/promptui"
+
 	"github.com/supermodeltools/cli/internal/analyze"
 	"github.com/supermodeltools/cli/internal/config"
 )
