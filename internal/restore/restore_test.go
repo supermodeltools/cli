@@ -619,6 +619,7 @@ func TestFromSupermodelIR_Empty(t *testing.T) {
 	g := FromSupermodelIR(&api.SupermodelIR{}, "empty")
 	if g == nil {
 		t.Fatal("returned nil")
+		return
 	}
 	if g.Name != "empty" {
 		t.Errorf("name: got %q", g.Name)
