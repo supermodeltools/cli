@@ -174,7 +174,6 @@ func (d *Daemon) loadOrGenerate(ctx context.Context) error {
 	return d.fullGenerate(ctx)
 }
 
-
 // fullGenerate does a complete fetch + render.
 func (d *Daemon) fullGenerate(ctx context.Context) error {
 	d.logf("Fetching full graph from Supermodel API...")
