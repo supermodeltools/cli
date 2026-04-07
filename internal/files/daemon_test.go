@@ -284,8 +284,8 @@ func TestMergeGraph_DomainsPreservedOnIncremental(t *testing.T) {
 		t.Fatalf("expected 3 domains preserved, got %d", len(result.Domains))
 	}
 	names := make(map[string]bool)
-	for _, d := range result.Domains {
-		names[d.Name] = true
+	for _, dom := range result.Domains {
+		names[dom.Name] = true
 	}
 	for _, want := range []string{"CommandCLI", "ApiClient", "SharedKernel"} {
 		if !names[want] {
