@@ -44,7 +44,7 @@ var skipDirs = map[string]bool{
 // working tree, so the archive reflects what the user is actually looking at).
 // Falls back to a manual directory walk otherwise.
 func CreateZip(dir string) (string, error) {
-	f, err := os.CreateTemp("", "supermodel-factory-*.zip")
+	f, err := os.CreateTemp("", "supermodel-audit-*.zip")
 	if err != nil {
 		return "", err
 	}

@@ -14,7 +14,7 @@ const (
 	StatusCritical HealthStatus = "CRITICAL"
 )
 
-// HealthReport is the output of a factory health analysis.
+// HealthReport is the output of an audit health analysis.
 type HealthReport struct {
 	ProjectName    string
 	Language       string
@@ -90,7 +90,7 @@ type Recommendation struct {
 	Message  string
 }
 
-// SDLCPromptData holds the inputs for rendering a factory run/improve prompt.
+// SDLCPromptData holds the inputs for rendering an audit run/improve prompt.
 type SDLCPromptData struct {
 	ProjectName    string
 	Language       string
