@@ -130,63 +130,10 @@ func (c *Client) AnalyzeSidecars(ctx context.Context, zipPath, idempotencyKey st
 	return &ir, nil
 }
 
-// AnalyzeIncremental uploads a zip of changed files and requests an incremental
-// graph update from the API. changedFiles is sent on every request (initial and
-// retries) so the server always has the full context.
-func (c *Client) AnalyzeIncremental(ctx context.Context, zipPath string, changedFiles []string, idempotencyKey string) (*SidecarIR, error) {
-	post := func() (*JobResponse, error) {
-		return c.postIncrementalZip(ctx, zipPath, changedFiles, idempotencyKey)
-	}
-	job, err := c.pollLoop(ctx, post)
-	if err != nil {
-		return nil, err
-	}
-
-	var ir SidecarIR
-	if err := json.Unmarshal(job.Result, &ir); err != nil {
-		return nil, fmt.Errorf("decode incremental sidecar result: %w", err)
-	}
-	return &ir, nil
-}
-
 // postZip sends the repository ZIP to the analyze endpoint and returns the
 // raw job response (which may be pending, processing, or completed).
 func (c *Client) postZip(ctx context.Context, zipPath, idempotencyKey string) (*JobResponse, error) {
 	return c.postZipTo(ctx, zipPath, idempotencyKey, analyzeEndpoint)
-}
-
-// postIncrementalZip builds a multipart form with both the ZIP and the
-// changedFiles JSON array, then submits it to the analyze endpoint.
-func (c *Client) postIncrementalZip(ctx context.Context, zipPath string, changedFiles []string, idempotencyKey string) (*JobResponse, error) {
-	f, err := os.Open(zipPath)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	fw, err := mw.CreateFormFile("file", filepath.Base(zipPath))
-	if err != nil {
-		return nil, err
-	}
-	if _, err = io.Copy(fw, f); err != nil {
-		return nil, err
-	}
-	changedJSON, err := json.Marshal(changedFiles)
-	if err != nil {
-		return nil, err
-	}
-	if err := mw.WriteField("changedFiles", string(changedJSON)); err != nil {
-		return nil, err
-	}
-	mw.Close()
-
-	var job JobResponse
-	if err := c.request(ctx, http.MethodPost, analyzeEndpoint, mw.FormDataContentType(), &buf, idempotencyKey, &job); err != nil {
-		return nil, err
-	}
-	return &job, nil
 }
 
 // deadCodeEndpoint is the API path for dead code analysis.

@@ -213,7 +213,7 @@ func (d *Daemon) incrementalUpdate(ctx context.Context, changedFiles []string) {
 	}
 	defer os.Remove(zipPath)
 
-	ir, err := d.client.AnalyzeIncremental(ctx, zipPath, changedFiles, idemKey)
+	ir, err := d.client.AnalyzeSidecars(ctx, zipPath, "incremental-"+idemKey[:8])
 	if err != nil {
 		d.logf("Incremental API error: %v", err)
 		return
@@ -476,9 +476,9 @@ func (d *Daemon) mergeGraph(incremental *api.SidecarIR, changedFiles []string) {
 	keptRels = append(keptRels, newRels...)
 	d.ir.Graph.Relationships = keptRels
 
-	if len(incremental.Domains) > 0 {
-		d.ir.Domains = incremental.Domains
-	}
+	// Preserve domains from the last full generate. Incremental responses
+	// contain domains classified from only the changed files, which are
+	// incorrect for the repo as a whole. Domains only refresh on full generate.
 
 	if len(extRemap) > 0 {
 		d.logf("Resolved %d external references to internal nodes", len(extRemap))
