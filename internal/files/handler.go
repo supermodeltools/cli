@@ -1,4 +1,4 @@
-package sidecars
+package files
 
 import (
 	"bufio"
@@ -30,16 +30,6 @@ type WatchOptions struct {
 	NotifyPort   int
 	FSWatch      bool
 	PollInterval time.Duration
-}
-
-// CleanOptions configures the clean command.
-type CleanOptions struct {
-	DryRun bool
-}
-
-// HookOptions configures the hook command.
-type HookOptions struct {
-	Port int
 }
 
 // RenderOptions configures the render command.
@@ -160,7 +150,7 @@ func Watch(ctx context.Context, cfg *config.Config, dir string, opts WatchOption
 	}
 
 	logf := func(format string, args ...interface{}) {
-		fmt.Fprintf(os.Stderr, "[sidecars] "+format+"\n", args...)
+		fmt.Fprintf(os.Stderr, "[files] "+format+"\n", args...)
 	}
 
 	daemonCfg := DaemonConfig{
@@ -178,7 +168,7 @@ func Watch(ctx context.Context, cfg *config.Config, dir string, opts WatchOption
 }
 
 // Clean removes all .graph.* sidecar files from the directory tree.
-func Clean(dir string, opts CleanOptions) error {
+func Clean(_ context.Context, _ *config.Config, dir string, dryRun bool) error {
 	repoDir, err := filepath.Abs(dir)
 	if err != nil {
 		return fmt.Errorf("resolving path: %w", err)
@@ -200,7 +190,7 @@ func Clean(dir string, opts CleanOptions) error {
 		if !isSidecarFile(info.Name()) {
 			return nil
 		}
-		if opts.DryRun {
+		if dryRun {
 			fmt.Printf("  [dry-run] would remove %s\n", path)
 			removed++
 			return nil
@@ -216,7 +206,7 @@ func Clean(dir string, opts CleanOptions) error {
 		return err
 	}
 
-	if opts.DryRun {
+	if dryRun {
 		fmt.Printf("Would remove %d sidecar files\n", removed)
 	} else {
 		fmt.Printf("Removed %d sidecar files\n", removed)
@@ -239,8 +229,7 @@ type toolInput struct {
 
 // Hook reads a Claude Code PostToolUse JSON event from stdin and sends a UDP
 // notification to the watch daemon for any source file written or edited.
-func Hook(opts HookOptions) error {
-	port := opts.Port
+func Hook(port int) error {
 	if port <= 0 {
 		port = 7734
 	}
@@ -314,7 +303,7 @@ func Render(dir string, opts RenderOptions) error {
 
 	data, err := os.ReadFile(cacheFile)
 	if err != nil {
-		return fmt.Errorf("reading cache %s: %w (run `supermodel sidecars generate` first)", cacheFile, err)
+		return fmt.Errorf("reading cache %s: %w (run `supermodel analyze` first)", cacheFile, err)
 	}
 
 	var ir api.SidecarIR

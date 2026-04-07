@@ -1,4 +1,4 @@
-package sidecars
+package files
 
 import (
 	"archive/zip"
