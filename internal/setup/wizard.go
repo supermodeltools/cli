@@ -109,8 +109,8 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		fmt.Printf("  %s◆%s  Claude Code hook\n", cyan, reset)
 		fmt.Println()
 
-		claudeDetected := detectClaude()
-		if claudeDetected {
+		switch detectClaude() {
+		case true:
 			fmt.Printf("  %sInstalling a PostToolUse hook keeps your .graph files updated every%s\n", dWhite, reset)
 			fmt.Printf("  %stime Claude Code writes or edits a file — no manual re-runs needed.%s\n", dWhite, reset)
 			fmt.Println()
@@ -129,7 +129,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 					hookNote = "already in .claude/settings.json"
 				}
 			}
-		} else {
+		default:
 			fmt.Printf("  %sClaude Code not detected. You can install the hook later by adding%s\n", dWhite, reset)
 			fmt.Printf("  %sthis to .claude/settings.json in your repo:%s\n", dWhite, reset)
 			fmt.Println()
