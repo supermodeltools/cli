@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/supermodeltools/cli/internal/api"
@@ -88,7 +90,10 @@ func (d *Daemon) Run(ctx context.Context) error {
 		go d.listenUDP(ctx, udpReady)
 		if err := <-udpReady; err != nil {
 			if !d.cfg.FSWatch {
-				return fmt.Errorf("UDP port %d already in use — is `supermodel watch` already running? (%w)", d.cfg.NotifyPort, err)
+				if errors.Is(err, syscall.EADDRINUSE) {
+					return fmt.Errorf("UDP port %d already in use — is `supermodel watch` already running?", d.cfg.NotifyPort)
+				}
+				return fmt.Errorf("failed to start UDP listener on port %d: %w", d.cfg.NotifyPort, err)
 			}
 			d.logf("Warning: UDP listener failed (FSWatch active, continuing): %v", err)
 		}
