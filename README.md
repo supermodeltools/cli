@@ -1,24 +1,60 @@
 # Supermodel CLI
 
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)](#installation)
-[![Website](https://img.shields.io/badge/web-supermodeltools.com-blueviolet)](http://supermodeltools.com)
-[![API](https://img.shields.io/badge/API-api.supermodeltools.com-blue)](https://api.supermodeltools.com)
+Your AI agent knows your entire codebase — not just the files it's looking at.
 
-Give your AI coding agent a map of your codebase.
+Supermodel maps every file, function, and call relationship in your repo and writes a `.graph` file next to each source file. Your agent reads them automatically via grep and cat. No prompt changes. No extra context windows. No new tools to learn.
 
-Supermodel CLI connects AI coding agents to the [Supermodel API](https://api.supermodeltools.com), providing call graphs, dependency graphs, dead code detection, and blast radius analysis as context during your sessions. It operates in two modes: **file mode**, which writes `.graph.*` sidecar files next to your source so agents can read them at any time, and **on-demand analysis**, which runs targeted queries against the graph without touching the filesystem.
+```bash
+curl -fsSL https://supermodeltools.com/install.sh | sh
+```
 
 ---
 
-## Links
+## How it works
 
-| | |
+**1. Map your codebase**
+```bash
+supermodel watch
+```
+Uploads your repo to the Supermodel API, builds a full call graph, and writes `.graph` files next to every source file. Stays running to keep files updated as you code.
+
+**2. Your agent reads the graph automatically**
+
+`.graph` files are plain text. Any agent that can read files — Claude Code, Cursor, Copilot, Windsurf — picks them up automatically through its normal file-reading tools. No configuration needed on the agent side.
+
+**3. Ask anything**
+
+Your agent now has full visibility into your call graph, imports, domains, and blast radius — for every file in the repo, not just the ones open in the editor.
+
+---
+
+## Works with any AI agent
+
+`.graph` files are plain text read via grep and cat. There is no agent-specific integration required.
+
+| Agent | Setup |
 |---|---|
-| **Website** | [supermodeltools.com](http://supermodeltools.com) |
-| **API Docs** | [api.supermodeltools.com](https://api.supermodeltools.com) |
-| **Dashboard** | [dashboard.supermodeltools.com](https://dashboard.supermodeltools.com) |
-| **Twitter / X** | [@supermodeltools](https://x.com/supermodeltools) |
-| **Contact** | [abe@supermodel.software](mailto:abe@supermodel.software) |
+| **Claude Code** | Run `supermodel watch`; install the hook for live updates (setup wizard handles this) |
+| **Cursor** | Run `supermodel watch`; `.graph` files appear in context when you open any source file |
+| **GitHub Copilot** | Run `supermodel watch`; open `.graph` files in the editor to include them in context |
+| **Windsurf** | Same as Cursor |
+| **Aider** | Run `supermodel watch`, then pass `--read '**/*.graph.*'` to include all graph files |
+| **Any other agent** | Run `supermodel watch` — if it can read files, it can read `.graph` files |
+
+For live updates in Claude Code, add this hook to `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [{
+      "matcher": "Write|Edit",
+      "hooks": [{"type": "command", "command": "supermodel hook"}]
+    }]
+  }
+}
+```
+
+The `supermodel setup` wizard installs this automatically if Claude Code is detected.
 
 ---
 
@@ -30,11 +66,13 @@ Supermodel CLI connects AI coding agents to the [Supermodel API](https://api.sup
 brew install supermodeltools/tap/supermodel
 ```
 
-### Linux
+### Linux / macOS (curl)
 
 ```bash
 curl -fsSL https://supermodeltools.com/install.sh | sh
 ```
+
+Runs the setup wizard automatically on first install when attached to a terminal.
 
 ### From source
 
@@ -49,10 +87,9 @@ go build -o supermodel .
 ## Quick start
 
 ```bash
-supermodel login          # authenticate (browser or --token for CI)
+supermodel setup          # authenticate + configure (runs automatically after install)
 cd /path/to/your/repo
-supermodel analyze        # upload repo, run analysis, write .graph.* files
-supermodel status         # confirm auth and cache state
+supermodel watch          # generate graph files and keep them updated
 ```
 
 ---
@@ -61,12 +98,12 @@ supermodel status         # confirm auth and cache state
 
 ### File mode
 
-These commands manage `.graph.*` sidecar files written next to each source file. Agents and MCP tools read these files without making API calls.
+Manages `.graph.*` sidecar files written next to each source file. Agents read these without making API calls.
 
 | Command | Description |
 |---|---|
 | `analyze [path]` | Upload repo, run full analysis, write `.graph.*` files (use `--no-files` to skip) |
-| `watch [path]` | Generate graph files on startup, then keep them updated incrementally as you code |
+| `watch [path]` | Generate graph files on startup, then keep them updated incrementally |
 | `clean [path]` | Remove all `.graph.*` files from the repository |
 | `hook` | Claude Code `PostToolUse` hook — forward file-change events to the `watch` daemon |
 
@@ -85,9 +122,9 @@ These commands manage `.graph.*` sidecar files written next to each source file.
 
 | Command | Description |
 |---|---|
-| `compact [path]` | Strip comments and shorten identifiers to reduce token usage while preserving semantics (aliases: `pack`, `minify`) |
+| `compact [path]` | Strip comments and shorten identifiers to reduce token usage (aliases: `pack`, `minify`) |
 | `docs [path]` | Generate a static HTML architecture documentation site |
-| `restore` | Build a project context summary to restore Claude's understanding after a context compaction |
+| `restore` | Build a project context summary to restore Claude's understanding after context compaction |
 
 ### Agent integration
 
@@ -99,9 +136,20 @@ These commands manage `.graph.*` sidecar files written next to each source file.
 
 | Command | Description |
 |---|---|
+| `setup` | Interactive setup wizard — authenticate, configure file mode, install Claude Code hook |
 | `login` | Authenticate with your Supermodel account (browser or `--token` for CI) |
 | `logout` | Remove stored credentials |
 | `status` | Show authentication and cache status |
+
+---
+
+## Add a badge to your README
+
+```markdown
+[![Supermodel](https://img.shields.io/badge/supermodel-enabled-blueviolet)](https://supermodeltools.com)
+```
+
+[![Supermodel](https://img.shields.io/badge/supermodel-enabled-blueviolet)](https://supermodeltools.com)
 
 ---
 
@@ -124,32 +172,9 @@ SUPERMODEL_API_KEY=smsk_live_... supermodel analyze
 
 ---
 
-## Claude Code integration
+## MCP setup
 
-### Hook setup
-
-The `hook` command forwards file-change events from Claude Code to the `supermodel watch` daemon so graph files stay current as your agent edits code. Add the following to `.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "PostToolUse": [{
-      "matcher": "Write|Edit",
-      "hooks": [{"type": "command", "command": "supermodel hook"}]
-    }]
-  }
-}
-```
-
-Then start the daemon in your repo:
-
-```bash
-supermodel watch
-```
-
-### MCP setup
-
-To expose Supermodel graph tools directly to Claude Code, add the MCP server to `~/.claude/config.json`:
+To expose Supermodel graph tools directly to Claude Code via the Model Context Protocol, add the server to `~/.claude/config.json`:
 
 ```json
 {
@@ -163,6 +188,18 @@ To expose Supermodel graph tools directly to Claude Code, add the MCP server to 
 ```
 
 Exposed MCP tools: `analyze`, `dead_code`, `blast_radius`, `get_graph`.
+
+---
+
+## Links
+
+| | |
+|---|---|
+| **Website** | [supermodeltools.com](http://supermodeltools.com) |
+| **API Docs** | [api.supermodeltools.com](https://api.supermodeltools.com) |
+| **Dashboard** | [dashboard.supermodeltools.com](https://dashboard.supermodeltools.com) |
+| **Twitter / X** | [@supermodeltools](https://x.com/supermodeltools) |
+| **Contact** | [abe@supermodel.software](mailto:abe@supermodel.software) |
 
 ---
 
