@@ -4,14 +4,15 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/supermodeltools/cli/internal/api"
+	"github.com/supermodeltools/cli/internal/audit"
 	"github.com/supermodeltools/cli/internal/cache"
 	"github.com/supermodeltools/cli/internal/config"
-	"github.com/supermodeltools/cli/internal/factory"
 )
 
 func init() {
@@ -29,9 +30,6 @@ Markdown health report covering:
   - High blast-radius files
   - Prioritised recommendations
 
-The report is also used internally by 'supermodel factory run' and
-'supermodel factory improve' as the Phase 8 health gate.
-
 Example:
 
   supermodel audit
@@ -46,41 +44,80 @@ Example:
 	rootCmd.AddCommand(c)
 }
 
-// runAudit is the shared implementation used by both 'supermodel audit' and
-// 'supermodel factory health'.
 func runAudit(cmd *cobra.Command, dir string) error {
-	rootDir, projectName, err := resolveFactoryDir(dir)
+	rootDir, projectName, err := resolveAuditDir(dir)
 	if err != nil {
 		return err
 	}
 
-	ir, err := factoryAnalyze(cmd, rootDir, projectName)
+	ir, err := auditAnalyze(cmd, rootDir, projectName)
 	if err != nil {
 		return err
 	}
 
-	report := factory.Analyze(ir, projectName)
+	report := audit.Analyze(ir, projectName)
 
 	// Run impact analysis (global mode) to enrich the health report.
 	impact, err := runImpactForAudit(cmd, rootDir)
 	if err != nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: impact analysis unavailable: %v\n", err)
 	} else {
-		factory.EnrichWithImpact(report, impact)
+		audit.EnrichWithImpact(report, impact)
 	}
 
-	factory.RenderHealth(cmd.OutOrStdout(), report)
+	audit.RenderHealth(cmd.OutOrStdout(), report)
 	return nil
 }
 
-// runImpactForAudit runs global impact analysis for the audit report.
+func resolveAuditDir(dir string) (rootDir, projectName string, err error) {
+	if dir == "" {
+		dir, err = os.Getwd()
+		if err != nil {
+			return "", "", fmt.Errorf("get working directory: %w", err)
+		}
+	}
+	rootDir = findGitRoot(dir)
+	projectName = filepath.Base(rootDir)
+	return rootDir, projectName, nil
+}
+
+func auditAnalyze(cmd *cobra.Command, rootDir, projectName string) (*api.SupermodelIR, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+	if err := cfg.RequireAPIKey(); err != nil {
+		return nil, err
+	}
+
+	fmt.Fprintln(cmd.ErrOrStderr(), "Creating repository archive…")
+	zipPath, err := audit.CreateZip(rootDir)
+	if err != nil {
+		return nil, fmt.Errorf("create archive: %w", err)
+	}
+	defer func() { _ = os.Remove(zipPath) }()
+
+	hash, err := cache.HashFile(zipPath)
+	if err != nil {
+		return nil, fmt.Errorf("hash archive: %w", err)
+	}
+
+	client := api.New(cfg)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	fmt.Fprintf(cmd.ErrOrStderr(), "Analyzing %s…\n", projectName)
+	return client.AnalyzeDomains(ctx, zipPath, "audit-"+hash[:16])
+}
+
+// runImpactForAudit runs global impact analysis to enrich the health report.
 func runImpactForAudit(cmd *cobra.Command, rootDir string) (*api.ImpactResult, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, err
 	}
 
-	zipPath, err := factory.CreateZip(rootDir)
+	zipPath, err := audit.CreateZip(rootDir)
 	if err != nil {
 		return nil, err
 	}
