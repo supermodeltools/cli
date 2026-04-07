@@ -36,13 +36,13 @@ Use --no-files to skip writing graph files.`,
 			if len(args) > 0 {
 				dir = args[0]
 			}
-			if err := analyze.Run(cmd.Context(), cfg, dir, opts); err != nil {
-				return err
-			}
 			if cfg.FilesEnabled() && !noFiles {
-				return files.Generate(cmd.Context(), cfg, dir, files.GenerateOptions{})
+				// File mode: Generate handles the full pipeline (API call +
+				// cache + sidecars) in a single upload. Running analyze.Run
+				// first would duplicate the API call.
+				return files.Generate(cmd.Context(), cfg, dir, files.GenerateOptions{Force: opts.Force})
 			}
-			return nil
+			return analyze.Run(cmd.Context(), cfg, dir, opts)
 		},
 	}
 
