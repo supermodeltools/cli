@@ -18,6 +18,7 @@ type Config struct {
 	APIKey  string `yaml:"api_key,omitempty"`
 	APIBase string `yaml:"api_base,omitempty"`
 	Output  string `yaml:"output,omitempty"` // "human" | "json"
+	Files   *bool  `yaml:"files,omitempty"`
 }
 
 // Dir returns the Supermodel config directory (~/.supermodel).
@@ -70,6 +71,14 @@ func (c *Config) Save() error {
 	return nil
 }
 
+// FilesEnabled reports whether file mode is on. Defaults to true.
+func (c *Config) FilesEnabled() bool {
+	if c.Files != nil {
+		return *c.Files
+	}
+	return true
+}
+
 // RequireAPIKey returns an actionable error if no API key is configured.
 func (c *Config) RequireAPIKey() error {
 	if c.APIKey == "" {
@@ -98,4 +107,9 @@ func (c *Config) applyEnv() {
 	if base := os.Getenv("SUPERMODEL_API_BASE"); base != "" {
 		c.APIBase = base
 	}
+	if os.Getenv("SUPERMODEL_FILES") == "false" {
+		c.Files = boolPtr(false)
+	}
 }
+
+func boolPtr(b bool) *bool { return &b }

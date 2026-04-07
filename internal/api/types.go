@@ -144,6 +144,41 @@ type IRSubdomain struct {
 	DescriptionSummary string `json:"descriptionSummary"`
 }
 
+// SidecarIR is the full structured response from /v1/graphs/supermodel used
+// by the sidecars vertical slice. Unlike SupermodelIR (which uses simplified
+// IRNode/IRRelationship stubs), SidecarIR preserves the complete node graph
+// with IDs, labels, and properties required for sidecar rendering.
+type SidecarIR struct {
+	Repo     string          `json:"repo"`
+	Summary  map[string]any  `json:"summary"`
+	Metadata IRMetadata      `json:"metadata"`
+	Domains  []SidecarDomain `json:"domains"`
+	Graph    SidecarGraph    `json:"graph"`
+}
+
+// SidecarGraph is the full node/relationship graph embedded in SidecarIR.
+type SidecarGraph struct {
+	Nodes         []Node         `json:"nodes"`
+	Relationships []Relationship `json:"relationships"`
+}
+
+// SidecarDomain is a semantic domain from the API with file references.
+type SidecarDomain struct {
+	Name               string             `json:"name"`
+	DescriptionSummary string             `json:"descriptionSummary"`
+	KeyFiles           []string           `json:"keyFiles"`
+	Responsibilities   []string           `json:"responsibilities"`
+	Subdomains         []SidecarSubdomain `json:"subdomains"`
+}
+
+// SidecarSubdomain is a named sub-area within a SidecarDomain.
+type SidecarSubdomain struct {
+	Name               string   `json:"name"`
+	DescriptionSummary string   `json:"descriptionSummary"`
+	Files              []string `json:"files"`
+	KeyFiles           []string `json:"keyFiles"`
+}
+
 // JobResponse is the async envelope returned by the API for long-running jobs.
 type JobResponse struct {
 	Status     string          `json:"status"`
