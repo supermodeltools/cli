@@ -73,8 +73,10 @@ install -m755 "$TMP/$BINARY" "$INSTALL_DIR/$BINARY"
 echo "Installed: $INSTALL_DIR/$BINARY"
 "$INSTALL_DIR/$BINARY" version
 
-# Run the setup wizard when attached to a terminal (skip in piped/CI installs).
-if [ -t 1 ]; then
+# Run the setup wizard when a controlling terminal is available.
+# Use /dev/tty as stdin so interactive prompts work even in piped installs
+# (e.g. curl … | sh), where stdin is the pipe rather than the terminal.
+if [ -r /dev/tty ]; then
   echo ""
-  "$INSTALL_DIR/$BINARY" setup
+  "$INSTALL_DIR/$BINARY" setup </dev/tty
 fi

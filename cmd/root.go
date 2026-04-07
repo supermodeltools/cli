@@ -10,13 +10,16 @@ import (
 )
 
 // noConfigCommands are subcommands that work without a config file.
+// Includes Cobra's internal shell-completion helpers to avoid crashing them.
 var noConfigCommands = map[string]bool{
-	"setup":      true,
-	"login":      true,
-	"logout":     true,
-	"version":    true,
-	"help":       true,
-	"completion": true,
+	"setup":              true,
+	"login":              true,
+	"logout":             true,
+	"version":            true,
+	"help":               true,
+	"completion":         true,
+	"__complete":         true,
+	"__completeNoDesc":   true,
 }
 
 var rootCmd = &cobra.Command{
@@ -35,7 +38,11 @@ See https://supermodeltools.com for documentation.`,
 		}
 
 		cfg, err := config.Load()
-		if err != nil || cfg.APIKey == "" {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+			os.Exit(1)
+		}
+		if cfg.APIKey == "" {
 			fmt.Fprintln(os.Stderr, "Run 'supermodel setup' to get started.")
 			os.Exit(1)
 		}
