@@ -294,6 +294,45 @@ func TestMergeGraph_DomainsPreservedOnIncremental(t *testing.T) {
 	}
 }
 
+func TestMergeGraph_DeletedFilePrunesRelationships(t *testing.T) {
+	// When a file is deleted, its nodes are removed from the graph.
+	// Relationships referencing those deleted nodes must also be pruned.
+	existing := buildIR(
+		[]api.Node{
+			newNode("file-a", []string{"File"}, "filePath", "/repo/a.go"),
+			newNode("fn-a", []string{"Function"}, "filePath", "/repo/a.go", "name", "Foo"),
+			newNode("file-b", []string{"File"}, "filePath", "/repo/b.go"),
+			newNode("fn-b", []string{"Function"}, "filePath", "/repo/b.go", "name", "Bar"),
+		},
+		[]api.Relationship{
+			newRel("r1", "DEFINES", "file-a", "fn-a"),
+			newRel("r2", "DEFINES", "file-b", "fn-b"),
+			newRel("r3", "CALLS", "fn-b", "fn-a"), // b.go calls a.go — should be pruned when a.go deleted
+		},
+	)
+	// Incremental has no nodes for a.go (it was deleted).
+	incremental := buildIR(nil, nil)
+
+	d := NewTestDaemon(existing)
+	d.MergeGraph(incremental, []string{"/repo/a.go"})
+
+	result := d.GetIR()
+	ids := nodeIDSet(result)
+
+	if ids["file-a"] || ids["fn-a"] {
+		t.Error("nodes for deleted a.go should be removed")
+	}
+	if !ids["file-b"] || !ids["fn-b"] {
+		t.Error("nodes for b.go should remain")
+	}
+	if hasRelEdge(result, "fn-b", "fn-a") {
+		t.Error("CALLS rel referencing deleted fn-a should be pruned")
+	}
+	if hasRelEdge(result, "file-a", "fn-a") {
+		t.Error("DEFINES rel for deleted a.go should be pruned")
+	}
+}
+
 func TestMergeGraph_DomainsPreservedEvenWhenIncrementalHasMore(t *testing.T) {
 	existing := &api.ShardIR{
 		Graph: api.ShardGraph{

@@ -466,27 +466,35 @@ func (d *Daemon) mergeGraph(incremental *api.ShardIR, changedFiles []string) { /
 		keptNodes = append(keptNodes, n)
 	}
 
-	removedOldIDs := make(map[string]bool)
+	// Build a set of node IDs that are still present in the graph (either kept as-is
+	// or remapped to a new ID). Any relationship referencing a node outside this set
+	// belongs to a deleted file and must be pruned.
+	keptNodeIDs := make(map[string]bool, len(keptNodes))
+	for _, n := range keptNodes {
+		keptNodeIDs[n.ID] = true
+	}
+
+	replacedOldIDs := make(map[string]bool, len(oldToNew))
 	for oldID := range oldToNew {
-		removedOldIDs[oldID] = true
+		replacedOldIDs[oldID] = true
 	}
 
 	var keptRels []api.Relationship
 	for _, r := range d.ir.Graph.Relationships {
-		startIsNew := newNodeIDs[r.StartNode]
-		endIsNew := newNodeIDs[r.EndNode]
-		if startIsNew && endIsNew {
+		// Prune relationships whose start or end node was deleted (not kept, not remapped).
+		if !keptNodeIDs[r.StartNode] && !replacedOldIDs[r.StartNode] {
 			continue
 		}
-
-		if startIsNew || removedOldIDs[r.StartNode] {
+		if !keptNodeIDs[r.EndNode] && !replacedOldIDs[r.EndNode] {
+			continue
+		}
+		// Outgoing rels from replaced/changed nodes are superseded by newRels from the
+		// incremental graph; skip them here.
+		if replacedOldIDs[r.StartNode] {
 			continue
 		}
 
 		rel := r
-		if newID, ok := oldToNew[rel.StartNode]; ok {
-			rel.StartNode = newID
-		}
 		if newID, ok := oldToNew[rel.EndNode]; ok {
 			rel.EndNode = newID
 		}
