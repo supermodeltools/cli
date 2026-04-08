@@ -107,7 +107,7 @@ func (c *Client) pollLoop(ctx context.Context, post func() (*JobResponse, error)
 		}
 	}
 	if job.Error != nil {
-		return nil, fmt.Errorf("analysis failed: %s", *job.Error)
+		return nil, fmt.Errorf("%s", *job.Error)
 	}
 	if job.Status != "completed" {
 		return nil, fmt.Errorf("unexpected job status: %s", job.Status)
@@ -152,33 +152,10 @@ func (c *Client) DeadCode(ctx context.Context, zipPath, idempotencyKey, minConfi
 		endpoint += sep + fmt.Sprintf("limit=%d", limit)
 	}
 
-	job, err := c.postZipTo(ctx, zipPath, idempotencyKey, endpoint)
+	post := func() (*JobResponse, error) { return c.postZipTo(ctx, zipPath, idempotencyKey, endpoint) }
+	job, err := c.pollLoop(ctx, post)
 	if err != nil {
-		return nil, err
-	}
-
-	for job.Status == "pending" || job.Status == "processing" {
-		wait := time.Duration(job.RetryAfter) * time.Second
-		if wait <= 0 {
-			wait = 5 * time.Second
-		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(wait):
-		}
-
-		job, err = c.postZipTo(ctx, zipPath, idempotencyKey, endpoint)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if job.Error != nil {
-		return nil, fmt.Errorf("dead code analysis failed: %s", *job.Error)
-	}
-	if job.Status != "completed" {
-		return nil, fmt.Errorf("unexpected job status: %s", job.Status)
+		return nil, fmt.Errorf("dead code analysis failed: %w", err)
 	}
 
 	var result DeadCodeResult
@@ -225,32 +202,10 @@ func (c *Client) Impact(ctx context.Context, zipPath, idempotencyKey, targets, d
 		endpoint += "?targets=" + targets
 	}
 
-	job, err := c.postImpact(ctx, zipPath, diffPath, idempotencyKey, endpoint)
+	post := func() (*JobResponse, error) { return c.postImpact(ctx, zipPath, diffPath, idempotencyKey, endpoint) }
+	job, err := c.pollLoop(ctx, post)
 	if err != nil {
-		return nil, err
-	}
-
-	for job.Status == "pending" || job.Status == "processing" {
-		wait := time.Duration(job.RetryAfter) * time.Second
-		if wait <= 0 {
-			wait = 5 * time.Second
-		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(wait):
-		}
-		job, err = c.postImpact(ctx, zipPath, diffPath, idempotencyKey, endpoint)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if job.Error != nil {
-		return nil, fmt.Errorf("impact analysis failed: %s", *job.Error)
-	}
-	if job.Status != "completed" {
-		return nil, fmt.Errorf("unexpected job status: %s", job.Status)
+		return nil, fmt.Errorf("impact analysis failed: %w", err)
 	}
 
 	var result ImpactResult
