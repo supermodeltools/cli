@@ -95,7 +95,7 @@ func runRestore(cmd *cobra.Command, dir string, localMode bool, maxTokens int) e
 
 	if graph == nil {
 		opts.LocalMode = true
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
 		defer cancel()
 		var err error
 		graph, err = restore.BuildProjectGraph(ctx, rootDir, projectName)
@@ -135,7 +135,7 @@ func restoreViaAPI(cmd *cobra.Command, cfg *config.Config, rootDir, projectName 
 
 	client := api.New(cfg)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Minute)
 	defer cancel()
 
 	fmt.Fprintln(cmd.ErrOrStderr(), "Analyzing repository…")

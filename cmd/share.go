@@ -50,7 +50,7 @@ func runShare(cmd *cobra.Command, dir string) error {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Minute)
 	defer cancel()
 
 	fp, _ := cache.RepoFingerprint(rootDir)
@@ -76,7 +76,7 @@ func runShare(cmd *cobra.Command, dir string) error {
 
 	// Upload and get public URL.
 	client := api.New(cfg)
-	uploadCtx, uploadCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	uploadCtx, uploadCancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer uploadCancel()
 
 	fmt.Fprintln(cmd.ErrOrStderr(), "Uploading report…")

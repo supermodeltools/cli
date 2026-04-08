@@ -59,7 +59,7 @@ func runAudit(cmd *cobra.Command, dir string) error {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Minute)
 	defer cancel()
 
 	// Fingerprint for caching — best-effort; empty string means no caching.
