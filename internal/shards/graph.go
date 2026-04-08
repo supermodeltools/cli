@@ -94,6 +94,10 @@ func (c *Cache) Build(ir *api.ShardIR) { //nolint:gocyclo // multi-pass graph in
 	rels := ir.Graph.Relationships
 
 	// Pass 1: index nodes
+	nodeByID := make(map[string]*api.Node, len(nodes))
+	for i := range nodes {
+		nodeByID[nodes[i].ID] = &nodes[i]
+	}
 	for i := range nodes {
 		n := nodes[i]
 		props := n.Properties
@@ -182,17 +186,13 @@ func (c *Cache) Build(ir *api.ShardIR) { //nolint:gocyclo // multi-pass graph in
 			if nodePath == "" {
 				continue
 			}
-			// Find the domain node
-			for j := range nodes {
-				if nodes[j].ID == rel.EndNode {
-					domainName := nodes[j].Prop("name")
-					if domainName == "" {
-						parts := strings.Split(rel.EndNode, ":")
-						domainName = parts[len(parts)-1]
-					}
-					c.FileDomain[nodePath] = domainName
-					break
+			if domainNode, ok := nodeByID[rel.EndNode]; ok {
+				domainName := domainNode.Prop("name")
+				if domainName == "" {
+					parts := strings.Split(rel.EndNode, ":")
+					domainName = parts[len(parts)-1]
 				}
+				c.FileDomain[nodePath] = domainName
 			}
 		}
 	}

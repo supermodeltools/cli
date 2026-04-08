@@ -257,6 +257,21 @@ func (d *Daemon) incrementalUpdate(ctx context.Context, changedFiles []string) {
 		return
 	}
 
+	// Snapshot old import relationships before the merge so we can re-render
+	// files that lost an "imported-by" reference after A stops importing B.
+	oldImports := make(map[string][]string, len(changedFiles))
+	func() {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		for _, f := range changedFiles {
+			if deps := d.cache.Imports[f]; len(deps) > 0 {
+				cp := make([]string, len(deps))
+				copy(cp, deps)
+				oldImports[f] = cp
+			}
+		}
+	}()
+
 	var affected []string
 	var cacheSnapshot *Cache
 	func() {
@@ -265,7 +280,7 @@ func (d *Daemon) incrementalUpdate(ctx context.Context, changedFiles []string) {
 		d.mergeGraph(ir, changedFiles)
 		d.cache = NewCache()
 		d.cache.Build(d.ir)
-		affected = d.computeAffectedFiles(changedFiles)
+		affected = d.computeAffectedFiles(changedFiles, oldImports)
 		cacheSnapshot = d.cache
 	}()
 
@@ -316,6 +331,7 @@ func (d *Daemon) saveCache() {
 		return
 	}
 	if err := os.Rename(tmp, d.cfg.CacheFile); err != nil {
+		_ = os.Remove(tmp)
 		d.logf("Error renaming cache: %v", err)
 		return
 	}
@@ -573,14 +589,31 @@ func (d *Daemon) assignNewFilesToDomains(newNodes []api.Node) {
 }
 
 // computeAffectedFiles returns changed files plus their 1-hop dependents.
-func (d *Daemon) computeAffectedFiles(changedFiles []string) []string {
+// oldImports maps each changed file to the set of files it imported BEFORE
+// the merge, so that files whose "imported-by" sections lost a reference
+// are also re-rendered.
+func (d *Daemon) computeAffectedFiles(changedFiles []string, oldImports map[string][]string) []string {
 	affected := make(map[string]bool)
 
 	for _, f := range changedFiles {
 		affected[f] = true
 
+		// Files that currently import f: their [deps] imported-by section references f.
 		for _, imp := range d.cache.Importers[f] {
 			affected[imp] = true
+		}
+
+		// Files that f currently imports: their [deps] imported-by section needs to
+		// include f (newly added imports gain an "imported-by" entry).
+		for _, dep := range d.cache.Imports[f] {
+			affected[dep] = true
+		}
+
+		// Files that f used to import but no longer does: their "imported-by" section
+		// needs to drop f. These are absent from the post-merge cache so we use the
+		// snapshot taken before mergeGraph was called.
+		for _, dep := range oldImports[f] {
+			affected[dep] = true
 		}
 
 		for id, fn := range d.cache.FnByID {
