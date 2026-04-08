@@ -51,7 +51,7 @@ func createZip(dir string) (string, error) {
 	dest := f.Name()
 	f.Close()
 
-	if isGitRepo(dir) {
+	if isGitRepo(dir) && isWorktreeClean(dir) {
 		if err := gitArchive(dir, dest); err == nil {
 			return dest, nil
 		}
@@ -69,6 +69,13 @@ func isGitRepo(dir string) bool {
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	return cmd.Run() == nil
+}
+// isWorktreeClean reports whether there are no uncommitted changes.
+// When the worktree is dirty, git archive HEAD would silently omit local
+// edits, so we fall back to the directory walk instead.
+func isWorktreeClean(dir string) bool {
+	out, err := exec.Command("git", "-C", dir, "status", "--porcelain").Output()
+	return err == nil && strings.TrimSpace(string(out)) == ""
 }
 
 func gitArchive(dir, dest string) error {
