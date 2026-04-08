@@ -69,17 +69,30 @@ func renderCallsSection(filePath string, cache *Cache, prefix string) string {
 		return ""
 	}
 
-	sort.Slice(fns, func(i, j int) bool { return fns[i].name < fns[j].name })
+	sort.Slice(fns, func(i, j int) bool {
+		if fns[i].name != fns[j].name {
+			return fns[i].name < fns[j].name
+		}
+		return fns[i].id < fns[j].id
+	})
 
 	var lines []string
 	lines = append(lines, fmt.Sprintf("%s [calls]", prefix))
 	for _, fe := range fns {
-		for _, caller := range cache.Callers[fe.id] {
+		callers := make([]CallerRef, len(cache.Callers[fe.id]))
+		copy(callers, cache.Callers[fe.id])
+		sort.Slice(callers, func(i, j int) bool { return callers[i].FuncID < callers[j].FuncID })
+
+		callees := make([]CallerRef, len(cache.Callees[fe.id]))
+		copy(callees, cache.Callees[fe.id])
+		sort.Slice(callees, func(i, j int) bool { return callees[i].FuncID < callees[j].FuncID })
+
+		for _, caller := range callers {
 			callerName := cache.FuncName(caller.FuncID)
 			loc := formatLoc(caller.File, caller.Line)
 			lines = append(lines, fmt.Sprintf("%s %s ← %s    %s", prefix, fe.name, callerName, loc))
 		}
-		for _, callee := range cache.Callees[fe.id] {
+		for _, callee := range callees {
 			calleeName := cache.FuncName(callee.FuncID)
 			loc := formatLoc(callee.File, callee.Line)
 			lines = append(lines, fmt.Sprintf("%s %s → %s    %s", prefix, fe.name, calleeName, loc))
