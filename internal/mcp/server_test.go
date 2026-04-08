@@ -96,6 +96,114 @@ func TestFormatImpact_WithTarget(t *testing.T) {
 	}
 }
 
+func TestFilterGraph_NoFilter(t *testing.T) {
+	g := makeTestGraph()
+	result := filterGraph(g, "", "")
+	if len(result.Nodes) != len(g.Nodes) {
+		t.Errorf("no filter: want %d nodes, got %d", len(g.Nodes), len(result.Nodes))
+	}
+	if len(result.Relationships) != len(g.Rels()) {
+		t.Errorf("no filter: want %d rels, got %d", len(g.Rels()), len(result.Relationships))
+	}
+}
+
+func TestFilterGraph_LabelOnly(t *testing.T) {
+	g := makeTestGraph()
+	result := filterGraph(g, "File", "")
+	for _, n := range result.Nodes {
+		if !n.HasLabel("File") {
+			t.Errorf("label filter: expected only File nodes, got label %v", n.Labels)
+		}
+	}
+	// Relationships must only reference nodes that are in the result.
+	visible := make(map[string]bool)
+	for _, n := range result.Nodes {
+		visible[n.ID] = true
+	}
+	for _, r := range result.Relationships {
+		if !visible[r.StartNode] || !visible[r.EndNode] {
+			t.Errorf("label filter: relationship %s→%s references a node not in the filtered set", r.StartNode, r.EndNode)
+		}
+	}
+}
+
+func TestFilterGraph_LabelExcludesCrossLabelRels(t *testing.T) {
+	// File nodes + Function nodes; one file→file rel, one function→function rel.
+	// Filtering by File should yield only the file→file rel.
+	g := &api.Graph{
+		Nodes: []api.Node{
+			{ID: "f1", Labels: []string{"File"}, Properties: map[string]any{"path": "a.go"}},
+			{ID: "f2", Labels: []string{"File"}, Properties: map[string]any{"path": "b.go"}},
+			{ID: "fn1", Labels: []string{"Function"}, Properties: map[string]any{"name": "foo"}},
+			{ID: "fn2", Labels: []string{"Function"}, Properties: map[string]any{"name": "bar"}},
+		},
+		Relationships: []api.Relationship{
+			{ID: "r1", Type: "imports", StartNode: "f1", EndNode: "f2"},
+			{ID: "r2", Type: "calls", StartNode: "fn1", EndNode: "fn2"},
+		},
+	}
+	result := filterGraph(g, "File", "")
+	if len(result.Relationships) != 1 {
+		t.Errorf("want 1 rel (file→file), got %d", len(result.Relationships))
+	}
+	if len(result.Relationships) > 0 && result.Relationships[0].ID != "r1" {
+		t.Errorf("want rel r1 (imports), got %s", result.Relationships[0].ID)
+	}
+}
+
+func TestFilterGraph_RelTypeOnly(t *testing.T) {
+	g := makeTestGraph()
+	result := filterGraph(g, "", "calls")
+	for _, r := range result.Relationships {
+		if r.Type != "calls" {
+			t.Errorf("relType filter: expected only 'calls', got %q", r.Type)
+		}
+	}
+	// All nodes should be returned when only relType is filtered.
+	if len(result.Nodes) != len(g.Nodes) {
+		t.Errorf("relType filter: want all %d nodes, got %d", len(g.Nodes), len(result.Nodes))
+	}
+}
+
+func TestFilterGraph_BothFilters(t *testing.T) {
+	g := &api.Graph{
+		Nodes: []api.Node{
+			{ID: "f1", Labels: []string{"File"}, Properties: map[string]any{"path": "a.go"}},
+			{ID: "f2", Labels: []string{"File"}, Properties: map[string]any{"path": "b.go"}},
+			{ID: "fn1", Labels: []string{"Function"}, Properties: map[string]any{"name": "foo"}},
+		},
+		Relationships: []api.Relationship{
+			{ID: "r1", Type: "imports", StartNode: "f1", EndNode: "f2"},
+			{ID: "r2", Type: "calls", StartNode: "fn1", EndNode: "f2"},        // fn→file, excluded by label filter
+			{ID: "r3", Type: "contains_call", StartNode: "f1", EndNode: "f2"}, // file→file, wrong relType
+		},
+	}
+	result := filterGraph(g, "File", "imports")
+	if len(result.Nodes) != 2 {
+		t.Errorf("both filters: want 2 File nodes, got %d", len(result.Nodes))
+	}
+	if len(result.Relationships) != 1 || result.Relationships[0].ID != "r1" {
+		t.Errorf("both filters: want only r1 (imports between Files), got %v", result.Relationships)
+	}
+}
+
+// makeTestGraph builds a small mixed graph for filter tests.
+func makeTestGraph() *api.Graph {
+	return &api.Graph{
+		Nodes: []api.Node{
+			{ID: "f1", Labels: []string{"File"}, Properties: map[string]any{"path": "a.go"}},
+			{ID: "f2", Labels: []string{"File"}, Properties: map[string]any{"path": "b.go"}},
+			{ID: "fn1", Labels: []string{"Function"}, Properties: map[string]any{"name": "handleReq"}},
+			{ID: "fn2", Labels: []string{"Function"}, Properties: map[string]any{"name": "parse"}},
+		},
+		Relationships: []api.Relationship{
+			{ID: "r1", Type: "imports", StartNode: "f1", EndNode: "f2"},
+			{ID: "r2", Type: "calls", StartNode: "fn1", EndNode: "fn2"},
+			{ID: "r3", Type: "defines_function", StartNode: "f1", EndNode: "fn1"},
+		},
+	}
+}
+
 func TestFormatImpact_NoEntryPoints(t *testing.T) {
 	result := &api.ImpactResult{
 		Metadata: api.ImpactMetadata{TargetsAnalyzed: 1, TotalFiles: 50, TotalFunctions: 200},

@@ -92,6 +92,35 @@ func TestWriteHuman_Filter(t *testing.T) {
 	}
 }
 
+func TestWriteHuman_FilterRelationshipCount(t *testing.T) {
+	// File nodes connected to each other, plus a Function→Function call.
+	// When filtering by File, only the file→file relationship should be counted.
+	g := &api.Graph{
+		Nodes: []api.Node{
+			{ID: "f1", Labels: []string{"File"}, Properties: map[string]any{"path": "a.go"}},
+			{ID: "f2", Labels: []string{"File"}, Properties: map[string]any{"path": "b.go"}},
+			{ID: "fn1", Labels: []string{"Function"}, Properties: map[string]any{"name": "doWork"}},
+			{ID: "fn2", Labels: []string{"Function"}, Properties: map[string]any{"name": "helper"}},
+		},
+		Relationships: []api.Relationship{
+			{ID: "r1", Type: "imports", StartNode: "f1", EndNode: "f2"},
+			{ID: "r2", Type: "calls", StartNode: "fn1", EndNode: "fn2"},
+		},
+	}
+	var buf bytes.Buffer
+	if err := writeHuman(&buf, g, "File"); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	// Only r1 connects two File nodes — r2 connects Functions and must not be counted.
+	if !strings.Contains(out, "1 relationship") {
+		t.Errorf("filtered relationship count should be 1, got:\n%s", out)
+	}
+	if strings.Contains(out, "2 relationship") {
+		t.Errorf("should not show 2 relationships when filter excludes one:\n%s", out)
+	}
+}
+
 func TestWriteHuman_FilterExcludes(t *testing.T) {
 	g := &api.Graph{
 		Nodes: []api.Node{
