@@ -306,7 +306,7 @@ func LanguageStats(files []string) []LangStat {
 		if ext == "" {
 			continue
 		}
-		counts[strings.TrimPrefix(ext, ".")] ++
+		counts[strings.TrimPrefix(ext, ".")]++
 	}
 	stats := make([]LangStat, 0, len(counts))
 	for ext, n := range counts {

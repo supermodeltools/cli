@@ -129,7 +129,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 			d.logf("Shutting down...")
 			d.logf("Cleaning shard files...")
 			done := make(chan struct{})
-			go func() {
+			go func() { //nolint:gosec // ctx is already cancelled; background context is intentional for cleanup
 				_ = Clean(context.Background(), nil, d.cfg.RepoDir, false)
 				close(done)
 			}()

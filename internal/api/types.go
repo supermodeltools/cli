@@ -149,11 +149,11 @@ type IRSubdomain struct {
 // IRNode/IRRelationship stubs), ShardIR preserves the complete node graph
 // with IDs, labels, and properties required for sidecar rendering.
 type ShardIR struct {
-	Repo     string          `json:"repo"`
-	Summary  map[string]any  `json:"summary"`
-	Metadata IRMetadata      `json:"metadata"`
-	Domains  []ShardDomain `json:"domains"`
-	Graph    ShardGraph    `json:"graph"`
+	Repo     string         `json:"repo"`
+	Summary  map[string]any `json:"summary"`
+	Metadata IRMetadata     `json:"metadata"`
+	Domains  []ShardDomain  `json:"domains"`
+	Graph    ShardGraph     `json:"graph"`
 }
 
 // ShardGraph is the full node/relationship graph embedded in ShardIR.
@@ -164,10 +164,10 @@ type ShardGraph struct {
 
 // ShardDomain is a semantic domain from the API with file references.
 type ShardDomain struct {
-	Name               string             `json:"name"`
-	DescriptionSummary string             `json:"descriptionSummary"`
-	KeyFiles           []string           `json:"keyFiles"`
-	Responsibilities   []string           `json:"responsibilities"`
+	Name               string           `json:"name"`
+	DescriptionSummary string           `json:"descriptionSummary"`
+	KeyFiles           []string         `json:"keyFiles"`
+	Responsibilities   []string         `json:"responsibilities"`
 	Subdomains         []ShardSubdomain `json:"subdomains"`
 }
 
