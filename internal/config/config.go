@@ -57,6 +57,8 @@ func Load() (*Config, error) {
 
 // Save writes the config to disk, creating the directory if necessary.
 // The file is written with mode 0600 (owner-readable only).
+// Uses a tmp→rename pattern so a partial write (e.g. killed process) can
+// never leave a corrupt config file.
 func (c *Config) Save() error {
 	if err := os.MkdirAll(Dir(), 0o700); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
@@ -65,8 +67,14 @@ func (c *Config) Save() error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(Path(), data, 0o600); err != nil {
+	dest := Path()
+	tmp := dest + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return fmt.Errorf("write config: %w", err)
+	}
+	if err := os.Rename(tmp, dest); err != nil {
+		_ = os.Remove(tmp)
+		return err
 	}
 	return nil
 }
