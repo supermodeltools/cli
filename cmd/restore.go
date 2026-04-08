@@ -166,10 +166,12 @@ func restoreCreateZip(dir string) (string, error) {
 	dest := f.Name()
 	f.Close()
 
-	cmd := exec.Command("git", "-C", dir, "archive", "--format=zip", "-o", dest, "HEAD")
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err == nil {
-		return dest, nil
+	if restoreIsGitRepo(dir) && restoreIsWorktreeClean(dir) {
+		cmd := exec.Command("git", "-C", dir, "archive", "--format=zip", "-o", dest, "HEAD")
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err == nil {
+			return dest, nil
+		}
 	}
 
 	// Fallback: walk the directory.
@@ -178,6 +180,18 @@ func restoreCreateZip(dir string) (string, error) {
 		return "", err
 	}
 	return dest, nil
+}
+
+func restoreIsGitRepo(dir string) bool {
+	cmd := exec.Command("git", "-C", dir, "rev-parse", "--git-dir")
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	return cmd.Run() == nil
+}
+
+func restoreIsWorktreeClean(dir string) bool {
+	out, err := exec.Command("git", "-C", dir, "status", "--porcelain").Output()
+	return err == nil && strings.TrimSpace(string(out)) == ""
 }
 
 // restoreWalkZip archives dir into a ZIP at dest, skipping common build/cache dirs.
