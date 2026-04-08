@@ -80,6 +80,11 @@ func Generate(ctx context.Context, cfg *config.Config, dir string, opts Generate
 		}
 	}
 
+	if fileList, listErr := DryRunList(repoDir); listErr == nil {
+		stats := LanguageStats(fileList)
+		PrintLanguageBarChart(stats, len(fileList))
+	}
+
 	spin := ui.Start("Creating repository archive…")
 	zipPath, err := CreateZipFile(repoDir, nil)
 	spin.Stop()
@@ -314,7 +319,7 @@ func Hook(port int) error {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	conn, err := net.Dial("udp", addr)
 	if err != nil {
-		// Daemon not running — silently exit
+		fmt.Fprintf(os.Stderr, "[supermodel] watch daemon not running on :%d — run `supermodel watch` to enable live updates\n", port)
 		return nil
 	}
 	defer conn.Close()

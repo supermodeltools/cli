@@ -127,6 +127,8 @@ func (d *Daemon) Run(ctx context.Context) error {
 				debounceTimer.Stop()
 			}
 			d.logf("Shutting down...")
+			d.logf("Cleaning sidecar files...")
+			_ = Clean(context.Background(), nil, d.cfg.RepoDir, false)
 			return nil
 
 		case filePath, ok := <-d.notifyCh:
@@ -190,6 +192,11 @@ func (d *Daemon) loadOrGenerate(ctx context.Context) error {
 func (d *Daemon) fullGenerate(ctx context.Context) error {
 	d.logf("Fetching full graph from Supermodel API...")
 	idemKey := newUUID()
+
+	if fileList, listErr := DryRunList(d.cfg.RepoDir); listErr == nil {
+		stats := LanguageStats(fileList)
+		PrintLanguageBarChart(stats, len(fileList))
+	}
 
 	zipPath, err := CreateZipFile(d.cfg.RepoDir, nil)
 	if err != nil {
@@ -506,8 +513,45 @@ func (d *Daemon) mergeGraph(incremental *api.SidecarIR, changedFiles []string) {
 	// contain domains classified from only the changed files, which are
 	// incorrect for the repo as a whole. Domains only refresh on full generate.
 
+	// Assign new files to existing domains by directory-prefix matching.
+	d.assignNewFilesToDomains(newNodes)
+
 	if len(extRemap) > 0 {
 		d.logf("Resolved %d external references to internal nodes", len(extRemap))
+	}
+}
+
+// assignNewFilesToDomains assigns newly merged File nodes to the best-matching
+// existing domain using longest common directory-prefix heuristic.
+func (d *Daemon) assignNewFilesToDomains(newNodes []api.Node) {
+	if len(d.ir.Domains) == 0 {
+		return
+	}
+
+	for _, n := range newNodes {
+		if !n.HasLabel("File") {
+			continue
+		}
+		fp := n.Prop("filePath")
+		if fp == "" {
+			continue
+		}
+		dir := filepath.Dir(fp)
+
+		bestDomain := -1
+		bestLen := -1
+		for i, domain := range d.ir.Domains {
+			for _, kf := range domain.KeyFiles {
+				prefix := filepath.Dir(kf)
+				if strings.HasPrefix(dir+"/", prefix+"/") && len(prefix) > bestLen {
+					bestLen = len(prefix)
+					bestDomain = i
+				}
+			}
+		}
+		if bestDomain >= 0 {
+			d.ir.Domains[bestDomain].KeyFiles = append(d.ir.Domains[bestDomain].KeyFiles, fp)
+		}
 	}
 }
 

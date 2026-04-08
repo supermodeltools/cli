@@ -48,8 +48,10 @@ func gitOutput(dir string, args ...string) (string, error) {
 }
 
 // AnalysisKey builds a cache key for a specific analysis type on a repo state.
-func AnalysisKey(fingerprint, analysisType string) string {
+// version is the CLI version string and is included so the cache is invalidated
+// automatically after an upgrade.
+func AnalysisKey(fingerprint, analysisType, version string) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "%s\x00%s", fingerprint, analysisType)
+	fmt.Fprintf(h, "%s\x00%s\x00%s", fingerprint, analysisType, version)
 	return hex.EncodeToString(h.Sum(nil))
 }

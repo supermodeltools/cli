@@ -77,3 +77,36 @@ func Evict(hash string) error {
 	}
 	return err
 }
+
+// PutJSON serialises v as JSON and stores it under hash. Unlike Put, it works
+// with any value type — useful for dead-code and blast-radius results.
+func PutJSON(hash string, v any) error {
+	if err := os.MkdirAll(dir(), 0o700); err != nil {
+		return fmt.Errorf("create cache dir: %w", err)
+	}
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	tmp := filepath.Join(dir(), hash+".json.tmp")
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return fmt.Errorf("write cache: %w", err)
+	}
+	return os.Rename(tmp, filepath.Join(dir(), hash+".json"))
+}
+
+// GetJSON reads the cached JSON for hash and unmarshals it into v.
+// Returns (true, nil) on hit, (false, nil) on miss, (false, err) on error.
+func GetJSON(hash string, v any) (bool, error) {
+	data, err := os.ReadFile(filepath.Join(dir(), hash+".json"))
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read cache: %w", err)
+	}
+	if err := json.Unmarshal(data, v); err != nil {
+		return false, fmt.Errorf("parse cache: %w", err)
+	}
+	return true, nil
+}

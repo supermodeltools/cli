@@ -24,6 +24,7 @@ type Watcher struct {
 	mu             sync.Mutex
 	lastKnownFiles map[string]struct{}
 	lastIndexMod   time.Time
+	lastCommitSHA  string // HEAD at last poll; empty until first poll
 
 	eventCh chan []WatchEvent
 }
@@ -53,6 +54,7 @@ func (w *Watcher) Run(ctx context.Context) {
 	defer close(w.eventCh)
 
 	w.lastIndexMod = w.gitIndexMtime()
+	w.lastCommitSHA = w.runGit("rev-parse", "HEAD")
 
 	for {
 		select {
@@ -71,6 +73,10 @@ func (w *Watcher) poll() {
 		w.lastIndexMod = indexMod
 	}
 
+	// Detect HEAD change (git commit, pull, checkout, merge, stash pop, etc.)
+	currentSHA := strings.TrimSpace(w.runGit("rev-parse", "HEAD"))
+	headChanged := currentSHA != "" && currentSHA != w.lastCommitSHA && w.lastCommitSHA != ""
+
 	currentDirty := w.gitDirtyFiles()
 
 	w.mu.Lock()
@@ -78,6 +84,19 @@ func (w *Watcher) poll() {
 
 	var newEvents []WatchEvent
 	now := time.Now()
+
+	if headChanged {
+		// Emit all files that changed between the old and new HEAD.
+		diffOutput := w.runGit("diff", "--name-only", w.lastCommitSHA, currentSHA)
+		for _, line := range strings.Split(diffOutput, "\n") {
+			line = strings.TrimSpace(line)
+			if line != "" && isWatchSourceFile(line) {
+				newEvents = append(newEvents, WatchEvent{Path: line, Time: now})
+			}
+		}
+		w.lastCommitSHA = currentSHA
+	}
+
 	for f := range currentDirty {
 		if _, known := w.lastKnownFiles[f]; !known {
 			newEvents = append(newEvents, WatchEvent{Path: f, Time: now})

@@ -2,11 +2,14 @@ package analyze
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/supermodeltools/cli/internal/api"
+	"github.com/supermodeltools/cli/internal/build"
 	"github.com/supermodeltools/cli/internal/cache"
 	"github.com/supermodeltools/cli/internal/config"
 	"github.com/supermodeltools/cli/internal/ui"
@@ -38,7 +41,7 @@ func GetGraph(ctx context.Context, cfg *config.Config, dir string, force bool) (
 	if !force {
 		fingerprint, err := cache.RepoFingerprint(dir)
 		if err == nil {
-			key := cache.AnalysisKey(fingerprint, "graph")
+			key := cache.AnalysisKey(fingerprint, "graph", build.Version)
 			if g, _ := cache.Get(key); g != nil {
 				ui.Success("Using cached analysis (repoId: %s)", g.RepoID())
 				return g, key, nil
@@ -70,22 +73,37 @@ func GetGraph(ctx context.Context, cfg *config.Config, dir string, force bool) (
 
 	client := api.New(cfg)
 	spin = ui.Start("Uploading and analyzing repository…")
-	g, err := client.Analyze(ctx, zipPath, "analyze-"+hash[:16])
+	ir, err := client.AnalyzeSidecars(ctx, zipPath, "analyze-"+hash[:16])
 	spin.Stop()
 	if err != nil {
 		return nil, hash, err
 	}
 
+	g := api.GraphFromSidecarIR(ir)
+
 	// Cache under both keys: fingerprint (fast lookup) and zip hash (fallback).
 	fingerprint, fpErr := cache.RepoFingerprint(dir)
 	if fpErr == nil {
-		fpKey := cache.AnalysisKey(fingerprint, "graph")
+		fpKey := cache.AnalysisKey(fingerprint, "graph", build.Version)
 		if err := cache.Put(fpKey, g); err != nil {
 			ui.Warn("could not write cache: %v", err)
 		}
 	}
 	if err := cache.Put(hash, g); err != nil {
 		ui.Warn("could not write cache: %v", err)
+	}
+
+	// Also populate the sidecar cache (.supermodel/graph.json) so that
+	// files.Generate() called after analyze reuses this result without a
+	// second API upload.
+	sidecarCacheFile := filepath.Join(dir, ".supermodel", "graph.json")
+	if irJSON, marshalErr := json.MarshalIndent(ir, "", "  "); marshalErr == nil {
+		if mkErr := os.MkdirAll(filepath.Dir(sidecarCacheFile), 0o755); mkErr == nil {
+			tmp := sidecarCacheFile + ".tmp"
+			if writeErr := os.WriteFile(tmp, irJSON, 0o644); writeErr == nil {
+				_ = os.Rename(tmp, sidecarCacheFile)
+			}
+		}
 	}
 
 	ui.Success("Analysis complete (repoId: %s)", g.RepoID())

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/supermodeltools/cli/internal/api"
+	"github.com/supermodeltools/cli/internal/build"
 	"github.com/supermodeltools/cli/internal/cache"
 	"github.com/supermodeltools/cli/internal/config"
 	"github.com/supermodeltools/cli/internal/ui"
@@ -22,6 +23,25 @@ type Options struct {
 
 // Run uploads the repo and runs impact analysis via the dedicated API endpoint.
 func Run(ctx context.Context, cfg *config.Config, dir string, targets []string, opts Options) error {
+	targetStr := strings.Join(targets, ",")
+
+	// Fast-path: check cache by git fingerprint (skip when a diff is supplied,
+	// since the diff changes the result independently of repo state).
+	if !opts.Force && opts.Diff == "" {
+		if fp, err := cache.RepoFingerprint(dir); err == nil {
+			analysisType := "impact"
+			if targetStr != "" {
+				analysisType += ":" + targetStr
+			}
+			key := cache.AnalysisKey(fp, analysisType, build.Version)
+			var cached api.ImpactResult
+			if hit, _ := cache.GetJSON(key, &cached); hit {
+				ui.Success("Using cached impact analysis")
+				return printResults(os.Stdout, &cached, ui.ParseFormat(opts.Output))
+			}
+		}
+	}
+
 	spin := ui.Start("Creating repository archive…")
 	zipPath, err := createZip(dir)
 	spin.Stop()
@@ -36,7 +56,6 @@ func Run(ctx context.Context, cfg *config.Config, dir string, targets []string, 
 	}
 
 	idempotencyKey := "impact-" + hash[:16]
-	targetStr := strings.Join(targets, ",")
 	if targetStr != "" {
 		idempotencyKey += "-" + targetStr
 	}
@@ -47,6 +66,18 @@ func Run(ctx context.Context, cfg *config.Config, dir string, targets []string, 
 	spin.Stop()
 	if err != nil {
 		return err
+	}
+
+	// Store result in cache.
+	if opts.Diff == "" {
+		if fp, err := cache.RepoFingerprint(dir); err == nil {
+			analysisType := "impact"
+			if targetStr != "" {
+				analysisType += ":" + targetStr
+			}
+			key := cache.AnalysisKey(fp, analysisType, build.Version)
+			_ = cache.PutJSON(key, result)
+		}
 	}
 
 	return printResults(os.Stdout, result, ui.ParseFormat(opts.Output))

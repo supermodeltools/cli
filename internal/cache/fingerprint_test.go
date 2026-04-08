@@ -98,16 +98,16 @@ func TestRepoFingerprint_NotGitRepo(t *testing.T) {
 
 func TestAnalysisKey_DifferentTypes(t *testing.T) {
 	fp := "abc123"
-	k1 := AnalysisKey(fp, "graph")
-	k2 := AnalysisKey(fp, "dead-code")
+	k1 := AnalysisKey(fp, "graph", "dev")
+	k2 := AnalysisKey(fp, "dead-code", "dev")
 	if k1 == k2 {
 		t.Error("different analysis types should produce different keys")
 	}
 }
 
 func TestAnalysisKey_Stable(t *testing.T) {
-	k1 := AnalysisKey("abc", "graph")
-	k2 := AnalysisKey("abc", "graph")
+	k1 := AnalysisKey("abc", "graph", "dev")
+	k2 := AnalysisKey("abc", "graph", "dev")
 	if k1 != k2 {
 		t.Error("same inputs should produce same key")
 	}

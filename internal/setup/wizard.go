@@ -80,16 +80,25 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	fmt.Printf("  %s✓%s  Repository\n", green, reset)
 	fmt.Println()
 
-	// ── Step 3: Claude Code hook ───────────────────────────────────
+	// ── Step 3: Agent hook ────────────────────────────────────────
 	hookNote := ""
 
-	fmt.Printf("  %s◆%s  Claude Code hook\n", cyan, reset)
+	fmt.Printf("  %s◆%s  Agent hook\n", cyan, reset)
 	fmt.Println()
+	fmt.Printf("  %s.graph files work with any agent that can read files — Claude Code,%s\n", dWhite, reset)
+	fmt.Printf("  %sCursor, Copilot, Windsurf, Aider, and more.%s\n", dWhite, reset)
+	fmt.Println()
+
+	if detectCursor(repoDir) {
+		fmt.Printf("  %sCursor detected%s — .graph files appear in context automatically\n", green, reset)
+		fmt.Printf("  %swhen you open a source file. No extra configuration needed.%s\n", dWhite, reset)
+		fmt.Println()
+	}
 
 	switch detectClaude() {
 	case true:
-		fmt.Printf("  %sInstalls a PostToolUse hook that regenerates .graph files every%s\n", dWhite, reset)
-		fmt.Printf("  %stime Claude writes or edits a file — keeps context always fresh.%s\n", dWhite, reset)
+		fmt.Printf("  %sInstalls a Claude Code PostToolUse hook that regenerates .graph%s\n", dWhite, reset)
+		fmt.Printf("  %sfiles every time Claude writes or edits a file.%s\n", dWhite, reset)
 		fmt.Println()
 
 		if confirmYN("Install Claude Code hook?", true) {
@@ -108,7 +117,8 @@ func Run(ctx context.Context, cfg *config.Config) error {
 			fmt.Printf("  %s–%s  Skipped\n", dim, reset)
 		}
 	default:
-		fmt.Printf("  %sClaude Code not detected. Add this to .claude/settings.json:%s\n", dWhite, reset)
+		fmt.Printf("  %sClaude Code not detected. To enable live updates, add this%s\n", dWhite, reset)
+		fmt.Printf("  %sto .claude/settings.json:%s\n", dWhite, reset)
 		fmt.Println()
 		fmt.Printf("  %s{%s\n", dim, reset)
 		fmt.Printf("  %s  \"hooks\": {%s\n", dim, reset)
@@ -118,6 +128,9 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		fmt.Printf("  %s    }]%s\n", dim, reset)
 		fmt.Printf("  %s  }%s\n", dim, reset)
 		fmt.Printf("  %s}%s\n", dim, reset)
+		fmt.Println()
+		fmt.Printf("  %sOther agents (Cursor, Copilot, Windsurf, Aider) read .graph%s\n", dWhite, reset)
+		fmt.Printf("  %sfiles directly — no hook needed, just run `supermodel watch`.%s\n", dWhite, reset)
 	}
 	fmt.Println()
 
@@ -211,6 +224,26 @@ func detectClaude() bool {
 	return false
 }
 
+// detectCursor checks if Cursor is installed or configured in repoDir.
+func detectCursor(repoDir string) bool {
+	// Repo-level .cursor directory
+	if _, err := os.Stat(filepath.Join(repoDir, ".cursor")); err == nil {
+		return true
+	}
+	// Global ~/.cursor directory (macOS / Linux)
+	home, _ := os.UserHomeDir()
+	if home != "" {
+		if _, err := os.Stat(filepath.Join(home, ".cursor")); err == nil {
+			return true
+		}
+		// macOS app support directory
+		if _, err := os.Stat(filepath.Join(home, "Library", "Application Support", "Cursor")); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // installHook writes the PostToolUse hook to .claude/settings.json in repoDir.
 // Returns true if newly installed, false if already present. Error on failure.
 func installHook(repoDir string) (bool, error) {
@@ -231,7 +264,10 @@ func installHook(repoDir string) (bool, error) {
 		settings = make(map[string]interface{})
 	}
 
-	const hookCmd = "supermodel hook"
+	hookCmd := "supermodel hook"
+	if exe, err := os.Executable(); err == nil {
+		hookCmd = exe + " hook"
+	}
 
 	// Check if already installed.
 	if hooks, ok := settings["hooks"].(map[string]interface{}); ok {

@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/supermodeltools/cli/internal/api"
+	"github.com/supermodeltools/cli/internal/build"
 	"github.com/supermodeltools/cli/internal/cache"
 	"github.com/supermodeltools/cli/internal/config"
 	"github.com/supermodeltools/cli/internal/ui"
@@ -24,6 +25,21 @@ type Options struct {
 
 // Run uploads the repo and runs dead code analysis via the dedicated API endpoint.
 func Run(ctx context.Context, cfg *config.Config, dir string, opts *Options) error {
+	// Fast-path: check cache by git fingerprint before creating the zip.
+	if !opts.Force {
+		if fp, err := cache.RepoFingerprint(dir); err == nil {
+			key := cache.AnalysisKey(fp, "dead-code", build.Version)
+			var cached api.DeadCodeResult
+			if hit, _ := cache.GetJSON(key, &cached); hit {
+				ui.Success("Using cached dead-code analysis")
+				if len(opts.Ignore) > 0 {
+					cached.DeadCodeCandidates = filterIgnored(cached.DeadCodeCandidates, opts.Ignore)
+				}
+				return printResults(os.Stdout, &cached, ui.ParseFormat(opts.Output))
+			}
+		}
+	}
+
 	spin := ui.Start("Creating repository archive…")
 	zipPath, err := createZip(dir)
 	spin.Stop()
@@ -43,6 +59,12 @@ func Run(ctx context.Context, cfg *config.Config, dir string, opts *Options) err
 	spin.Stop()
 	if err != nil {
 		return err
+	}
+
+	// Store result in cache for subsequent calls.
+	if fp, err := cache.RepoFingerprint(dir); err == nil {
+		key := cache.AnalysisKey(fp, "dead-code", build.Version)
+		_ = cache.PutJSON(key, result)
 	}
 
 	if len(opts.Ignore) > 0 {

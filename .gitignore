@@ -3,3 +3,4 @@ npm/bin/
 *.exe
 supermodel
 cli
+.supermodel/

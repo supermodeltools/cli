@@ -179,6 +179,19 @@ type SidecarSubdomain struct {
 	KeyFiles           []string `json:"keyFiles"`
 }
 
+// GraphFromSidecarIR builds a display Graph from a SidecarIR response.
+// SidecarIR uses the same Node/Relationship types, so this is a zero-copy
+// extraction that also populates the repoId metadata field.
+func GraphFromSidecarIR(ir *SidecarIR) *Graph {
+	return &Graph{
+		Nodes:         ir.Graph.Nodes,
+		Relationships: ir.Graph.Relationships,
+		Metadata: map[string]any{
+			"repoId": ir.Repo,
+		},
+	}
+}
+
 // JobResponse is the async envelope returned by the API for long-running jobs.
 type JobResponse struct {
 	Status     string          `json:"status"`
