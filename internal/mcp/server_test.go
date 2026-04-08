@@ -174,8 +174,8 @@ func TestFilterGraph_BothFilters(t *testing.T) {
 		},
 		Relationships: []api.Relationship{
 			{ID: "r1", Type: "imports", StartNode: "f1", EndNode: "f2"},
-			{ID: "r2", Type: "calls", StartNode: "fn1", EndNode: "f2"},  // fn→file, should be excluded by label
-			{ID: "r3", Type: "contains_call", StartNode: "f1", EndNode: "f2"}, // file→file, different type
+			{ID: "r2", Type: "calls", StartNode: "fn1", EndNode: "f2"},        // fn→file, excluded by label filter
+			{ID: "r3", Type: "contains_call", StartNode: "f1", EndNode: "f2"}, // file→file, wrong relType
 		},
 	}
 	result := filterGraph(g, "File", "imports")
