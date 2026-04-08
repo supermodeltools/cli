@@ -118,6 +118,28 @@ func TestSearch_CallersAndCallees(t *testing.T) {
 	}
 }
 
+func TestSearch_CallersDeduplicatedWhenSameCallerCallsMultipleTimes(t *testing.T) {
+	// "main" calls "target" via two separate call edges (two different call sites).
+	// The callers list should show "main" only once.
+	g := &api.Graph{
+		Nodes: []api.Node{
+			{ID: "main", Labels: []string{"Function"}, Properties: map[string]any{"name": "main"}},
+			{ID: "target", Labels: []string{"Function"}, Properties: map[string]any{"name": "target"}},
+		},
+		Relationships: []api.Relationship{
+			{ID: "r1", Type: "calls", StartNode: "main", EndNode: "target"},
+			{ID: "r2", Type: "calls", StartNode: "main", EndNode: "target"}, // second call site
+		},
+	}
+	matches := search(g, "target", "")
+	if len(matches) != 1 {
+		t.Fatalf("want 1 match, got %d", len(matches))
+	}
+	if len(matches[0].Callers) != 1 || matches[0].Callers[0] != "main" {
+		t.Errorf("callers: want [main] (deduped), got %v", matches[0].Callers)
+	}
+}
+
 func TestSearch_DefinesFunction(t *testing.T) {
 	g := &api.Graph{
 		Nodes: []api.Node{

@@ -95,12 +95,8 @@ func search(g *api.Graph, symbol, kind string) []Match {
 			File:      n.Prop("filePath", "file", "path"),
 			DefinedIn: defFile[n.ID],
 		}
-		cs := callers[n.ID]
-		sort.Strings(cs)
-		m.Callers = cs
-		ces := callees[n.ID]
-		sort.Strings(ces)
-		m.Callees = ces
+		m.Callers = dedupSorted(callers[n.ID])
+		m.Callees = dedupSorted(callees[n.ID])
 		matches = append(matches, m)
 	}
 
@@ -138,4 +134,19 @@ func printMatches(w io.Writer, matches []Match, query string, fmt_ ui.Format) er
 func getGraph(ctx context.Context, cfg *config.Config, dir string, force bool) (*api.Graph, error) {
 	g, _, err := analyze.GetGraph(ctx, cfg, dir, force)
 	return g, err
+}
+
+// dedupSorted returns a sorted, deduplicated copy of ss.
+func dedupSorted(ss []string) []string {
+	if len(ss) == 0 {
+		return nil
+	}
+	sort.Strings(ss)
+	out := ss[:1]
+	for _, s := range ss[1:] {
+		if s != out[len(out)-1] {
+			out = append(out, s)
+		}
+	}
+	return out
 }
