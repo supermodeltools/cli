@@ -182,8 +182,10 @@ type jobResponse struct {
 }
 
 // jobResult is the inner result object wrapping the graph.
+// The API response has shape: {"graph": {...}, "repo": "...", "domains": [...]}
 type jobResult struct {
-	Graph Graph `json:"graph"`
+	Graph Graph  `json:"graph"`
+	Repo  string `json:"repo"`
 }
 
 // AnalyzeZip uploads a pre-built ZIP to the Supermodel API and polls until
@@ -222,7 +224,11 @@ func (c *Client) AnalyzeZip(ctx context.Context, zipPath, idempotencyKey string)
 	if err := json.Unmarshal(job.Result, &result); err != nil {
 		return nil, fmt.Errorf("decode graph result: %w", err)
 	}
-	return &result.Graph, nil
+	g := &result.Graph
+	if result.Repo != "" {
+		g.Metadata = map[string]any{"repoId": result.Repo}
+	}
+	return g, nil
 }
 
 // postZip sends the repository ZIP to the analyze endpoint and returns the raw job response.
