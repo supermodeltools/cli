@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/supermodeltools/cli/internal/api"
+	"github.com/supermodeltools/cli/internal/build"
 	"github.com/supermodeltools/cli/internal/cache"
 	"github.com/supermodeltools/cli/internal/config"
 	"github.com/supermodeltools/cli/internal/restore"
@@ -112,6 +113,15 @@ func runRestore(cmd *cobra.Command, dir string, localMode bool, maxTokens int) e
 }
 
 func restoreViaAPI(cmd *cobra.Command, cfg *config.Config, rootDir, projectName string) (*restore.ProjectGraph, error) {
+	// Fast-path: check fingerprint cache before uploading.
+	if fp, err := cache.RepoFingerprint(rootDir); err == nil {
+		key := cache.AnalysisKey(fp, "restore", build.Version)
+		var cached api.SupermodelIR
+		if hit, _ := cache.GetJSON(key, &cached); hit {
+			return restore.FromSupermodelIR(&cached, projectName), nil
+		}
+	}
+
 	zipPath, err := restoreCreateZip(rootDir)
 	if err != nil {
 		return nil, fmt.Errorf("create archive: %w", err)
@@ -132,6 +142,11 @@ func restoreViaAPI(cmd *cobra.Command, cfg *config.Config, rootDir, projectName 
 	ir, err := client.AnalyzeDomains(ctx, zipPath, "restore-"+hash[:16])
 	if err != nil {
 		return nil, err
+	}
+
+	if fp, err := cache.RepoFingerprint(rootDir); err == nil {
+		key := cache.AnalysisKey(fp, "restore", build.Version)
+		_ = cache.PutJSON(key, ir)
 	}
 
 	graph := restore.FromSupermodelIR(ir, projectName)

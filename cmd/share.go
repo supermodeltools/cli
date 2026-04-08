@@ -11,6 +11,7 @@ import (
 
 	"github.com/supermodeltools/cli/internal/api"
 	"github.com/supermodeltools/cli/internal/audit"
+	"github.com/supermodeltools/cli/internal/build"
 	"github.com/supermodeltools/cli/internal/cache"
 	"github.com/supermodeltools/cli/internal/config"
 )
@@ -49,15 +50,20 @@ func runShare(cmd *cobra.Command, dir string) error {
 		return err
 	}
 
-	// Run the full audit pipeline.
-	ir, err := shareAnalyze(cmd, cfg, rootDir, projectName)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	fp, _ := cache.RepoFingerprint(rootDir)
+
+	// Run the full audit pipeline (shares cache with `supermodel audit`).
+	ir, err := shareAnalyze(ctx, cmd, cfg, rootDir, projectName, fp)
 	if err != nil {
 		return err
 	}
 
 	report := audit.Analyze(ir, projectName)
 
-	impact, err := runImpactForShare(cmd, cfg, rootDir)
+	impact, err := runImpactForShare(ctx, cmd, cfg, rootDir, fp)
 	if err != nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: impact analysis unavailable: %v\n", err)
 	} else {
@@ -70,11 +76,11 @@ func runShare(cmd *cobra.Command, dir string) error {
 
 	// Upload and get public URL.
 	client := api.New(cfg)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
+	uploadCtx, uploadCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer uploadCancel()
 
 	fmt.Fprintln(cmd.ErrOrStderr(), "Uploading report…")
-	url, err := client.Share(ctx, api.ShareRequest{
+	url, err := client.Share(uploadCtx, api.ShareRequest{
 		ProjectName: projectName,
 		Status:      string(report.Status),
 		Content:     buf.String(),
@@ -92,9 +98,18 @@ func runShare(cmd *cobra.Command, dir string) error {
 	return nil
 }
 
-func shareAnalyze(cmd *cobra.Command, cfg *config.Config, rootDir, projectName string) (*api.SupermodelIR, error) {
+func shareAnalyze(ctx context.Context, cmd *cobra.Command, cfg *config.Config, rootDir, projectName, fp string) (*api.SupermodelIR, error) {
 	if err := cfg.RequireAPIKey(); err != nil {
 		return nil, err
+	}
+
+	// Check fingerprint cache (shares results with `supermodel audit`).
+	if fp != "" {
+		key := cache.AnalysisKey(fp, "audit-domains", build.Version)
+		var cached api.SupermodelIR
+		if hit, _ := cache.GetJSON(key, &cached); hit {
+			return &cached, nil
+		}
 	}
 
 	fmt.Fprintln(cmd.ErrOrStderr(), "Creating repository archive…")
@@ -110,14 +125,29 @@ func shareAnalyze(cmd *cobra.Command, cfg *config.Config, rootDir, projectName s
 	}
 
 	client := api.New(cfg)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-
 	fmt.Fprintf(cmd.ErrOrStderr(), "Analyzing %s…\n", projectName)
-	return client.AnalyzeDomains(ctx, zipPath, "share-"+hash[:16])
+	ir, err := client.AnalyzeDomains(ctx, zipPath, "share-"+hash[:16])
+	if err != nil {
+		return nil, err
+	}
+
+	if fp != "" {
+		key := cache.AnalysisKey(fp, "audit-domains", build.Version)
+		_ = cache.PutJSON(key, ir)
+	}
+	return ir, nil
 }
 
-func runImpactForShare(cmd *cobra.Command, cfg *config.Config, rootDir string) (*api.ImpactResult, error) {
+func runImpactForShare(ctx context.Context, cmd *cobra.Command, cfg *config.Config, rootDir, fp string) (*api.ImpactResult, error) {
+	// Check fingerprint cache (shares results with `supermodel audit` and `supermodel blast-radius`).
+	if fp != "" {
+		key := cache.AnalysisKey(fp, "impact", build.Version)
+		var cached api.ImpactResult
+		if hit, _ := cache.GetJSON(key, &cached); hit {
+			return &cached, nil
+		}
+	}
+
 	zipPath, err := audit.CreateZip(rootDir)
 	if err != nil {
 		return nil, err
@@ -130,11 +160,17 @@ func runImpactForShare(cmd *cobra.Command, cfg *config.Config, rootDir string) (
 	}
 
 	client := api.New(cfg)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-
 	fmt.Fprintln(cmd.ErrOrStderr(), "Running impact analysis…")
-	return client.Impact(ctx, zipPath, "share-impact-"+hash[:16], "", "")
+	result, err := client.Impact(ctx, zipPath, "share-impact-"+hash[:16], "", "")
+	if err != nil {
+		return nil, err
+	}
+
+	if fp != "" {
+		key := cache.AnalysisKey(fp, "impact", build.Version)
+		_ = cache.PutJSON(key, result)
+	}
+	return result, nil
 }
 
 // resolveAuditDir and findGitRoot are defined in cmd/audit.go (same package).
