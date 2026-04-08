@@ -9,10 +9,11 @@ import (
 	"os"
 	"strings"
 
+	"github.com/supermodeltools/cli/internal/analyze"
 	"github.com/supermodeltools/cli/internal/api"
+	"github.com/supermodeltools/cli/internal/build"
 	"github.com/supermodeltools/cli/internal/cache"
 	"github.com/supermodeltools/cli/internal/config"
-	"github.com/supermodeltools/cli/internal/ui"
 )
 
 // Serve starts the MCP stdio server. It reads JSON-RPC 2.0 messages from stdin
@@ -247,14 +248,23 @@ func (s *server) toolAnalyze(ctx context.Context, args map[string]any) (string, 
 
 // toolDeadCode calls the dedicated /v1/analysis/dead-code endpoint.
 func (s *server) toolDeadCode(ctx context.Context, args map[string]any) (string, error) {
+	minConfidence, _ := args["min_confidence"].(string)
+	limit := intArg(args, "limit")
+
+	// Check fingerprint cache (shared with `supermodel dead-code` CLI command).
+	if fp, err := cache.RepoFingerprint(s.dir); err == nil {
+		key := cache.AnalysisKey(fp, fmt.Sprintf("dead-code:%s:%d", minConfidence, limit), build.Version)
+		var cached api.DeadCodeResult
+		if hit, _ := cache.GetJSON(key, &cached); hit {
+			return formatDeadCode(&cached), nil
+		}
+	}
+
 	zipPath, hash, err := s.ensureZip()
 	if err != nil {
 		return "", err
 	}
 	defer os.Remove(zipPath)
-
-	minConfidence, _ := args["min_confidence"].(string)
-	limit := intArg(args, "limit")
 
 	client := api.New(s.cfg)
 	result, err := client.DeadCode(ctx, zipPath, "mcp-dc-"+hash[:16], minConfidence, limit)
@@ -262,18 +272,37 @@ func (s *server) toolDeadCode(ctx context.Context, args map[string]any) (string,
 		return "", err
 	}
 
+	if fp, err := cache.RepoFingerprint(s.dir); err == nil {
+		key := cache.AnalysisKey(fp, fmt.Sprintf("dead-code:%s:%d", minConfidence, limit), build.Version)
+		_ = cache.PutJSON(key, result)
+	}
+
 	return formatDeadCode(result), nil
 }
 
 // toolBlastRadius calls the dedicated /v1/analysis/impact endpoint.
 func (s *server) toolBlastRadius(ctx context.Context, args map[string]any) (string, error) {
+	target, _ := args["file"].(string)
+
+	// Check fingerprint cache (shared with `supermodel blast-radius` CLI command).
+	if fp, err := cache.RepoFingerprint(s.dir); err == nil {
+		analysisType := "impact"
+		if target != "" {
+			analysisType += ":" + target
+		}
+		key := cache.AnalysisKey(fp, analysisType, build.Version)
+		var cached api.ImpactResult
+		if hit, _ := cache.GetJSON(key, &cached); hit {
+			return formatImpact(&cached), nil
+		}
+	}
+
 	zipPath, hash, err := s.ensureZip()
 	if err != nil {
 		return "", err
 	}
 	defer os.Remove(zipPath)
 
-	target, _ := args["file"].(string)
 	idempotencyKey := "mcp-impact-" + hash[:16]
 	if target != "" {
 		idempotencyKey += "-" + target
@@ -283,6 +312,15 @@ func (s *server) toolBlastRadius(ctx context.Context, args map[string]any) (stri
 	result, err := client.Impact(ctx, zipPath, idempotencyKey, target, "")
 	if err != nil {
 		return "", err
+	}
+
+	if fp, err := cache.RepoFingerprint(s.dir); err == nil {
+		analysisType := "impact"
+		if target != "" {
+			analysisType += ":" + target
+		}
+		key := cache.AnalysisKey(fp, analysisType, build.Version)
+		_ = cache.PutJSON(key, result)
 	}
 
 	return formatImpact(result), nil
@@ -381,32 +419,10 @@ func (s *server) getOrAnalyze(ctx context.Context, force bool) (*api.Graph, stri
 		return nil, "", err
 	}
 
-	zipPath, err := createZip(s.dir)
+	g, hash, err := analyze.GetGraph(ctx, s.cfg, s.dir, force)
 	if err != nil {
 		return nil, "", err
 	}
-	defer os.Remove(zipPath)
-
-	hash, err := cache.HashFile(zipPath)
-	if err != nil {
-		return nil, "", err
-	}
-
-	if !force {
-		if g, _ := cache.Get(hash); g != nil {
-			s.graph = g
-			s.hash = hash
-			return g, hash, nil
-		}
-	}
-
-	ui.Step("Analyzing repository…")
-	client := api.New(s.cfg)
-	g, err := client.Analyze(ctx, zipPath, "mcp-"+hash[:16])
-	if err != nil {
-		return nil, hash, err
-	}
-	_ = cache.Put(hash, g)
 	s.graph = g
 	s.hash = hash
 	return g, hash, nil
