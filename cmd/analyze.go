@@ -5,12 +5,12 @@ import (
 
 	"github.com/supermodeltools/cli/internal/analyze"
 	"github.com/supermodeltools/cli/internal/config"
-	"github.com/supermodeltools/cli/internal/files"
+	"github.com/supermodeltools/cli/internal/shards"
 )
 
 func init() {
 	var opts analyze.Options
-	var noFiles bool
+	var noShards bool
 
 	c := &cobra.Command{
 		Use:   "analyze [path]",
@@ -21,8 +21,8 @@ call graph generation, dependency analysis, and domain classification.
 Results are cached locally by content hash. Subsequent commands
 (dead-code, blast-radius, graph) reuse the cache automatically.
 
-By default, .graph.* sidecar files are written next to each source file.
-Use --no-files to skip writing graph files.`,
+By default, .graph.* shard files are written next to each source file.
+Use --no-shards to skip writing graph files.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
@@ -36,11 +36,11 @@ Use --no-files to skip writing graph files.`,
 			if len(args) > 0 {
 				dir = args[0]
 			}
-			if cfg.FilesEnabled() && !noFiles {
-				// File mode: Generate handles the full pipeline (API call +
-				// cache + sidecars) in a single upload. Running analyze.Run
+			if cfg.ShardsEnabled() && !noShards {
+				// Shard mode: Generate handles the full pipeline (API call +
+				// cache + shards) in a single upload. Running analyze.Run
 				// first would duplicate the API call.
-				return files.Generate(cmd.Context(), cfg, dir, files.GenerateOptions{Force: opts.Force})
+				return shards.Generate(cmd.Context(), cfg, dir, shards.GenerateOptions{Force: opts.Force})
 			}
 			return analyze.Run(cmd.Context(), cfg, dir, opts)
 		},
@@ -48,7 +48,7 @@ Use --no-files to skip writing graph files.`,
 
 	c.Flags().BoolVar(&opts.Force, "force", false, "re-analyze even if a cached result exists")
 	c.Flags().StringVarP(&opts.Output, "output", "o", "", "output format: human|json")
-	c.Flags().BoolVar(&noFiles, "no-files", false, "skip writing .graph.* sidecar files")
+	c.Flags().BoolVar(&noShards, "no-shards", false, "skip writing .graph.* shard files")
 
 	rootCmd.AddCommand(c)
 }

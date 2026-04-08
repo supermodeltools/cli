@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/supermodeltools/cli/internal/files"
+	"github.com/supermodeltools/cli/internal/shards"
 )
 
 func init() {
@@ -15,7 +15,7 @@ func init() {
 		Long:  `Reads a Claude Code PostToolUse JSON payload from stdin and forwards the file path to the running watch daemon via UDP. Install as a PostToolUse hook in .claude/settings.json.`,
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return files.Hook(port)
+			return shards.Hook(port)
 		},
 	}
 

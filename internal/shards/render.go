@@ -1,4 +1,4 @@
-package files
+package shards
 
 import (
 	"fmt"
@@ -18,9 +18,9 @@ func CommentPrefix(ext string) string {
 	}
 }
 
-// SidecarFilename generates the .graph sidecar path.
+// ShardFilename generates the .graph shard path.
 // Example: "src/Foo.tsx" → "src/Foo.graph.tsx"
-func SidecarFilename(sourcePath string) string {
+func ShardFilename(sourcePath string) string {
 	ext := filepath.Ext(sourcePath)
 	stem := strings.TrimSuffix(sourcePath, ext)
 	return stem + ".graph" + ext
@@ -28,10 +28,10 @@ func SidecarFilename(sourcePath string) string {
 
 // Header returns the @generated header line.
 func Header(prefix string) string {
-	return prefix + " @generated supermodel-sidecar — do not edit\n"
+	return prefix + " @generated supermodel-shard — do not edit\n"
 }
 
-// RenderGraph produces a combined .graph sidecar with deps, calls, and impact sections.
+// RenderGraph produces a combined .graph shard with deps, calls, and impact sections.
 func RenderGraph(filePath string, cache *Cache, prefix string) string {
 	deps := renderDepsSection(filePath, cache, prefix)
 	calls := renderCallsSection(filePath, cache, prefix)
@@ -188,9 +188,9 @@ func renderImpactSection(filePath string, cache *Cache, prefix string) string { 
 	return strings.Join(lines, "\n")
 }
 
-// WriteSidecar writes a sidecar file with path traversal protection.
-func WriteSidecar(repoDir, sidecarPath, content string, dryRun bool) error {
-	full, err := filepath.Abs(filepath.Join(repoDir, sidecarPath))
+// WriteShard writes a shard file with path traversal protection.
+func WriteShard(repoDir, shardPath, content string, dryRun bool) error {
+	full, err := filepath.Abs(filepath.Join(repoDir, shardPath))
 	if err != nil {
 		return err
 	}
@@ -199,7 +199,7 @@ func WriteSidecar(repoDir, sidecarPath, content string, dryRun bool) error {
 		return err
 	}
 	if !strings.HasPrefix(full, repoAbs+string(filepath.Separator)) && full != repoAbs {
-		return fmt.Errorf("path traversal blocked: %s", sidecarPath)
+		return fmt.Errorf("path traversal blocked: %s", shardPath)
 	}
 
 	if dryRun {
@@ -219,8 +219,8 @@ func WriteSidecar(repoDir, sidecarPath, content string, dryRun bool) error {
 	return os.Rename(tmp, full)
 }
 
-// RenderAll generates and writes .graph sidecars for the given source files.
-// Returns the count of sidecars written.
+// RenderAll generates and writes .graph shards for the given source files.
+// Returns the count of shards written.
 func RenderAll(repoDir string, cache *Cache, files []string, dryRun bool) (int, error) {
 	sort.Strings(files)
 	written := 0
@@ -240,8 +240,8 @@ func RenderAll(repoDir string, cache *Cache, files []string, dryRun bool) (int, 
 			fullContent = "//go:build ignore\n\npackage ignore\n" + fullContent
 		}
 
-		scPath := SidecarFilename(srcFile)
-		if err := WriteSidecar(repoDir, scPath, fullContent, dryRun); err != nil {
+		scPath := ShardFilename(srcFile)
+		if err := WriteShard(repoDir, scPath, fullContent, dryRun); err != nil {
 			if strings.Contains(err.Error(), "path traversal") {
 				continue
 			}

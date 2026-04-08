@@ -115,15 +115,15 @@ func (c *Client) pollLoop(ctx context.Context, post func() (*JobResponse, error)
 	return job, nil
 }
 
-// AnalyzeSidecars uploads a repository ZIP and runs the full analysis pipeline,
-// returning the complete SidecarIR response with full Node/Relationship data
+// AnalyzeShards uploads a repository ZIP and runs the full analysis pipeline,
+// returning the complete ShardIR response with full Node/Relationship data
 // required for sidecar rendering (IDs, labels, properties preserved).
-func (c *Client) AnalyzeSidecars(ctx context.Context, zipPath, idempotencyKey string) (*SidecarIR, error) {
+func (c *Client) AnalyzeShards(ctx context.Context, zipPath, idempotencyKey string) (*ShardIR, error) {
 	job, err := c.pollUntilComplete(ctx, zipPath, idempotencyKey)
 	if err != nil {
 		return nil, err
 	}
-	var ir SidecarIR
+	var ir ShardIR
 	if err := json.Unmarshal(job.Result, &ir); err != nil {
 		return nil, fmt.Errorf("decode sidecar result: %w", err)
 	}

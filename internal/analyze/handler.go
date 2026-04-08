@@ -73,13 +73,13 @@ func GetGraph(ctx context.Context, cfg *config.Config, dir string, force bool) (
 
 	client := api.New(cfg)
 	spin = ui.Start("Uploading and analyzing repository…")
-	ir, err := client.AnalyzeSidecars(ctx, zipPath, "analyze-"+hash[:16])
+	ir, err := client.AnalyzeShards(ctx, zipPath, "analyze-"+hash[:16])
 	spin.Stop()
 	if err != nil {
 		return nil, hash, err
 	}
 
-	g := api.GraphFromSidecarIR(ir)
+	g := api.GraphFromShardIR(ir)
 
 	// Cache under both keys: fingerprint (fast lookup) and zip hash (fallback).
 	fingerprint, fpErr := cache.RepoFingerprint(dir)
@@ -93,16 +93,16 @@ func GetGraph(ctx context.Context, cfg *config.Config, dir string, force bool) (
 		ui.Warn("could not write cache: %v", err)
 	}
 
-	// Also populate the sidecar cache (.supermodel/graph.json) so that
+	// Also populate the shard cache (.supermodel/graph.json) so that
 	// files.Generate() called after analyze reuses this result without a
 	// second API upload.
 	absDir, _ := filepath.Abs(dir)
-	sidecarCacheFile := filepath.Join(absDir, ".supermodel", "graph.json")
+	shardCacheFile := filepath.Join(absDir, ".supermodel", "shards.json")
 	if irJSON, marshalErr := json.MarshalIndent(ir, "", "  "); marshalErr == nil {
-		if mkErr := os.MkdirAll(filepath.Dir(sidecarCacheFile), 0o755); mkErr == nil {
-			tmp := sidecarCacheFile + ".tmp"
+		if mkErr := os.MkdirAll(filepath.Dir(shardCacheFile), 0o755); mkErr == nil {
+			tmp := shardCacheFile + ".tmp"
 			if writeErr := os.WriteFile(tmp, irJSON, 0o644); writeErr == nil {
-				_ = os.Rename(tmp, sidecarCacheFile)
+				_ = os.Rename(tmp, shardCacheFile)
 			}
 		}
 	}

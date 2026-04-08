@@ -1,4 +1,4 @@
-package files
+package shards
 
 import (
 	"context"
@@ -166,5 +166,5 @@ func isWatchSourceFile(path string) bool {
 	if !SourceExtensions[ext] {
 		return false
 	}
-	return !isSidecarPath(path)
+	return !isShardPath(path)
 }

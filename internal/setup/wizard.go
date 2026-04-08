@@ -13,7 +13,7 @@ import (
 
 	"github.com/supermodeltools/cli/internal/auth"
 	"github.com/supermodeltools/cli/internal/config"
-	"github.com/supermodeltools/cli/internal/files"
+	"github.com/supermodeltools/cli/internal/shards"
 )
 
 // ANSI color codes
@@ -134,8 +134,8 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	}
 	fmt.Println()
 
-	// ── Step 4: File mode ─────────────────────────────────────────
-	fmt.Printf("  %s◆%s  File mode\n", cyan, reset)
+	// ── Step 4: Shard mode ─────────────────────────────────────────
+	fmt.Printf("  %s◆%s  Shard mode\n", cyan, reset)
 	fmt.Println()
 	fmt.Printf("  %sWrites a .graph file next to each source file in your repo.%s\n", dWhite, reset)
 	fmt.Printf("  %sAgents read them automatically via grep and cat — no extra%s\n", dWhite, reset)
@@ -144,18 +144,18 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	fmt.Printf("  %sDisable at any time with:%s %ssupermodel clean%s\n", dWhite, reset, bWhite, reset)
 	fmt.Println()
 
-	filesEnabled := confirmYN("Enable file mode?", true)
+	shardsEnabled := confirmYN("Enable shard mode?", true)
 	fmt.Println()
 
-	cfg.Files = boolPtr(filesEnabled)
+	cfg.Shards = boolPtr(shardsEnabled)
 	if err := cfg.Save(); err != nil {
 		fmt.Fprintf(os.Stderr, "  %sWarning: could not save config: %v%s\n", yellow, err, reset)
 	}
 
-	if filesEnabled {
-		fmt.Printf("  %s✓%s  File mode enabled\n", green, reset)
+	if shardsEnabled {
+		fmt.Printf("  %s✓%s  Shard mode enabled\n", green, reset)
 	} else {
-		fmt.Printf("  %s–%s  File mode disabled\n", dim, reset)
+		fmt.Printf("  %s–%s  Shard mode disabled\n", dim, reset)
 	}
 	fmt.Println()
 
@@ -165,10 +165,10 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	fmt.Printf("  %s✓%s  Setup complete\n", bGreen, reset)
 	fmt.Println()
 	fileModeStr := "disabled"
-	if filesEnabled {
+	if shardsEnabled {
 		fileModeStr = "enabled"
 	}
-	fmt.Printf("     %sFile mode%s    %s%s%s\n", dim, reset, bWhite, fileModeStr, reset)
+	fmt.Printf("     %sShard mode%s    %s%s%s\n", dim, reset, bWhite, fileModeStr, reset)
 	if hookNote != "" {
 		fmt.Printf("     %sHook%s         %s%s%s\n", dim, reset, bWhite, hookNote, reset)
 	}
@@ -187,7 +187,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	fmt.Printf("  %sRun %ssupermodel watch%s%s to restart at any time.%s\n", dWhite, bWhite, reset, dWhite, reset)
 	fmt.Println()
 
-	return files.Watch(ctx, cfg, repoDir, files.WatchOptions{})
+	return shards.Watch(ctx, cfg, repoDir, shards.WatchOptions{})
 }
 
 func boolPtr(b bool) *bool { return &b }

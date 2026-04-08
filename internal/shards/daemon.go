@@ -1,4 +1,4 @@
-package files
+package shards
 
 import (
 	"context"
@@ -33,7 +33,7 @@ type DaemonConfig struct {
 	OnUpdate func(GraphStats)
 }
 
-// Daemon watches for file changes and keeps sidecars fresh.
+// Daemon watches for file changes and keeps shards fresh.
 type Daemon struct {
 	cfg    DaemonConfig
 	client *api.Client
@@ -41,7 +41,7 @@ type Daemon struct {
 	logf   func(string, ...interface{})
 
 	mu          sync.Mutex
-	ir          *api.SidecarIR
+	ir          *api.ShardIR
 	notifyCh    chan string
 	loadedCache bool // true if startup data came from local cache
 }
@@ -127,7 +127,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 				debounceTimer.Stop()
 			}
 			d.logf("Shutting down...")
-			d.logf("Cleaning sidecar files...")
+			d.logf("Cleaning shard files...")
 			done := make(chan struct{})
 			go func() {
 				_ = Clean(context.Background(), nil, d.cfg.RepoDir, false)
@@ -136,7 +136,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 			select {
 			case <-done:
 			case <-time.After(5 * time.Second):
-				d.logf("Warning: sidecar cleanup timed out")
+				d.logf("Warning: shard cleanup timed out")
 			}
 			return nil
 
@@ -163,12 +163,12 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 }
 
-// loadOrGenerate loads an existing cache if available and re-renders sidecars.
+// loadOrGenerate loads an existing cache if available and re-renders shards.
 // If no cache exists, it does a full API fetch.
 func (d *Daemon) loadOrGenerate(ctx context.Context) error {
 	data, err := os.ReadFile(d.cfg.CacheFile)
 	if err == nil {
-		var ir api.SidecarIR
+		var ir api.ShardIR
 		if unmarshalErr := json.Unmarshal(data, &ir); unmarshalErr != nil {
 			d.logf("Warning: cache file invalid, regenerating: %v", unmarshalErr)
 		} else if len(ir.Graph.Nodes) > 0 {
@@ -187,7 +187,7 @@ func (d *Daemon) loadOrGenerate(ctx context.Context) error {
 			if renderErr != nil {
 				return renderErr
 			}
-			d.logf("Rendered %d sidecars for %d source files", written, len(files))
+			d.logf("Rendered %d shards for %d source files", written, len(files))
 			return nil
 		}
 	}
@@ -213,7 +213,7 @@ func (d *Daemon) fullGenerate(ctx context.Context) error {
 	}
 	defer os.Remove(zipPath)
 
-	ir, err := d.client.AnalyzeSidecars(ctx, zipPath, idemKey)
+	ir, err := d.client.AnalyzeShards(ctx, zipPath, idemKey)
 	if err != nil {
 		return err
 	}
@@ -230,11 +230,11 @@ func (d *Daemon) fullGenerate(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	d.logf("Rendered %d sidecars for %d source files", written, len(files))
+	d.logf("Rendered %d shards for %d source files", written, len(files))
 	return nil
 }
 
-// incrementalUpdate fetches graph for only changed files and re-renders affected sidecars.
+// incrementalUpdate fetches graph for only changed files and re-renders affected shards.
 func (d *Daemon) incrementalUpdate(ctx context.Context, changedFiles []string) {
 	d.logf("Incremental update: %d files changed [%s]",
 		len(changedFiles), strings.Join(changedFiles, ", "))
@@ -251,7 +251,7 @@ func (d *Daemon) incrementalUpdate(ctx context.Context, changedFiles []string) {
 	}
 	defer os.Remove(zipPath)
 
-	ir, err := d.client.AnalyzeSidecars(ctx, zipPath, "incremental-"+idemKey[:8])
+	ir, err := d.client.AnalyzeShards(ctx, zipPath, "incremental-"+idemKey[:8])
 	if err != nil {
 		d.logf("Incremental API error: %v", err)
 		return
@@ -269,7 +269,7 @@ func (d *Daemon) incrementalUpdate(ctx context.Context, changedFiles []string) {
 		cacheSnapshot = d.cache
 	}()
 
-	d.logf("Re-rendering %d affected sidecars", len(affected))
+	d.logf("Re-rendering %d affected shards", len(affected))
 
 	written, err := RenderAll(d.cfg.RepoDir, cacheSnapshot, affected, false)
 	if err != nil {
@@ -277,7 +277,7 @@ func (d *Daemon) incrementalUpdate(ctx context.Context, changedFiles []string) {
 		return
 	}
 
-	d.logf("Updated %d sidecars", written)
+	d.logf("Updated %d shards", written)
 
 	var updateStats GraphStats
 	func() {
@@ -295,7 +295,7 @@ func (d *Daemon) incrementalUpdate(ctx context.Context, changedFiles []string) {
 	}
 }
 
-// saveCache writes the current merged SidecarIR to the cache file. Must be called with d.mu held.
+// saveCache writes the current merged ShardIR to the cache file. Must be called with d.mu held.
 func (d *Daemon) saveCache() {
 	if d.ir == nil {
 		return
@@ -323,8 +323,8 @@ func (d *Daemon) saveCache() {
 		len(d.ir.Graph.Nodes), len(d.ir.Graph.Relationships))
 }
 
-// mergeGraph integrates incremental API results into the existing SidecarIR.
-func (d *Daemon) mergeGraph(incremental *api.SidecarIR, changedFiles []string) { //nolint:gocyclo // graph merge has inherent branching per node/rel type; splitting would obscure the algorithm
+// mergeGraph integrates incremental API results into the existing ShardIR.
+func (d *Daemon) mergeGraph(incremental *api.ShardIR, changedFiles []string) { //nolint:gocyclo // graph merge has inherent branching per node/rel type; splitting would obscure the algorithm
 	if d.ir == nil {
 		d.ir = incremental
 		return

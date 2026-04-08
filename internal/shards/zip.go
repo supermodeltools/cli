@@ -1,4 +1,4 @@
-package files
+package shards
 
 import (
 	"archive/zip"
@@ -141,7 +141,7 @@ func shouldInclude(relPath string, fileSize int64, ex *zipExclusions) bool {
 
 	filename := parts[len(parts)-1]
 
-	if isSidecarFile(filename) {
+	if isShardFile(filename) {
 		return false
 	}
 
@@ -178,7 +178,7 @@ func shouldInclude(relPath string, fileSize int64, ex *zipExclusions) bool {
 func CreateZipFile(repoDir string, onlyFiles []string) (string, error) {
 	ex := buildExclusions(repoDir)
 
-	f, err := os.CreateTemp("", "supermodel-sidecars-*.zip")
+	f, err := os.CreateTemp("", "supermodel-shards-*.zip")
 	if err != nil {
 		return "", fmt.Errorf("create temp zip: %w", err)
 	}
@@ -346,8 +346,8 @@ func PrintLanguageBarChart(stats []LangStat, totalFiles int) {
 	fmt.Fprintln(os.Stderr)
 }
 
-// isSidecarFile checks if a filename is a generated sidecar (e.g. foo.graph.ts).
-func isSidecarFile(filename string) bool {
+// isShardFile checks if a filename is a generated shard (e.g. foo.graph.ts).
+func isShardFile(filename string) bool {
 	ext := filepath.Ext(filename)
 	if ext == "" {
 		return false
@@ -358,7 +358,7 @@ func isSidecarFile(filename string) bool {
 		return false
 	}
 	tag = strings.TrimPrefix(tag, ".")
-	return tag == SidecarExt
+	return tag == ShardExt
 }
 
 func addFileToZip(w *zip.Writer, fullPath, relPath string) error {

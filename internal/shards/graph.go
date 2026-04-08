@@ -1,4 +1,4 @@
-package files
+package shards
 
 import (
 	"path/filepath"
@@ -7,7 +7,7 @@ import (
 	"github.com/supermodeltools/cli/internal/api"
 )
 
-// SourceExtensions are the file extensions that get sidecars.
+// SourceExtensions are the file extensions that get shards.
 var SourceExtensions = map[string]bool{
 	".ts": true, ".js": true, ".mjs": true, ".jsx": true, ".tsx": true,
 	".go": true, ".py": true, ".rb": true, ".rs": true,
@@ -15,8 +15,8 @@ var SourceExtensions = map[string]bool{
 	".swift": true, ".kt": true,
 }
 
-// SidecarExt is the extension tag for the combined sidecar file.
-const SidecarExt = "graph"
+// ShardExt is the extension tag for the combined shard file.
+const ShardExt = "graph"
 
 // FuncInfo holds metadata about a function node.
 type FuncInfo struct {
@@ -54,8 +54,8 @@ type GraphStats struct {
 	FromCache         bool // true when data was loaded from a local cache
 }
 
-// computeStats derives a GraphStats from a SidecarIR and its built Cache.
-func computeStats(ir *api.SidecarIR, c *Cache) GraphStats {
+// computeStats derives a GraphStats from a ShardIR and its built Cache.
+func computeStats(ir *api.ShardIR, c *Cache) GraphStats {
 	s := GraphStats{
 		Relationships: len(ir.Graph.Relationships),
 	}
@@ -86,10 +86,10 @@ func NewCache() *Cache {
 	}
 }
 
-// Build populates the cache from a SidecarIR result.
-// SidecarIR preserves the full Node/Relationship data (IDs, labels, properties)
-// required for sidecar rendering.
-func (c *Cache) Build(ir *api.SidecarIR) { //nolint:gocyclo // multi-pass graph indexing; each branch handles one node/rel label type
+// Build populates the cache from a ShardIR result.
+// ShardIR preserves the full Node/Relationship data (IDs, labels, properties)
+// required for shard rendering.
+func (c *Cache) Build(ir *api.ShardIR) { //nolint:gocyclo // multi-pass graph indexing; each branch handles one node/rel label type
 	nodes := ir.Graph.Nodes
 	rels := ir.Graph.Relationships
 
@@ -245,7 +245,7 @@ func (c *Cache) SourceFiles() []string {
 		if !SourceExtensions[ext] {
 			continue
 		}
-		if isSidecarPath(f) {
+		if isShardPath(f) {
 			continue
 		}
 		files = append(files, f)
@@ -280,7 +280,7 @@ func (c *Cache) walkImporters(filePath string, visited map[string]bool) {
 	}
 }
 
-func isSidecarPath(name string) bool {
+func isShardPath(name string) bool {
 	base := filepath.Base(name)
 	ext := filepath.Ext(base)
 	stem := strings.TrimSuffix(base, ext)
@@ -289,7 +289,7 @@ func isSidecarPath(name string) bool {
 		return false
 	}
 	tag := strings.TrimPrefix(stemExt, ".")
-	return tag == SidecarExt
+	return tag == ShardExt
 }
 
 // firstString returns the first non-empty string value from props for the given keys.

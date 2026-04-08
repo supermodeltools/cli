@@ -144,45 +144,45 @@ type IRSubdomain struct {
 	DescriptionSummary string `json:"descriptionSummary"`
 }
 
-// SidecarIR is the full structured response from /v1/graphs/supermodel used
+// ShardIR is the full structured response from /v1/graphs/supermodel used
 // by the sidecars vertical slice. Unlike SupermodelIR (which uses simplified
-// IRNode/IRRelationship stubs), SidecarIR preserves the complete node graph
+// IRNode/IRRelationship stubs), ShardIR preserves the complete node graph
 // with IDs, labels, and properties required for sidecar rendering.
-type SidecarIR struct {
+type ShardIR struct {
 	Repo     string          `json:"repo"`
 	Summary  map[string]any  `json:"summary"`
 	Metadata IRMetadata      `json:"metadata"`
-	Domains  []SidecarDomain `json:"domains"`
-	Graph    SidecarGraph    `json:"graph"`
+	Domains  []ShardDomain `json:"domains"`
+	Graph    ShardGraph    `json:"graph"`
 }
 
-// SidecarGraph is the full node/relationship graph embedded in SidecarIR.
-type SidecarGraph struct {
+// ShardGraph is the full node/relationship graph embedded in ShardIR.
+type ShardGraph struct {
 	Nodes         []Node         `json:"nodes"`
 	Relationships []Relationship `json:"relationships"`
 }
 
-// SidecarDomain is a semantic domain from the API with file references.
-type SidecarDomain struct {
+// ShardDomain is a semantic domain from the API with file references.
+type ShardDomain struct {
 	Name               string             `json:"name"`
 	DescriptionSummary string             `json:"descriptionSummary"`
 	KeyFiles           []string           `json:"keyFiles"`
 	Responsibilities   []string           `json:"responsibilities"`
-	Subdomains         []SidecarSubdomain `json:"subdomains"`
+	Subdomains         []ShardSubdomain `json:"subdomains"`
 }
 
-// SidecarSubdomain is a named sub-area within a SidecarDomain.
-type SidecarSubdomain struct {
+// ShardSubdomain is a named sub-area within a ShardDomain.
+type ShardSubdomain struct {
 	Name               string   `json:"name"`
 	DescriptionSummary string   `json:"descriptionSummary"`
 	Files              []string `json:"files"`
 	KeyFiles           []string `json:"keyFiles"`
 }
 
-// GraphFromSidecarIR builds a display Graph from a SidecarIR response.
-// SidecarIR uses the same Node/Relationship types, so this is a zero-copy
+// GraphFromShardIR builds a display Graph from a ShardIR response.
+// ShardIR uses the same Node/Relationship types, so this is a zero-copy
 // extraction that also populates the repoId metadata field.
-func GraphFromSidecarIR(ir *SidecarIR) *Graph {
+func GraphFromShardIR(ir *ShardIR) *Graph {
 	return &Graph{
 		Nodes:         ir.Graph.Nodes,
 		Relationships: ir.Graph.Relationships,

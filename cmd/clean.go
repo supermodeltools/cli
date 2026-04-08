@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/supermodeltools/cli/internal/config"
-	"github.com/supermodeltools/cli/internal/files"
+	"github.com/supermodeltools/cli/internal/shards"
 )
 
 func init() {
@@ -23,7 +23,7 @@ func init() {
 			if len(args) > 0 {
 				dir = args[0]
 			}
-			return files.Clean(cmd.Context(), cfg, dir, dryRun)
+			return shards.Clean(cmd.Context(), cfg, dir, dryRun)
 		},
 	}
 

@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/supermodeltools/cli/internal/config"
-	"github.com/supermodeltools/cli/internal/files"
+	"github.com/supermodeltools/cli/internal/shards"
 )
 
 // noConfigCommands are subcommands that work without a config file.
@@ -66,14 +66,14 @@ See https://supermodeltools.com for documentation.`,
 		if len(args) > 0 {
 			dir = args[0]
 		}
-		opts := files.WatchOptions{
+		opts := shards.WatchOptions{
 			CacheFile:    watchCacheFile,
 			Debounce:     watchDebounce,
 			NotifyPort:   watchNotifyPort,
 			FSWatch:      watchFSWatch,
 			PollInterval: watchPollInterval,
 		}
-		return files.Watch(cmd.Context(), cfg, dir, opts)
+		return shards.Watch(cmd.Context(), cfg, dir, opts)
 	},
 }
 

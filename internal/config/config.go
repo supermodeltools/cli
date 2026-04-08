@@ -18,7 +18,7 @@ type Config struct {
 	APIKey  string `yaml:"api_key,omitempty"`
 	APIBase string `yaml:"api_base,omitempty"`
 	Output  string `yaml:"output,omitempty"` // "human" | "json"
-	Files   *bool  `yaml:"files,omitempty"`
+	Shards  *bool  `yaml:"shards,omitempty"`
 }
 
 // Dir returns the Supermodel config directory (~/.supermodel).
@@ -71,10 +71,10 @@ func (c *Config) Save() error {
 	return nil
 }
 
-// FilesEnabled reports whether file mode is on. Defaults to true.
-func (c *Config) FilesEnabled() bool {
-	if c.Files != nil {
-		return *c.Files
+// ShardsEnabled reports whether shard mode is on. Defaults to true.
+func (c *Config) ShardsEnabled() bool {
+	if c.Shards != nil {
+		return *c.Shards
 	}
 	return true
 }
@@ -107,8 +107,8 @@ func (c *Config) applyEnv() {
 	if base := os.Getenv("SUPERMODEL_API_BASE"); base != "" {
 		c.APIBase = base
 	}
-	if os.Getenv("SUPERMODEL_FILES") == "false" {
-		c.Files = boolPtr(false)
+	if os.Getenv("SUPERMODEL_SHARDS") == "false" {
+		c.Shards = boolPtr(false)
 	}
 }
 

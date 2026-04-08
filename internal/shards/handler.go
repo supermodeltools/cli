@@ -1,4 +1,4 @@
-package files
+package shards
 
 import (
 	"bufio"
@@ -47,7 +47,7 @@ type RenderOptions struct {
 	DryRun    bool
 }
 
-// Generate uploads a zip, builds the graph cache, and renders all sidecars.
+// Generate uploads a zip, builds the graph cache, and renders all shards.
 func Generate(ctx context.Context, cfg *config.Config, dir string, opts GenerateOptions) error {
 	repoDir, err := filepath.Abs(dir)
 	if err != nil {
@@ -56,25 +56,25 @@ func Generate(ctx context.Context, cfg *config.Config, dir string, opts Generate
 
 	cacheFile := opts.CacheFile
 	if cacheFile == "" {
-		cacheFile = filepath.Join(repoDir, ".supermodel", "graph.json")
+		cacheFile = filepath.Join(repoDir, ".supermodel", "shards.json")
 	}
 
 	// Check for existing cache unless --force
 	if !opts.Force {
 		if data, err := os.ReadFile(cacheFile); err == nil {
-			var ir api.SidecarIR
+			var ir api.ShardIR
 			if err := json.Unmarshal(data, &ir); err == nil && len(ir.Graph.Nodes) > 0 {
 				ui.Success("Using cached graph (%d nodes) — use --force to re-fetch", len(ir.Graph.Nodes))
 				cache := NewCache()
 				cache.Build(&ir)
 				files := cache.SourceFiles()
-				spin := ui.Start("Rendering sidecars…")
+				spin := ui.Start("Rendering shards…")
 				written, err := RenderAll(repoDir, cache, files, opts.DryRun)
 				spin.Stop()
 				if err != nil {
 					return err
 				}
-				ui.Success("Wrote %d sidecars for %d source files", written, len(files))
+				ui.Success("Wrote %d shards for %d source files", written, len(files))
 				return updateGitignore(repoDir)
 			}
 		}
@@ -97,7 +97,7 @@ func Generate(ctx context.Context, cfg *config.Config, dir string, opts Generate
 	idemKey := newUUID()
 
 	spin = ui.Start("Uploading and analyzing repository…")
-	ir, err := client.AnalyzeSidecars(ctx, zipPath, "sidecars-"+idemKey[:8])
+	ir, err := client.AnalyzeShards(ctx, zipPath, "shards-"+idemKey[:8])
 	spin.Stop()
 	if err != nil {
 		return err
@@ -123,14 +123,14 @@ func Generate(ctx context.Context, cfg *config.Config, dir string, opts Generate
 	cache.Build(ir)
 	files := cache.SourceFiles()
 
-	spin = ui.Start("Rendering sidecars…")
+	spin = ui.Start("Rendering shards…")
 	written, err := RenderAll(repoDir, cache, files, opts.DryRun)
 	spin.Stop()
 	if err != nil {
 		return err
 	}
 
-	ui.Success("Wrote %d sidecars for %d source files (%d nodes, %d relationships)",
+	ui.Success("Wrote %d shards for %d source files (%d nodes, %d relationships)",
 		written, len(files), len(ir.Graph.Nodes), len(ir.Graph.Relationships))
 
 	return updateGitignore(repoDir)
@@ -145,7 +145,7 @@ func Watch(ctx context.Context, cfg *config.Config, dir string, opts WatchOption
 
 	cacheFile := opts.CacheFile
 	if cacheFile == "" {
-		cacheFile = filepath.Join(repoDir, ".supermodel", "graph.json")
+		cacheFile = filepath.Join(repoDir, ".supermodel", "shards.json")
 	}
 
 	client := api.New(cfg)
@@ -206,7 +206,7 @@ func Watch(ctx context.Context, cfg *config.Config, dir string, opts WatchOption
 	return d.Run(ctx)
 }
 
-// Clean removes all .graph.* sidecar files from the directory tree.
+// Clean removes all .graph.* shard files from the directory tree.
 func Clean(_ context.Context, _ *config.Config, dir string, dryRun bool) error {
 	repoDir, err := filepath.Abs(dir)
 	if err != nil {
@@ -226,7 +226,7 @@ func Clean(_ context.Context, _ *config.Config, dir string, dryRun bool) error {
 			}
 			return nil
 		}
-		if !isSidecarFile(info.Name()) {
+		if !isShardFile(info.Name()) {
 			return nil
 		}
 		if dryRun {
@@ -246,9 +246,9 @@ func Clean(_ context.Context, _ *config.Config, dir string, dryRun bool) error {
 	}
 
 	if dryRun {
-		fmt.Printf("Would remove %d sidecar files\n", removed)
+		fmt.Printf("Would remove %d shard files\n", removed)
 	} else {
-		fmt.Printf("Removed %d sidecar files\n", removed)
+		fmt.Printf("Removed %d shard files\n", removed)
 	}
 	return nil
 }
@@ -310,9 +310,9 @@ func Hook(port int) error {
 		return nil
 	}
 
-	// Only notify for source files, not sidecars
+	// Only notify for source files, not shards
 	ext := strings.ToLower(filepath.Ext(filePath))
-	if !SourceExtensions[ext] || isSidecarPath(filePath) {
+	if !SourceExtensions[ext] || isShardPath(filePath) {
 		return nil
 	}
 
@@ -328,7 +328,7 @@ func Hook(port int) error {
 	return nil
 }
 
-// Render renders sidecars from the existing cache without fetching from the API.
+// Render renders shards from the existing cache without fetching from the API.
 func Render(dir string, opts RenderOptions) error {
 	repoDir, err := filepath.Abs(dir)
 	if err != nil {
@@ -337,7 +337,7 @@ func Render(dir string, opts RenderOptions) error {
 
 	cacheFile := opts.CacheFile
 	if cacheFile == "" {
-		cacheFile = filepath.Join(repoDir, ".supermodel", "graph.json")
+		cacheFile = filepath.Join(repoDir, ".supermodel", "shards.json")
 	}
 
 	data, err := os.ReadFile(cacheFile)
@@ -345,7 +345,7 @@ func Render(dir string, opts RenderOptions) error {
 		return fmt.Errorf("reading cache %s: %w (run `supermodel analyze` first)", cacheFile, err)
 	}
 
-	var ir api.SidecarIR
+	var ir api.ShardIR
 	if err := json.Unmarshal(data, &ir); err != nil {
 		return fmt.Errorf("parsing cache: %w", err)
 	}
@@ -360,9 +360,9 @@ func Render(dir string, opts RenderOptions) error {
 	}
 
 	if opts.DryRun {
-		fmt.Printf("Would write %d sidecars for %d source files\n", written, len(files))
+		fmt.Printf("Would write %d shards for %d source files\n", written, len(files))
 	} else {
-		ui.Success("Wrote %d sidecars for %d source files", written, len(files))
+		ui.Success("Wrote %d shards for %d source files", written, len(files))
 	}
 	return nil
 }

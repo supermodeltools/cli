@@ -1,4 +1,4 @@
-package files
+package shards
 
 import (
 	"testing"
@@ -8,9 +8,9 @@ import (
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
-func buildIR(nodes []api.Node, rels []api.Relationship) *api.SidecarIR {
-	return &api.SidecarIR{
-		Graph: api.SidecarGraph{
+func buildIR(nodes []api.Node, rels []api.Relationship) *api.ShardIR {
+	return &api.ShardIR{
+		Graph: api.ShardGraph{
 			Nodes:         nodes,
 			Relationships: rels,
 		},
@@ -29,7 +29,7 @@ func newRel(id, typ, start, end string) api.Relationship {
 	return api.Relationship{ID: id, Type: typ, StartNode: start, EndNode: end}
 }
 
-func nodeIDSet(ir *api.SidecarIR) map[string]bool {
+func nodeIDSet(ir *api.ShardIR) map[string]bool {
 	m := make(map[string]bool, len(ir.Graph.Nodes))
 	for _, n := range ir.Graph.Nodes {
 		m[n.ID] = true
@@ -37,7 +37,7 @@ func nodeIDSet(ir *api.SidecarIR) map[string]bool {
 	return m
 }
 
-func hasRelEdge(ir *api.SidecarIR, start, end string) bool {
+func hasRelEdge(ir *api.ShardIR, start, end string) bool {
 	for _, r := range ir.Graph.Relationships {
 		if r.StartNode == start && r.EndNode == end {
 			return true
@@ -247,7 +247,7 @@ func TestMergeGraph_NilExisting(t *testing.T) {
 
 	result := d.GetIR()
 	if result == nil {
-		t.Fatal("expected non-nil SidecarIR after merging into nil daemon")
+		t.Fatal("expected non-nil ShardIR after merging into nil daemon")
 	}
 	if !nodeIDSet(result)["file-a"] {
 		t.Error("file-a should be present when merging into nil existing graph")
@@ -257,21 +257,21 @@ func TestMergeGraph_NilExisting(t *testing.T) {
 // ── domain preservation tests ───────────────────────────────────────────────
 
 func TestMergeGraph_DomainsPreservedOnIncremental(t *testing.T) {
-	existing := &api.SidecarIR{
-		Graph: api.SidecarGraph{
+	existing := &api.ShardIR{
+		Graph: api.ShardGraph{
 			Nodes: []api.Node{newNode("file-a", []string{"File"}, "filePath", "/repo/a.go")},
 		},
-		Domains: []api.SidecarDomain{
+		Domains: []api.ShardDomain{
 			{Name: "CommandCLI"},
 			{Name: "ApiClient"},
 			{Name: "SharedKernel"},
 		},
 	}
-	incremental := &api.SidecarIR{
-		Graph: api.SidecarGraph{
+	incremental := &api.ShardIR{
+		Graph: api.ShardGraph{
 			Nodes: []api.Node{newNode("file-b", []string{"File"}, "filePath", "/repo/b.go")},
 		},
-		Domains: []api.SidecarDomain{
+		Domains: []api.ShardDomain{
 			{Name: "LocalCache"}, // garbage domain from 1-file classification
 		},
 	}
@@ -295,17 +295,17 @@ func TestMergeGraph_DomainsPreservedOnIncremental(t *testing.T) {
 }
 
 func TestMergeGraph_DomainsPreservedEvenWhenIncrementalHasMore(t *testing.T) {
-	existing := &api.SidecarIR{
-		Graph: api.SidecarGraph{
+	existing := &api.ShardIR{
+		Graph: api.ShardGraph{
 			Nodes: []api.Node{newNode("file-a", []string{"File"}, "filePath", "/repo/a.go")},
 		},
-		Domains: []api.SidecarDomain{{Name: "Original"}},
+		Domains: []api.ShardDomain{{Name: "Original"}},
 	}
-	incremental := &api.SidecarIR{
-		Graph: api.SidecarGraph{
+	incremental := &api.ShardIR{
+		Graph: api.ShardGraph{
 			Nodes: []api.Node{newNode("file-b", []string{"File"}, "filePath", "/repo/b.go")},
 		},
-		Domains: []api.SidecarDomain{
+		Domains: []api.ShardDomain{
 			{Name: "New1"},
 			{Name: "New2"},
 			{Name: "New3"},
