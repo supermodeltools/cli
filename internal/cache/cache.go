@@ -49,8 +49,14 @@ func Put(hash string, g *api.Graph) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(dir(), hash+".json"), data, 0o600); err != nil {
+	dest := filepath.Join(dir(), hash+".json")
+	tmp := dest + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return fmt.Errorf("write cache: %w", err)
+	}
+	if err := os.Rename(tmp, dest); err != nil {
+		_ = os.Remove(tmp)
+		return err
 	}
 	return nil
 }
