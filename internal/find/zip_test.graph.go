@@ -1,6 +1,7 @@
 //go:build ignore
 
 package ignore
+
 // @generated supermodel-sidecar — do not edit
 // [calls]
 // TestWalkZip_IncludesFiles → readZipEntries    internal/find/zip_test.go:92

@@ -1,6 +1,7 @@
 //go:build ignore
 
 package ignore
+
 // @generated supermodel-sidecar — do not edit
 // [deps]
 // imported-by cmd/find.go
