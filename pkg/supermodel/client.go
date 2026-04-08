@@ -170,9 +170,69 @@ func (c *Client) Analyze(ctx context.Context, repoPath string) (*Graph, error) {
 	return c.AnalyzeZip(ctx, zipPath, "sdk-"+hash[:16])
 }
 
-// AnalyzeZip uploads a pre-built ZIP to the Supermodel API.
+const analyzeEndpoint = "/v1/graphs/supermodel"
+
+// jobResponse is the async envelope returned by the API.
+type jobResponse struct {
+	Status     string          `json:"status"`
+	JobID      string          `json:"jobId"`
+	RetryAfter int             `json:"retryAfter"`
+	Error      *string         `json:"error"`
+	Result     json.RawMessage `json:"result"`
+}
+
+// jobResult is the inner result object wrapping the graph.
+// The API response has shape: {"graph": {...}, "repo": "...", "domains": [...]}
+type jobResult struct {
+	Graph Graph  `json:"graph"`
+	Repo  string `json:"repo"`
+}
+
+// AnalyzeZip uploads a pre-built ZIP to the Supermodel API and polls until
+// the async job completes, returning the resulting Graph.
 // idempotencyKey must be unique per logical request.
 func (c *Client) AnalyzeZip(ctx context.Context, zipPath, idempotencyKey string) (*Graph, error) {
+	post := func() (*jobResponse, error) { return c.postZip(ctx, zipPath, idempotencyKey) }
+
+	job, err := post()
+	if err != nil {
+		return nil, err
+	}
+	for job.Status == "pending" || job.Status == "processing" {
+		wait := time.Duration(job.RetryAfter) * time.Second
+		if wait <= 0 {
+			wait = 5 * time.Second
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(wait):
+		}
+		job, err = post()
+		if err != nil {
+			return nil, err
+		}
+	}
+	if job.Error != nil {
+		return nil, fmt.Errorf("analysis failed: %s", *job.Error)
+	}
+	if job.Status != "completed" {
+		return nil, fmt.Errorf("unexpected job status: %s", job.Status)
+	}
+
+	var result jobResult
+	if err := json.Unmarshal(job.Result, &result); err != nil {
+		return nil, fmt.Errorf("decode graph result: %w", err)
+	}
+	g := &result.Graph
+	if result.Repo != "" {
+		g.Metadata = map[string]any{"repoId": result.Repo}
+	}
+	return g, nil
+}
+
+// postZip sends the repository ZIP to the analyze endpoint and returns the raw job response.
+func (c *Client) postZip(ctx context.Context, zipPath, idempotencyKey string) (*jobResponse, error) {
 	f, err := os.Open(zipPath)
 	if err != nil {
 		return nil, err
@@ -190,7 +250,7 @@ func (c *Client) AnalyzeZip(ctx context.Context, zipPath, idempotencyKey string)
 	}
 	mw.Close()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/supermodel", &buf)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+analyzeEndpoint, &buf)
 	if err != nil {
 		return nil, err
 	}
@@ -217,11 +277,11 @@ func (c *Client) AnalyzeZip(ctx context.Context, zipPath, idempotencyKey string)
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
-	var g Graph
-	if err := json.Unmarshal(body, &g); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
+	var job jobResponse
+	if err := json.Unmarshal(body, &job); err != nil {
+		return nil, fmt.Errorf("decode job response: %w", err)
 	}
-	return &g, nil
+	return &job, nil
 }
 
 // --- Archive helpers ---------------------------------------------------------
