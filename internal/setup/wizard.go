@@ -264,8 +264,12 @@ func installHook(repoDir string) (bool, error) {
 		settings = make(map[string]interface{})
 	}
 
+	// Prefer the installed binary on $PATH (survives symlinks, go run, dev builds),
+	// fall back to the current executable path, then the bare name.
 	hookCmd := "supermodel hook"
-	if exe, err := os.Executable(); err == nil {
+	if exe, err := exec.LookPath("supermodel"); err == nil {
+		hookCmd = exe + " hook"
+	} else if exe, err := os.Executable(); err == nil {
 		hookCmd = exe + " hook"
 	}
 

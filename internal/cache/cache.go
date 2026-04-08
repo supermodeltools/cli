@@ -92,7 +92,11 @@ func PutJSON(hash string, v any) error {
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return fmt.Errorf("write cache: %w", err)
 	}
-	return os.Rename(tmp, filepath.Join(dir(), hash+".json"))
+	if err := os.Rename(tmp, filepath.Join(dir(), hash+".json")); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 // GetJSON reads the cached JSON for hash and unmarshals it into v.

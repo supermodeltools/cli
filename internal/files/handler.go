@@ -319,7 +319,7 @@ func Hook(port int) error {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	conn, err := net.Dial("udp", addr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[supermodel] watch daemon not running on :%d — run `supermodel watch` to enable live updates\n", port)
+		// UDP dial rarely fails (connectionless), but treat errors as daemon absent.
 		return nil
 	}
 	defer conn.Close()

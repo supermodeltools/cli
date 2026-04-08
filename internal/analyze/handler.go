@@ -96,7 +96,8 @@ func GetGraph(ctx context.Context, cfg *config.Config, dir string, force bool) (
 	// Also populate the sidecar cache (.supermodel/graph.json) so that
 	// files.Generate() called after analyze reuses this result without a
 	// second API upload.
-	sidecarCacheFile := filepath.Join(dir, ".supermodel", "graph.json")
+	absDir, _ := filepath.Abs(dir)
+	sidecarCacheFile := filepath.Join(absDir, ".supermodel", "graph.json")
 	if irJSON, marshalErr := json.MarshalIndent(ir, "", "  "); marshalErr == nil {
 		if mkErr := os.MkdirAll(filepath.Dir(sidecarCacheFile), 0o755); mkErr == nil {
 			tmp := sidecarCacheFile + ".tmp"

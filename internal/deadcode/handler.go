@@ -28,7 +28,7 @@ func Run(ctx context.Context, cfg *config.Config, dir string, opts *Options) err
 	// Fast-path: check cache by git fingerprint before creating the zip.
 	if !opts.Force {
 		if fp, err := cache.RepoFingerprint(dir); err == nil {
-			key := cache.AnalysisKey(fp, "dead-code", build.Version)
+			key := cache.AnalysisKey(fp, fmt.Sprintf("dead-code:%s:%d", opts.MinConfidence, opts.Limit), build.Version)
 			var cached api.DeadCodeResult
 			if hit, _ := cache.GetJSON(key, &cached); hit {
 				ui.Success("Using cached dead-code analysis")
@@ -63,7 +63,7 @@ func Run(ctx context.Context, cfg *config.Config, dir string, opts *Options) err
 
 	// Store result in cache for subsequent calls.
 	if fp, err := cache.RepoFingerprint(dir); err == nil {
-		key := cache.AnalysisKey(fp, "dead-code", build.Version)
+		key := cache.AnalysisKey(fp, fmt.Sprintf("dead-code:%s:%d", opts.MinConfidence, opts.Limit), build.Version)
 		_ = cache.PutJSON(key, result)
 	}
 

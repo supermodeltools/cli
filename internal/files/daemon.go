@@ -128,7 +128,16 @@ func (d *Daemon) Run(ctx context.Context) error {
 			}
 			d.logf("Shutting down...")
 			d.logf("Cleaning sidecar files...")
-			_ = Clean(context.Background(), nil, d.cfg.RepoDir, false)
+			done := make(chan struct{})
+			go func() {
+				_ = Clean(context.Background(), nil, d.cfg.RepoDir, false)
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				d.logf("Warning: sidecar cleanup timed out")
+			}
 			return nil
 
 		case filePath, ok := <-d.notifyCh:
