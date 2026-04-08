@@ -459,6 +459,23 @@ func filterGraph(g *api.Graph, label, relType string) graphSlice {
 		nodes = g.NodesByLabel(label)
 	}
 	rels := g.Rels()
+	// When a label filter is set, restrict relationships to only those where
+	// both endpoints are within the filtered node set. Without this, the
+	// returned JSON would contain relationships referencing node IDs that
+	// are not present in the nodes list.
+	if label != "" {
+		visible := make(map[string]bool, len(nodes))
+		for _, n := range nodes {
+			visible[n.ID] = true
+		}
+		var inLabel []api.Relationship
+		for _, r := range rels {
+			if visible[r.StartNode] && visible[r.EndNode] {
+				inLabel = append(inLabel, r)
+			}
+		}
+		rels = inLabel
+	}
 	if relType != "" {
 		var filtered []api.Relationship
 		for _, r := range rels {
