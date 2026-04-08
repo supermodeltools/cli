@@ -77,6 +77,21 @@ func TestSearch_SortedByKindThenName(t *testing.T) {
 	}
 }
 
+func TestSearch_SharedFixtureCallers(t *testing.T) {
+	// makeGraph() has fn3("main") --calls--> fn1("handleRequest").
+	// Searching for "handleRequest" should show "main" as a caller.
+	// This test guards against the makeGraph() fixture using uppercase CALLS.
+	g := makeGraph()
+	matches := search(g, "handleRequest", "")
+	if len(matches) != 1 {
+		t.Fatalf("want 1 match, got %d", len(matches))
+	}
+	m := matches[0]
+	if len(m.Callers) != 1 || m.Callers[0] != "main" {
+		t.Errorf("callers: want [main], got %v", m.Callers)
+	}
+}
+
 func TestSearch_CallersAndCallees(t *testing.T) {
 	// caller calls target calls callee
 	g := &api.Graph{
@@ -202,7 +217,7 @@ func makeGraph() *api.Graph {
 			{ID: "fn3", Labels: []string{"Function"}, Properties: map[string]any{"name": "main"}},
 		},
 		Relationships: []api.Relationship{
-			{ID: "r1", Type: "CALLS", StartNode: "fn3", EndNode: "fn1"},
+			{ID: "r1", Type: "calls", StartNode: "fn3", EndNode: "fn1"},
 		},
 	}
 }
