@@ -116,6 +116,7 @@ func Generate(ctx context.Context, cfg *config.Config, dir string, opts Generate
 		return fmt.Errorf("write cache: %w", err)
 	}
 	if err := os.Rename(tmp, cacheFile); err != nil {
+		_ = os.Remove(tmp)
 		return fmt.Errorf("finalize cache: %w", err)
 	}
 
