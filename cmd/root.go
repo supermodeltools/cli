@@ -11,7 +11,7 @@ import (
 	"github.com/supermodeltools/cli/internal/shards"
 )
 
-// noConfigCommands are subcommands that work without a config file.
+// noConfigCommands are subcommands that work without a config file or API key.
 // Includes Cobra's internal shell-completion helpers to avoid crashing them.
 var noConfigCommands = map[string]bool{
 	"setup":            true,
@@ -22,6 +22,12 @@ var noConfigCommands = map[string]bool{
 	"completion":       true,
 	"__complete":       true,
 	"__completeNoDesc": true,
+	// Commands that work fully offline or have local-only modes:
+	"compact": true, // entirely local (AST transforms, no API)
+	"clean":   true, // removes .graph.* files, no API
+	"status":  true, // reads config; works even when not authenticated
+	"hook":    true, // forwards events to daemon; no API needed
+	"restore": true, // has --local fallback; API key is optional
 }
 
 var rootCmd = &cobra.Command{
