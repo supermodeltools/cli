@@ -294,7 +294,7 @@ func archiveRepo(dir string) (string, error) {
 	dest := f.Name()
 	f.Close()
 
-	if isGitRepo(dir) {
+	if isGitRepo(dir) && isWorktreeClean(dir) {
 		cmd := exec.Command("git", "-C", dir, "archive", "--format=zip", "-o", dest, "HEAD")
 		cmd.Stderr = io.Discard
 		if err := cmd.Run(); err == nil {
@@ -313,6 +313,11 @@ func isGitRepo(dir string) bool {
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	return cmd.Run() == nil
+}
+
+func isWorktreeClean(dir string) bool {
+	out, err := exec.Command("git", "-C", dir, "status", "--porcelain").Output()
+	return err == nil && strings.TrimSpace(string(out)) == ""
 }
 
 var skipDirs = map[string]bool{
