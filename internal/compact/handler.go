@@ -109,6 +109,13 @@ func CompactSource(src []byte, lang Language) ([]byte, error) {
 // compactGo strips non-directive comments via the Go AST, shortens local
 // identifiers, and removes blank lines.
 func compactGo(src []byte) ([]byte, error) {
+	// //go:embed directives must immediately precede their variable declaration
+	// and cannot be relocated. Return the source unchanged so that embed
+	// semantics and the "embed" import are preserved.
+	if bytes.Contains(src, []byte("//go:embed")) {
+		return src, nil
+	}
+
 	fset := token.NewFileSet()
 	// Parsing without parser.ParseComments drops all comments from the AST.
 	f, err := parser.ParseFile(fset, "", src, 0)
@@ -137,14 +144,15 @@ func compactGo(src []byte) ([]byte, error) {
 }
 
 // scanGoDirectives extracts //go:build, // +build and //go:generate lines.
+// //go:embed is intentionally excluded: it must remain adjacent to its variable
+// declaration and cannot be moved to the file top (handled by early return in compactGo).
 func scanGoDirectives(src []byte) []byte {
 	var out []byte
 	for _, line := range bytes.Split(src, []byte("\n")) {
 		text := strings.TrimSpace(string(line))
 		if strings.HasPrefix(text, "//go:build") ||
 			strings.HasPrefix(text, "// +build") ||
-			strings.HasPrefix(text, "//go:generate") ||
-			strings.HasPrefix(text, "//go:embed") {
+			strings.HasPrefix(text, "//go:generate") {
 			out = append(out, bytes.TrimRight(line, " \t")...)
 			out = append(out, '\n')
 		}

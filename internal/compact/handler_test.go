@@ -1,6 +1,7 @@
 package compact
 
 import (
+	"bytes"
 	"go/parser"
 	"go/token"
 	"os"
@@ -110,6 +111,25 @@ func Foo() {}
 	fset := token.NewFileSet()
 	if _, parseErr := parser.ParseFile(fset, "", got, 0); parseErr != nil {
 		t.Fatalf("compacted output with directive is not valid Go: %v\noutput:\n%s", parseErr, got)
+	}
+}
+
+func TestCompactGoPreservesEmbedFiles(t *testing.T) {
+	// //go:embed must stay adjacent to its var declaration and cannot be moved
+	// to the file top. Files containing it should be returned unchanged.
+	src := []byte(`package foo
+
+import _ "embed"
+
+//go:embed hello.txt
+var hello string
+`)
+	got, err := CompactSource(src, Go)
+	if err != nil {
+		t.Fatalf("CompactSource error: %v", err)
+	}
+	if !bytes.Equal(got, src) {
+		t.Errorf("expected source unchanged for //go:embed file, got:\n%s", got)
 	}
 }
 
