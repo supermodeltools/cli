@@ -70,6 +70,7 @@ func isGitRepo(dir string) bool {
 	cmd.Stderr = io.Discard
 	return cmd.Run() == nil
 }
+
 // isWorktreeClean reports whether there are no uncommitted changes.
 // When the worktree is dirty, git archive HEAD would silently omit local
 // edits, so we fall back to the directory walk instead.
