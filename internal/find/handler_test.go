@@ -130,7 +130,7 @@ func TestPrintMatches_JSON(t *testing.T) {
 		{ID: "n2", Kind: "File", Name: "main.go", File: "main.go"},
 	}
 	var buf bytes.Buffer
-	if err := printMatches(&buf, matches, ui.FormatJSON); err != nil {
+	if err := printMatches(&buf, matches, "handle", ui.FormatJSON); err != nil {
 		t.Fatalf("printMatches JSON: %v", err)
 	}
 	var decoded []map[string]any
@@ -147,7 +147,7 @@ func TestPrintMatches_Human(t *testing.T) {
 		{ID: "n1", Kind: "Function", Name: "handleAuth", File: "auth/handler.go", Callers: []string{"main"}},
 	}
 	var buf bytes.Buffer
-	if err := printMatches(&buf, matches, ui.FormatHuman); err != nil {
+	if err := printMatches(&buf, matches, "handle", ui.FormatHuman); err != nil {
 		t.Fatalf("printMatches human: %v", err)
 	}
 	out := buf.String()
@@ -163,7 +163,7 @@ func TestPrintMatches_HumanNoFile(t *testing.T) {
 		{ID: "n1", Kind: "Function", Name: "doThing"},
 	}
 	var buf bytes.Buffer
-	if err := printMatches(&buf, matches, ui.FormatHuman); err != nil {
+	if err := printMatches(&buf, matches, "doThing", ui.FormatHuman); err != nil {
 		t.Fatalf("printMatches: %v", err)
 	}
 	out := buf.String()
@@ -177,12 +177,16 @@ func TestPrintMatches_HumanShowsMatchCount(t *testing.T) {
 		{ID: "n1", Kind: "Function", Name: "foo"},
 	}
 	var buf bytes.Buffer
-	if err := printMatches(&buf, matches, ui.FormatHuman); err != nil {
+	if err := printMatches(&buf, matches, "fo", ui.FormatHuman); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
 	if !strings.Contains(out, "1 match") {
 		t.Errorf("should show match count:\n%s", out)
+	}
+	// Verify the query (not the first match name) is shown in the summary.
+	if !strings.Contains(out, `"fo"`) {
+		t.Errorf("should show original query 'fo' in summary, not match name:\n%s", out)
 	}
 }
 

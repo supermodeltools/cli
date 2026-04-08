@@ -43,7 +43,7 @@ func Run(ctx context.Context, cfg *config.Config, dir, symbol string, opts Optio
 		fmt.Fprintf(os.Stderr, "No matches for %q\n", symbol)
 		return nil
 	}
-	return printMatches(os.Stdout, matches, ui.ParseFormat(opts.Output))
+	return printMatches(os.Stdout, matches, symbol, ui.ParseFormat(opts.Output))
 }
 
 func search(g *api.Graph, symbol, kind string) []Match {
@@ -113,7 +113,7 @@ func search(g *api.Graph, symbol, kind string) []Match {
 	return matches
 }
 
-func printMatches(w io.Writer, matches []Match, fmt_ ui.Format) error {
+func printMatches(w io.Writer, matches []Match, query string, fmt_ ui.Format) error {
 	if fmt_ == ui.FormatJSON {
 		return ui.JSON(w, matches)
 	}
@@ -131,7 +131,7 @@ func printMatches(w io.Writer, matches []Match, fmt_ ui.Format) error {
 			fmt.Fprintf(w, "  calls:    %s\n", strings.Join(m.Callees, ", "))
 		}
 	}
-	fmt.Fprintf(w, "\n%d match(es) for %q\n", len(matches), matches[0].Name)
+	fmt.Fprintf(w, "\n%d match(es) for %q\n", len(matches), query)
 	return nil
 }
 
