@@ -18,6 +18,7 @@ func TestLoginWithToken(t *testing.T) {
 	// Point config to a temp dir so we don't touch real config.
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("SUPERMODEL_API_KEY", "")
 
 	if err := LoginWithToken("smsk_live_test123"); err != nil {
 		t.Fatalf("LoginWithToken: %v", err)
@@ -41,6 +42,7 @@ func TestLoginWithToken_Empty(t *testing.T) {
 func TestLoginWithToken_Whitespace(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("SUPERMODEL_API_KEY", "")
 
 	if err := LoginWithToken("  smsk_live_padded  "); err != nil {
 		t.Fatalf("LoginWithToken: %v", err)
@@ -168,6 +170,7 @@ func TestRandomState(t *testing.T) {
 func TestLogout(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("SUPERMODEL_API_KEY", "")
 
 	// Set up a config with a key.
 	cfg := &config.Config{APIKey: "smsk_live_toremove", APIBase: config.DefaultAPIBase, Output: "human"}
