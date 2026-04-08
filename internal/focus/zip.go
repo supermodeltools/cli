@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/supermodeltools/cli/internal/api"
-	"github.com/supermodeltools/cli/internal/config"
 )
 
 // skipDirs are directory names that should never be included in the archive.
@@ -121,9 +119,4 @@ func walkZip(dir, dest string) error {
 		_, err = io.Copy(w, f)
 		return err
 	})
-}
-
-// newAPIClient wraps api.New for use within the focus slice.
-func newAPIClient(cfg *config.Config) *api.Client {
-	return api.New(cfg)
 }

@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/supermodeltools/cli/internal/analyze"
 	"github.com/supermodeltools/cli/internal/api"
-	"github.com/supermodeltools/cli/internal/cache"
 	"github.com/supermodeltools/cli/internal/config"
 	"github.com/supermodeltools/cli/internal/ui"
 )
@@ -99,11 +99,11 @@ func extract(g *api.Graph, target string, depth int, includeTypes bool) *Slice {
 
 	rels := g.Rels()
 
-	// 1. Direct imports (IMPORTS edges from file node, up to depth hops).
+	// 1. Direct imports (imports edges from file node, up to depth hops).
 	sl.Imports = reachableImports(g, fileNode.ID, nodeByID, rels, depth)
 
 	// 2. Functions defined in this file.
-	fnIDs := functionNodesForFile(g, fileNode.ID, rels)
+	fnIDs := functionNodesForFile(fileNode.ID, rels)
 	calleesOf := buildCalleesOf(rels)
 
 	for _, fnID := range fnIDs {
@@ -124,14 +124,14 @@ func extract(g *api.Graph, target string, depth int, includeTypes bool) *Slice {
 		return sl.Functions[i].Name < sl.Functions[j].Name
 	})
 
-	// 3. External callers (CALLS edges whose target is one of our functions).
+	// 3. External callers (calls edges whose target is one of our functions).
 	fnIDSet := make(map[string]bool, len(fnIDs))
 	for _, id := range fnIDs {
 		fnIDSet[id] = true
 	}
 	seenCallers := make(map[string]bool)
 	for _, rel := range rels {
-		if rel.Type != "CALLS" && rel.Type != "CONTAINS_CALL" {
+		if rel.Type != "calls" && rel.Type != "contains_call" {
 			continue
 		}
 		if !fnIDSet[rel.EndNode] {
@@ -141,7 +141,7 @@ func extract(g *api.Graph, target string, depth int, includeTypes bool) *Slice {
 		if callerNode == nil {
 			continue
 		}
-		callerFile := callerNode.Prop("file", "path")
+		callerFile := callerNode.Prop("filePath", "file", "path")
 		if pathMatches(callerFile, target) {
 			continue // skip self-calls
 		}
@@ -179,7 +179,7 @@ func reachableImports(g *api.Graph, seedID string, nodeByID map[string]*api.Node
 		next := make([]string, 0)
 		for _, cur := range queue {
 			for _, rel := range rels {
-				if rel.Type != "IMPORTS" && rel.Type != "WILDCARD_IMPORTS" {
+				if rel.Type != "imports" && rel.Type != "wildcard_imports" {
 					continue
 				}
 				if rel.StartNode != cur || visited[rel.EndNode] {
@@ -202,20 +202,12 @@ func reachableImports(g *api.Graph, seedID string, nodeByID map[string]*api.Node
 }
 
 // functionNodesForFile returns the IDs of Function nodes associated with fileID
-// via DEFINES_FUNCTION or DEFINES relationships.
-func functionNodesForFile(g *api.Graph, fileID string, rels []api.Relationship) []string {
+// via defines_function or defines relationships.
+func functionNodesForFile(fileID string, rels []api.Relationship) []string {
 	var ids []string
 	for _, rel := range rels {
 		if (rel.Type == "defines_function" || rel.Type == "defines") && rel.StartNode == fileID {
 			ids = append(ids, rel.EndNode)
-		}
-	}
-	// Fallback: match by file property on Function nodes.
-	if len(ids) == 0 {
-		for _, n := range g.NodesByLabel("Function") {
-			if n.Prop("file", "path") != "" {
-				ids = append(ids, n.ID)
-			}
 		}
 	}
 	return ids
@@ -225,7 +217,8 @@ func functionNodesForFile(g *api.Graph, fileID string, rels []api.Relationship) 
 func buildCalleesOf(rels []api.Relationship) map[string][]string {
 	m := make(map[string][]string)
 	for _, rel := range rels {
-		if rel.Type == "calls" || rel.Type == "contains_call" {
+		t := rel.Type
+		if t == "calls" || t == "contains_call" {
 			m[rel.StartNode] = append(m[rel.StartNode], rel.EndNode)
 		}
 	}
@@ -235,7 +228,7 @@ func buildCalleesOf(rels []api.Relationship) map[string][]string {
 func extractTypes(g *api.Graph, fileID string, nodeByID map[string]*api.Node, rels []api.Relationship) []Type {
 	var types []Type
 	for _, rel := range rels {
-		if rel.Type != "DECLARES_CLASS" && rel.Type != "DEFINES" {
+		if rel.Type != "declares_class" && rel.Type != "defines" {
 			continue
 		}
 		if rel.StartNode != fileID {
@@ -337,32 +330,6 @@ func printMarkdown(w io.Writer, sl *Slice) error {
 	return nil
 }
 
-// --- Graph retrieval (not importing analyze slice) ---------------------------
-
 func getGraph(ctx context.Context, cfg *config.Config, dir string, force bool) (*api.Graph, string, error) {
-	zipPath, err := createZip(dir)
-	if err != nil {
-		return nil, "", err
-	}
-	defer os.Remove(zipPath)
-
-	hash, err := cache.HashFile(zipPath)
-	if err != nil {
-		return nil, "", err
-	}
-	if !force {
-		if g, _ := cache.Get(hash); g != nil {
-			return g, hash, nil
-		}
-	}
-	spin := ui.Start("Analyzing repository…")
-	defer spin.Stop()
-
-	client := newAPIClient(cfg)
-	g, err := client.Analyze(ctx, zipPath, "focus-"+hash[:16])
-	if err != nil {
-		return nil, hash, err
-	}
-	_ = cache.Put(hash, g)
-	return g, hash, nil
+	return analyze.GetGraph(ctx, cfg, dir, force)
 }

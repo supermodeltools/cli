@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/supermodeltools/cli/internal/analyze"
 	"github.com/supermodeltools/cli/internal/api"
-	"github.com/supermodeltools/cli/internal/cache"
 	"github.com/supermodeltools/cli/internal/config"
 	"github.com/supermodeltools/cli/internal/ui"
 )
@@ -60,21 +60,17 @@ func search(g *api.Graph, symbol, kind string) []Match {
 
 	for _, rel := range rels {
 		switch rel.Type {
-		case "CALLS", "CONTAINS_CALL":
-			if n := nodeByID[rel.EndNode]; n != nil {
-				callerNode := nodeByID[rel.StartNode]
-				if callerNode != nil {
-					callers[rel.EndNode] = append(callers[rel.EndNode], callerNode.Prop("name", "qualifiedName"))
-				}
+		case "calls", "contains_call":
+			if callerNode := nodeByID[rel.StartNode]; callerNode != nil {
+				callers[rel.EndNode] = append(callers[rel.EndNode], callerNode.Prop("name", "qualifiedName"))
 			}
-			if n := nodeByID[rel.StartNode]; n != nil {
-				calleeNode := nodeByID[rel.EndNode]
-				if calleeNode != nil {
-					callees[rel.StartNode] = append(callees[rel.StartNode], calleeNode.Prop("name", "qualifiedName"))
-				}
+			if calleeNode := nodeByID[rel.EndNode]; calleeNode != nil {
+				callees[rel.StartNode] = append(callees[rel.StartNode], calleeNode.Prop("name", "qualifiedName"))
 			}
-		case "DEFINES_FUNCTION", "DEFINES", "DECLARES_CLASS":
-			defFile[rel.EndNode] = nodeByID[rel.StartNode].Prop("path", "name", "file")
+		case "defines_function", "defines", "declares_class":
+			if fileNode := nodeByID[rel.StartNode]; fileNode != nil {
+				defFile[rel.EndNode] = fileNode.Prop("filePath", "path", "name")
+			}
 		}
 	}
 
@@ -96,7 +92,7 @@ func search(g *api.Graph, symbol, kind string) []Match {
 			ID:        n.ID,
 			Kind:      label,
 			Name:      name,
-			File:      n.Prop("file", "path"),
+			File:      n.Prop("filePath", "file", "path"),
 			DefinedIn: defFile[n.ID],
 		}
 		cs := callers[n.ID]
@@ -139,31 +135,7 @@ func printMatches(w io.Writer, matches []Match, fmt_ ui.Format) error {
 	return nil
 }
 
-// --- Graph retrieval ---------------------------------------------------------
-
 func getGraph(ctx context.Context, cfg *config.Config, dir string, force bool) (*api.Graph, error) {
-	zipPath, err := createZip(dir)
-	if err != nil {
-		return nil, err
-	}
-	defer os.Remove(zipPath)
-
-	hash, err := cache.HashFile(zipPath)
-	if err != nil {
-		return nil, err
-	}
-	if !force {
-		if g, _ := cache.Get(hash); g != nil {
-			return g, nil
-		}
-	}
-
-	spin := ui.Start("Analyzing repository…")
-	defer spin.Stop()
-	g, err := api.New(cfg).Analyze(ctx, zipPath, "find-"+hash[:16])
-	if err != nil {
-		return nil, err
-	}
-	_ = cache.Put(hash, g)
-	return g, nil
+	g, _, err := analyze.GetGraph(ctx, cfg, dir, force)
+	return g, err
 }

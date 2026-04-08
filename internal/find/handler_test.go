@@ -86,8 +86,8 @@ func TestSearch_CallersAndCallees(t *testing.T) {
 			{ID: "callee", Labels: []string{"Function"}, Properties: map[string]any{"name": "callee"}},
 		},
 		Relationships: []api.Relationship{
-			{ID: "r1", Type: "CALLS", StartNode: "caller", EndNode: "target"},
-			{ID: "r2", Type: "CALLS", StartNode: "target", EndNode: "callee"},
+			{ID: "r1", Type: "calls", StartNode: "caller", EndNode: "target"},
+			{ID: "r2", Type: "calls", StartNode: "target", EndNode: "callee"},
 		},
 	}
 	matches := search(g, "target", "")
@@ -110,7 +110,7 @@ func TestSearch_DefinesFunction(t *testing.T) {
 			{ID: "fn1", Labels: []string{"Function"}, Properties: map[string]any{"name": "authenticate"}},
 		},
 		Relationships: []api.Relationship{
-			{ID: "r1", Type: "DEFINES_FUNCTION", StartNode: "file1", EndNode: "fn1"},
+			{ID: "r1", Type: "defines_function", StartNode: "file1", EndNode: "fn1"},
 		},
 	}
 	matches := search(g, "authenticate", "Function")
