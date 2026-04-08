@@ -56,6 +56,36 @@ func TestRenderCallsSection_Deterministic(t *testing.T) {
 	}
 }
 
+// TestRenderCalleesSection_Deterministic mirrors TestRenderCallsSection_Deterministic
+// but targets the callee path: a single caller with multiple callees whose relationships
+// appear in reversed order must produce identical output.
+func TestRenderCalleesSection_Deterministic(t *testing.T) {
+	nodes := []api.Node{
+		{ID: "fn_caller", Labels: []string{"Function"}, Properties: map[string]any{"name": "dispatch", "filePath": "src/a.go"}},
+		{ID: "fn_c1", Labels: []string{"Function"}, Properties: map[string]any{"name": "alpha", "filePath": "src/b.go"}},
+		{ID: "fn_c2", Labels: []string{"Function"}, Properties: map[string]any{"name": "beta", "filePath": "src/c.go"}},
+	}
+
+	ir1 := shardIR(nodes, []api.Relationship{
+		{ID: "r1", Type: "calls", StartNode: "fn_caller", EndNode: "fn_c1"},
+		{ID: "r2", Type: "calls", StartNode: "fn_caller", EndNode: "fn_c2"},
+	})
+	ir2 := shardIR(nodes, []api.Relationship{
+		{ID: "r2", Type: "calls", StartNode: "fn_caller", EndNode: "fn_c2"},
+		{ID: "r1", Type: "calls", StartNode: "fn_caller", EndNode: "fn_c1"},
+	})
+
+	c1 := makeRenderCache(ir1)
+	c2 := makeRenderCache(ir2)
+
+	out1 := renderCallsSection("src/a.go", c1, "//")
+	out2 := renderCallsSection("src/a.go", c2, "//")
+
+	if out1 != out2 {
+		t.Errorf("callee output differs based on relationship order:\ngot1:\n%s\ngot2:\n%s", out1, out2)
+	}
+}
+
 // TestRenderCallsSection_SameNameFunctions ensures that two functions with the same
 // name (but different IDs, e.g. methods on different types) are ordered by ID when
 // they share a name, preventing non-determinism from the unstable sort.
