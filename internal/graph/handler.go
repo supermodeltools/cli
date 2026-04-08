@@ -63,7 +63,21 @@ func writeHuman(w io.Writer, g *api.Graph, filter string) error {
 	ui.Table(w, []string{"ID", "LABEL", "NAME"}, rows)
 
 	rels := g.Rels()
-	fmt.Fprintf(w, "\n%d nodes, %d relationships", len(nodes), len(rels))
+	relCount := len(rels)
+	if filter != "" {
+		visible := make(map[string]bool, len(nodes))
+		for _, n := range nodes {
+			visible[n.ID] = true
+		}
+		count := 0
+		for _, r := range rels {
+			if visible[r.StartNode] && visible[r.EndNode] {
+				count++
+			}
+		}
+		relCount = count
+	}
+	fmt.Fprintf(w, "\n%d nodes, %d relationships", len(nodes), relCount)
 	if filter != "" {
 		fmt.Fprintf(w, " (filtered by label: %s)", filter)
 	}
