@@ -11,6 +11,7 @@ import (
 
 	"github.com/supermodeltools/cli/internal/api"
 	"github.com/supermodeltools/cli/internal/audit"
+	"github.com/supermodeltools/cli/internal/build"
 	"github.com/supermodeltools/cli/internal/cache"
 	"github.com/supermodeltools/cli/internal/config"
 )
@@ -50,7 +51,21 @@ func runAudit(cmd *cobra.Command, dir string) error {
 		return err
 	}
 
-	ir, err := auditAnalyze(cmd, rootDir, projectName)
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	if err := cfg.RequireAPIKey(); err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	// Fingerprint for caching — best-effort; empty string means no caching.
+	fp, _ := cache.RepoFingerprint(rootDir)
+
+	ir, err := auditAnalyze(ctx, cmd, cfg, rootDir, projectName, fp)
 	if err != nil {
 		return err
 	}
@@ -58,7 +73,7 @@ func runAudit(cmd *cobra.Command, dir string) error {
 	report := audit.Analyze(ir, projectName)
 
 	// Run impact analysis (global mode) to enrich the health report.
-	impact, err := runImpactForAudit(cmd, rootDir)
+	impact, err := runImpactForAudit(ctx, cmd, cfg, rootDir, fp)
 	if err != nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: impact analysis unavailable: %v\n", err)
 	} else {
@@ -81,13 +96,13 @@ func resolveAuditDir(dir string) (rootDir, projectName string, err error) {
 	return rootDir, projectName, nil
 }
 
-func auditAnalyze(cmd *cobra.Command, rootDir, projectName string) (*api.SupermodelIR, error) {
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, err
-	}
-	if err := cfg.RequireAPIKey(); err != nil {
-		return nil, err
+func auditAnalyze(ctx context.Context, cmd *cobra.Command, cfg *config.Config, rootDir, projectName, fp string) (*api.SupermodelIR, error) {
+	if fp != "" {
+		key := cache.AnalysisKey(fp, "audit-domains", build.Version)
+		var cached api.SupermodelIR
+		if hit, _ := cache.GetJSON(key, &cached); hit {
+			return &cached, nil
+		}
 	}
 
 	fmt.Fprintln(cmd.ErrOrStderr(), "Creating repository archive…")
@@ -103,18 +118,27 @@ func auditAnalyze(cmd *cobra.Command, rootDir, projectName string) (*api.Supermo
 	}
 
 	client := api.New(cfg)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-
 	fmt.Fprintf(cmd.ErrOrStderr(), "Analyzing %s…\n", projectName)
-	return client.AnalyzeDomains(ctx, zipPath, "audit-"+hash[:16])
+	ir, err := client.AnalyzeDomains(ctx, zipPath, "audit-"+hash[:16])
+	if err != nil {
+		return nil, err
+	}
+
+	if fp != "" {
+		key := cache.AnalysisKey(fp, "audit-domains", build.Version)
+		_ = cache.PutJSON(key, ir)
+	}
+	return ir, nil
 }
 
 // runImpactForAudit runs global impact analysis to enrich the health report.
-func runImpactForAudit(cmd *cobra.Command, rootDir string) (*api.ImpactResult, error) {
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, err
+func runImpactForAudit(ctx context.Context, cmd *cobra.Command, cfg *config.Config, rootDir, fp string) (*api.ImpactResult, error) {
+	if fp != "" {
+		key := cache.AnalysisKey(fp, "impact", build.Version)
+		var cached api.ImpactResult
+		if hit, _ := cache.GetJSON(key, &cached); hit {
+			return &cached, nil
+		}
 	}
 
 	zipPath, err := audit.CreateZip(rootDir)
@@ -129,9 +153,15 @@ func runImpactForAudit(cmd *cobra.Command, rootDir string) (*api.ImpactResult, e
 	}
 
 	client := api.New(cfg)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-
 	fmt.Fprintln(cmd.ErrOrStderr(), "Running impact analysis…")
-	return client.Impact(ctx, zipPath, "audit-impact-"+hash[:16], "", "")
+	result, err := client.Impact(ctx, zipPath, "audit-impact-"+hash[:16], "", "")
+	if err != nil {
+		return nil, err
+	}
+
+	if fp != "" {
+		key := cache.AnalysisKey(fp, "impact", build.Version)
+		_ = cache.PutJSON(key, result)
+	}
+	return result, nil
 }

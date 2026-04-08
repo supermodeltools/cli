@@ -13,10 +13,13 @@ import (
 	"strconv"
 	"strings"
 
+	"encoding/json"
+
 	"github.com/supermodeltools/cli/internal/api"
 	"github.com/supermodeltools/cli/internal/archdocs/graph2md"
 	pssgbuild "github.com/supermodeltools/cli/internal/archdocs/pssg/build"
 	pssgconfig "github.com/supermodeltools/cli/internal/archdocs/pssg/config"
+	"github.com/supermodeltools/cli/internal/build"
 	"github.com/supermodeltools/cli/internal/cache"
 	"github.com/supermodeltools/cli/internal/config"
 	"github.com/supermodeltools/cli/internal/ui"
@@ -282,27 +285,10 @@ func Run(ctx context.Context, cfg *config.Config, dir string, opts Options) erro
 		opts.MaxEntities = 12000
 	}
 
-	ui.Step("Creating repository archive…")
-	zipPath, err := createZip(absDir)
+	rawResult, err := analyzeOrCachedRaw(ctx, cfg, absDir, opts.Force)
 	if err != nil {
-		return fmt.Errorf("create archive: %w", err)
+		return err
 	}
-	defer os.Remove(zipPath)
-
-	// Use zip hash as idempotency key (matches existing CLI cache key style)
-	hash, err := cache.HashFile(zipPath)
-	if err != nil {
-		return fmt.Errorf("hash archive: %w", err)
-	}
-
-	client := api.New(cfg)
-	spin := ui.Start("Uploading and analyzing repository…")
-	rawResult, err := client.AnalyzeRaw(ctx, zipPath, "archdocs-"+hash[:16])
-	spin.Stop()
-	if err != nil {
-		return fmt.Errorf("API analysis: %w", err)
-	}
-	ui.Success("Analysis complete")
 
 	// Write raw graph JSON to a temp file for graph2md
 	tmpDir, err := os.MkdirTemp("", "supermodel-archdocs-*")
@@ -490,4 +476,46 @@ func countFiles(dir, ext string) int {
 		return nil
 	})
 	return count
+}
+
+// analyzeOrCachedRaw returns the raw JSON result from a repository analysis,
+// hitting the fingerprint cache first to avoid re-uploading unchanged repos.
+func analyzeOrCachedRaw(ctx context.Context, cfg *config.Config, repoDir string, force bool) (json.RawMessage, error) {
+	if !force {
+		if fp, err := cache.RepoFingerprint(repoDir); err == nil {
+			key := cache.AnalysisKey(fp, "archdocs", build.Version)
+			var cached json.RawMessage
+			if hit, _ := cache.GetJSON(key, &cached); hit {
+				ui.Success("Using cached analysis")
+				return cached, nil
+			}
+		}
+	}
+
+	ui.Step("Creating repository archive…")
+	zipPath, err := createZip(repoDir)
+	if err != nil {
+		return nil, fmt.Errorf("create archive: %w", err)
+	}
+	defer os.Remove(zipPath)
+
+	hash, err := cache.HashFile(zipPath)
+	if err != nil {
+		return nil, fmt.Errorf("hash archive: %w", err)
+	}
+
+	client := api.New(cfg)
+	spin := ui.Start("Uploading and analyzing repository…")
+	raw, err := client.AnalyzeRaw(ctx, zipPath, "archdocs-"+hash[:16])
+	spin.Stop()
+	if err != nil {
+		return nil, fmt.Errorf("API analysis: %w", err)
+	}
+	ui.Success("Analysis complete")
+
+	if fp, err := cache.RepoFingerprint(repoDir); err == nil {
+		key := cache.AnalysisKey(fp, "archdocs", build.Version)
+		_ = cache.PutJSON(key, raw)
+	}
+	return raw, nil
 }
