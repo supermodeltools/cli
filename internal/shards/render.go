@@ -249,6 +249,9 @@ func RenderAll(repoDir string, cache *Cache, files []string, dryRun bool) (int, 
 
 		content := RenderGraph(srcFile, cache, prefix)
 		if content == "" {
+			// Remove any stale shard left from a previous run.
+			full := filepath.Join(repoDir, ShardFilename(srcFile))
+			_ = os.Remove(full)
 			continue
 		}
 
