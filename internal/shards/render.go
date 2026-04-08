@@ -229,7 +229,11 @@ func WriteShard(repoDir, shardPath, content string, dryRun bool) error {
 	if err := os.WriteFile(tmp, []byte(content), 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tmp, full)
+	if err := os.Rename(tmp, full); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 // RenderAll generates and writes .graph shards for the given source files.

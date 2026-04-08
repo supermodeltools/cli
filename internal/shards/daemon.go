@@ -316,6 +316,7 @@ func (d *Daemon) saveCache() {
 		return
 	}
 	if err := os.Rename(tmp, d.cfg.CacheFile); err != nil {
+		_ = os.Remove(tmp)
 		d.logf("Error renaming cache: %v", err)
 		return
 	}
