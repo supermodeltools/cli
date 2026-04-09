@@ -54,7 +54,7 @@ func (w *Watcher) Run(ctx context.Context) {
 	defer close(w.eventCh)
 
 	w.lastIndexMod = w.gitIndexMtime()
-	w.lastCommitSHA = w.runGit("rev-parse", "HEAD")
+	w.lastCommitSHA = strings.TrimSpace(w.runGit("rev-parse", "HEAD"))
 
 	for {
 		select {

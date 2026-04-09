@@ -257,17 +257,32 @@ func (d *Daemon) incrementalUpdate(ctx context.Context, changedFiles []string) {
 		return
 	}
 
-	// Snapshot old import relationships before the merge so we can re-render
-	// files that lost an "imported-by" reference after A stops importing B.
+	// Snapshot old import and call relationships before the merge so we can
+	// re-render files that lost a reference after A stops importing/calling B.
 	oldImports := make(map[string][]string, len(changedFiles))
+	oldCalleeFiles := make(map[string][]string) // funcID -> callee file paths
 	func() {
 		d.mu.Lock()
 		defer d.mu.Unlock()
+		changedSet := make(map[string]bool, len(changedFiles))
+		for _, f := range changedFiles {
+			changedSet[f] = true
+		}
 		for _, f := range changedFiles {
 			if deps := d.cache.Imports[f]; len(deps) > 0 {
 				cp := make([]string, len(deps))
 				copy(cp, deps)
 				oldImports[f] = cp
+			}
+		}
+		for id, fn := range d.cache.FnByID {
+			if !changedSet[fn.File] {
+				continue
+			}
+			for _, callee := range d.cache.Callees[id] {
+				if callee.File != "" {
+					oldCalleeFiles[id] = append(oldCalleeFiles[id], callee.File)
+				}
 			}
 		}
 	}()
@@ -280,7 +295,7 @@ func (d *Daemon) incrementalUpdate(ctx context.Context, changedFiles []string) {
 		d.mergeGraph(ir, changedFiles)
 		d.cache = NewCache()
 		d.cache.Build(d.ir)
-		affected = d.computeAffectedFiles(changedFiles, oldImports)
+		affected = d.computeAffectedFiles(changedFiles, oldImports, oldCalleeFiles)
 		cacheSnapshot = d.cache
 	}()
 
@@ -592,7 +607,10 @@ func (d *Daemon) assignNewFilesToDomains(newNodes []api.Node) {
 // oldImports maps each changed file to the set of files it imported BEFORE
 // the merge, so that files whose "imported-by" sections lost a reference
 // are also re-rendered.
-func (d *Daemon) computeAffectedFiles(changedFiles []string, oldImports map[string][]string) []string {
+// oldCalleeFiles maps each function ID (in a changed file) to the set of files
+// its callees lived in BEFORE the merge, so that callee files whose
+// "← caller" entries were removed are also re-rendered.
+func (d *Daemon) computeAffectedFiles(changedFiles []string, oldImports, oldCalleeFiles map[string][]string) []string {
 	affected := make(map[string]bool)
 
 	for _, f := range changedFiles {
@@ -624,6 +642,12 @@ func (d *Daemon) computeAffectedFiles(changedFiles []string, oldImports map[stri
 				if caller.File != "" {
 					affected[caller.File] = true
 				}
+			}
+			// Files that functions in f used to call (old callees): if the call was
+			// removed, those files' shards still show "funcB ← funcA" and need
+			// re-rendering to drop the stale back-reference.
+			for _, calleeFile := range oldCalleeFiles[id] {
+				affected[calleeFile] = true
 			}
 		}
 	}
