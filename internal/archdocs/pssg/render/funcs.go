@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -141,7 +142,8 @@ func formatNumber(n interface{}) string {
 
 var isoDuration = regexp.MustCompile(`PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?`)
 
-// durationMinutes converts an ISO 8601 duration to minutes.
+// durationMinutes converts an ISO 8601 duration to minutes, truncating any
+// remaining seconds.
 func durationMinutes(d string) int {
 	matches := isoDuration.FindStringSubmatch(d)
 	if matches == nil {
@@ -149,7 +151,8 @@ func durationMinutes(d string) int {
 	}
 	hours, _ := strconv.Atoi(matches[1])
 	minutes, _ := strconv.Atoi(matches[2])
-	return hours*60 + minutes
+	seconds, _ := strconv.Atoi(matches[3])
+	return hours*60 + minutes + seconds/60
 }
 
 // totalTime adds two ISO 8601 durations.
@@ -237,32 +240,30 @@ func dict(values ...interface{}) map[string]interface{} {
 	return result
 }
 
+func clampSliceBounds(start, end, length int) (int, int) {
+	if start < 0 {
+		start = 0
+	}
+	if end > length {
+		end = length
+	}
+	if start > end {
+		start = end
+	}
+	return start, end
+}
+
 func sliceHelper(items interface{}, start, end int) interface{} {
 	switch v := items.(type) {
 	case []string:
-		if start < 0 {
-			start = 0
-		}
-		if end > len(v) {
-			end = len(v)
-		}
-		return v[start:end]
+		s, e := clampSliceBounds(start, end, len(v))
+		return v[s:e]
 	case []*entity.Entity:
-		if start < 0 {
-			start = 0
-		}
-		if end > len(v) {
-			end = len(v)
-		}
-		return v[start:end]
+		s, e := clampSliceBounds(start, end, len(v))
+		return v[s:e]
 	case []interface{}:
-		if start < 0 {
-			start = 0
-		}
-		if end > len(v) {
-			end = len(v)
-		}
-		return v[start:end]
+		s, e := clampSliceBounds(start, end, len(v))
+		return v[s:e]
 	}
 	return items
 }
@@ -282,6 +283,7 @@ func length(v interface{}) int {
 func sortStrings(s []string) []string {
 	result := make([]string, len(s))
 	copy(result, s)
+	sort.Strings(result)
 	return result
 }
 
