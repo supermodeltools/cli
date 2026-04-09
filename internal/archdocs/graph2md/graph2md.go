@@ -373,6 +373,7 @@ func Run(inputFiles, outputDir, repoName, repoURL string, maxEntities int) error
 		if n, ok := usedSlugs[slug]; ok {
 			usedSlugs[slug] = n + 1
 			slug = fmt.Sprintf("%s-%d", slug, n+1)
+			usedSlugs[slug] = 1 // register the disambiguated slug so a later node can't claim it
 		} else {
 			usedSlugs[slug] = 1
 		}
@@ -676,8 +677,12 @@ func (c *renderContext) writeFunctionFrontmatter(sb *strings.Builder) {
 		fmt.Fprintf(sb, "start_line: %d\n", startLine)
 	}
 	if endLine > 0 {
+		effectiveStart := startLine
+		if effectiveStart <= 0 {
+			effectiveStart = 1
+		}
 		fmt.Fprintf(sb, "end_line: %d\n", endLine)
-		fmt.Fprintf(sb, "line_count: %d\n", endLine-startLine+1)
+		fmt.Fprintf(sb, "line_count: %d\n", endLine-effectiveStart+1)
 	}
 	fmt.Fprintf(sb, "repo: %q\n", c.repoName)
 	fmt.Fprintf(sb, "call_count: %d\n", len(c.calls[c.node.ID]))
@@ -726,8 +731,12 @@ func (c *renderContext) writeClassFrontmatter(sb *strings.Builder) {
 		fmt.Fprintf(sb, "start_line: %d\n", startLine)
 	}
 	if endLine > 0 {
+		effectiveStart := startLine
+		if effectiveStart <= 0 {
+			effectiveStart = 1
+		}
 		fmt.Fprintf(sb, "end_line: %d\n", endLine)
-		fmt.Fprintf(sb, "line_count: %d\n", endLine-startLine+1)
+		fmt.Fprintf(sb, "line_count: %d\n", endLine-effectiveStart+1)
 	}
 	fmt.Fprintf(sb, "repo: %q\n", c.repoName)
 
@@ -780,8 +789,12 @@ func (c *renderContext) writeTypeFrontmatter(sb *strings.Builder) {
 		fmt.Fprintf(sb, "start_line: %d\n", startLine)
 	}
 	if endLine > 0 {
+		effectiveStart := startLine
+		if effectiveStart <= 0 {
+			effectiveStart = 1
+		}
 		fmt.Fprintf(sb, "end_line: %d\n", endLine)
-		fmt.Fprintf(sb, "line_count: %d\n", endLine-startLine+1)
+		fmt.Fprintf(sb, "line_count: %d\n", endLine-effectiveStart+1)
 	}
 	fmt.Fprintf(sb, "repo: %q\n", c.repoName)
 
