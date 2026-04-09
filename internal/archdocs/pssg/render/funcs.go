@@ -227,6 +227,10 @@ func last(list interface{}) interface{} {
 		if len(v) > 0 {
 			return v[len(v)-1]
 		}
+	case []*entity.Entity:
+		if len(v) > 0 {
+			return v[len(v)-1]
+		}
 	}
 	return nil
 }

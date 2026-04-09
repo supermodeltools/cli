@@ -2,6 +2,8 @@ package render
 
 import (
 	"testing"
+
+	"github.com/supermodeltools/cli/internal/archdocs/pssg/entity"
 )
 
 func TestFormatNumber(t *testing.T) {
@@ -73,6 +75,28 @@ func TestSliceHelper(t *testing.T) {
 	got = sliceHelper(s, -1, 2).([]string)
 	if len(got) != 2 {
 		t.Errorf("sliceHelper negative start: got %v", got)
+	}
+}
+
+func TestFirstLast_EntitySlice(t *testing.T) {
+	a := &entity.Entity{Slug: "a"}
+	b := &entity.Entity{Slug: "b"}
+	c := &entity.Entity{Slug: "c"}
+	entities := []*entity.Entity{a, b, c}
+
+	if got := first(entities); got != a {
+		t.Errorf("first([]*entity.Entity) = %v, want %v", got, a)
+	}
+	if got := last(entities); got != c {
+		t.Errorf("last([]*entity.Entity) = %v, want %v", got, c)
+	}
+
+	var empty []*entity.Entity
+	if got := first(empty); got != nil {
+		t.Errorf("first(empty []*entity.Entity) = %v, want nil", got)
+	}
+	if got := last(empty); got != nil {
+		t.Errorf("last(empty []*entity.Entity) = %v, want nil", got)
 	}
 }
 
