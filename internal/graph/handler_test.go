@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/supermodeltools/cli/internal/api"
 )
@@ -305,5 +306,32 @@ func TestPrintGraph_HumanDefault(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "ID") {
 		t.Errorf("human output should contain table headers:\n%s", buf.String())
+	}
+}
+
+// TestWriteDOT_LongNameTruncated_MultiByteUTF8 verifies that dotEscape does
+// not split a multi-byte UTF-8 character when truncating long node names.
+// Before the fix, s[len(s)-39:] used byte indexing, which could land in the
+// middle of a multi-byte character and produce invalid UTF-8 in the DOT file.
+func TestWriteDOT_LongNameTruncated_MultiByteUTF8(t *testing.T) {
+	// 41 × "é" (2 bytes each) = 82 bytes, 41 runes.
+	// byte-based slice: s[82-39:] = s[43:] — byte 43 is the second byte of "é"
+	// (U+00E9 encodes as 0xC3 0xA9), producing invalid UTF-8 without the fix.
+	longName := strings.Repeat("é", 41)
+	g := &api.Graph{
+		Nodes: []api.Node{
+			{ID: "n1", Labels: []string{"Function"}, Properties: map[string]any{"name": longName}},
+		},
+	}
+	var buf bytes.Buffer
+	if err := writeDOT(&buf, g, ""); err != nil {
+		t.Fatalf("writeDOT: %v", err)
+	}
+	out := buf.String()
+	if !utf8.ValidString(out) {
+		t.Errorf("writeDOT output contains invalid UTF-8 (byte-based truncation of multi-byte name)")
+	}
+	if strings.Contains(out, longName) {
+		t.Errorf("long multi-byte name should be truncated in DOT output")
 	}
 }

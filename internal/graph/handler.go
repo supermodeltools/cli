@@ -121,8 +121,9 @@ func writeDOT(w io.Writer, g *api.Graph, filter string) error {
 }
 
 func dotEscape(s string) string {
-	if len(s) > 40 {
-		s = "…" + s[len(s)-39:]
+	runes := []rune(s)
+	if len(runes) > 40 {
+		return "…" + string(runes[len(runes)-39:])
 	}
 	return s
 }
