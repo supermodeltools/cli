@@ -3,7 +3,6 @@ package output
 import (
 	"encoding/xml"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/supermodeltools/cli/internal/archdocs/pssg/config"
@@ -92,28 +91,27 @@ func GenerateRSSFeeds(entities []*entity.Entity, cfg *config.Config, taxonomyEnt
 }
 
 func generateFeed(title, link, description, language, buildDate string, entities []*entity.Entity, baseURL string) string {
+	// xml.MarshalIndent escapes special characters (&, <, >, ") automatically.
+	// Do NOT pre-escape with a manual xmlEscape — that would double-encode them
+	// (e.g. "Beef & Rice" → "&amp;amp;" in the final XML).
 	channel := rssChannel{
-		Title:         xmlEscape(title),
+		Title:         title,
 		Link:          link,
-		Description:   xmlEscape(description),
+		Description:   description,
 		Language:      language,
 		LastBuildDate: buildDate,
 	}
 
 	for _, e := range entities {
-		itemTitle := e.GetString("title")
-		itemDesc := e.GetString("description")
-		category := e.GetString("recipe_category")
-
 		item := rssItem{
-			Title:       xmlEscape(itemTitle),
+			Title:       e.GetString("title"),
 			Link:        fmt.Sprintf("%s/%s.html", baseURL, e.Slug),
-			Description: xmlEscape(itemDesc),
+			Description: e.GetString("description"),
 			GUID:        fmt.Sprintf("%s/%s.html", baseURL, e.Slug),
 			PubDate:     buildDate,
 		}
-		if category != "" {
-			item.Category = xmlEscape(category)
+		if category := e.GetString("recipe_category"); category != "" {
+			item.Category = category
 		}
 		channel.Items = append(channel.Items, item)
 	}
@@ -128,12 +126,4 @@ func generateFeed(title, link, description, language, buildDate string, entities
 		return ""
 	}
 	return xml.Header + string(data)
-}
-
-func xmlEscape(s string) string {
-	s = strings.ReplaceAll(s, "&", "&amp;")
-	s = strings.ReplaceAll(s, "<", "&lt;")
-	s = strings.ReplaceAll(s, ">", "&gt;")
-	s = strings.ReplaceAll(s, "\"", "&quot;")
-	return s
 }
