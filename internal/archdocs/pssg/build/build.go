@@ -1342,8 +1342,8 @@ func (b *Builder) generateSearchIndex(entities []*entity.Entity, outDir string) 
 	entries := make([]searchEntry, 0, len(entities))
 	for _, e := range entities {
 		desc := e.GetString("description")
-		if len(desc) > 120 {
-			desc = desc[:120]
+		if runes := []rune(desc); len(runes) > 120 {
+			desc = string(runes[:120])
 		}
 		entries = append(entries, searchEntry{
 			T: e.GetString("title"),
