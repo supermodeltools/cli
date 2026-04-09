@@ -284,15 +284,19 @@ func MarshalSchemas(schemas ...map[string]interface{}) string {
 
 // stepName extracts a short name from an instruction step.
 func stepName(step string) string {
-	// Take first sentence
+	runes := []rune(step)
+	// Take first sentence if it fits within 80 runes.
 	for _, sep := range []string{". ", ".\n"} {
-		if idx := strings.Index(step, sep); idx > 0 && idx < 80 {
-			return step[:idx+1]
+		if idx := strings.Index(step, sep); idx > 0 {
+			// idx is a byte offset; compute rune length of the candidate name.
+			if len([]rune(step[:idx+1])) < 80 {
+				return step[:idx+1]
+			}
 		}
 	}
-	// Truncate if too long
-	if len(step) > 80 {
-		return step[:77] + "..."
+	// Truncate if too long (rune-aware to avoid splitting multi-byte chars).
+	if len(runes) > 80 {
+		return string(runes[:77]) + "..."
 	}
 	return step
 }

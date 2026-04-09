@@ -2,7 +2,53 @@ package schema
 
 import (
 	"testing"
+	"unicode/utf8"
 )
+
+func TestStepName(t *testing.T) {
+	// ASCII truncation: step longer than 80 bytes, no sentence break.
+	long := ""
+	for i := 0; i < 85; i++ {
+		long += "a"
+	}
+	got := stepName(long)
+	if len([]rune(got)) != 80 { // 77 + len("...") = 80
+		t.Errorf("ASCII truncation: got %d runes, want 80", len([]rune(got)))
+	}
+
+	// Short sentence extraction.
+	got = stepName("Mix ingredients. Then bake for 30 minutes.")
+	if got != "Mix ingredients." {
+		t.Errorf("short sentence: got %q, want %q", got, "Mix ingredients.")
+	}
+
+	// Multi-byte truncation: 85 'é' chars (2 bytes each), no period.
+	// Byte length > 80 but we must truncate at rune boundary.
+	multiLong := ""
+	for i := 0; i < 85; i++ {
+		multiLong += "é"
+	}
+	got = stepName(multiLong)
+	if !utf8.ValidString(got) {
+		t.Errorf("multi-byte truncation produced invalid UTF-8: %q", got)
+	}
+	if len([]rune(got)) != 80 { // 77 runes + "..."
+		t.Errorf("multi-byte truncation: got %d runes, want 80", len([]rune(got)))
+	}
+
+	// Multi-byte sentence: 'é' × 79 chars followed by ". rest"
+	// Sentence rune count = 80 (79 é + 1 period), which is NOT < 80, so falls through.
+	// Resulting truncation: 85-char total → truncate to 77+...
+	multiSentence := ""
+	for i := 0; i < 79; i++ {
+		multiSentence += "é"
+	}
+	multiSentence += ". rest of step"
+	got = stepName(multiSentence)
+	if !utf8.ValidString(got) {
+		t.Errorf("multi-byte sentence truncation produced invalid UTF-8: %q", got)
+	}
+}
 
 func TestParseDurationMinutes(t *testing.T) {
 	cases := []struct {
