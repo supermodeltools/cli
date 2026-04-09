@@ -299,7 +299,7 @@ func stepName(step string) string {
 
 var durationRegex = regexp.MustCompile(`PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?`)
 
-// parseDurationMinutes parses an ISO 8601 duration to minutes.
+// parseDurationMinutes parses an ISO 8601 duration to minutes, rounding seconds down.
 func parseDurationMinutes(d string) int {
 	matches := durationRegex.FindStringSubmatch(d)
 	if matches == nil {
@@ -307,7 +307,8 @@ func parseDurationMinutes(d string) int {
 	}
 	hours, _ := strconv.Atoi(matches[1])
 	minutes, _ := strconv.Atoi(matches[2])
-	return hours*60 + minutes
+	seconds, _ := strconv.Atoi(matches[3])
+	return hours*60 + minutes + seconds/60
 }
 
 // computeTotalTime adds two ISO 8601 durations and returns the result.
