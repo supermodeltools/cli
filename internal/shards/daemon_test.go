@@ -359,3 +359,83 @@ func TestMergeGraph_DomainsPreservedEvenWhenIncrementalHasMore(t *testing.T) {
 		t.Errorf("expected original domain preserved, got %v", result.Domains)
 	}
 }
+
+// ── computeAffectedFiles tests ───────────────────────────────────────────────
+
+// TestComputeAffectedFiles_OldCalleeIncluded verifies that when a function in a
+// changed file used to call a function in another file, that other file is
+// included in the affected set even if the call was removed by the update.
+//
+// Before the fix, computeAffectedFiles only walked d.cache.Callers (new state)
+// and oldImports. It never consulted pre-merge callee relationships. As a result,
+// if funcA stopped calling funcB, file B was not marked affected and its shard
+// kept the stale "funcB ← funcA" line.
+func TestComputeAffectedFiles_OldCalleeIncluded(t *testing.T) {
+	ir := buildIR(
+		[]api.Node{
+			newNode("file-a", []string{"File"}, "filePath", "a.go"),
+			newNode("fn-a", []string{"Function"}, "filePath", "a.go", "name", "FuncA"),
+			newNode("file-b", []string{"File"}, "filePath", "b.go"),
+			newNode("fn-b", []string{"Function"}, "filePath", "b.go", "name", "FuncB"),
+		},
+		[]api.Relationship{
+			// FuncA calls FuncB (before the incremental update).
+			newRel("calls-1", "calls", "fn-a", "fn-b"),
+		},
+	)
+	d := NewTestDaemon(ir)
+	d.cache = NewCache()
+	d.cache.Build(ir)
+
+	// Simulate pre-merge callees snapshot: fn-a used to call fn-b (in b.go).
+	oldCalleeFiles := map[string][]string{
+		"fn-a": {"b.go"},
+	}
+
+	// After the incremental update, FuncA no longer calls FuncB, so the new
+	// cache has no callee relationship. Only a.go is in changedFiles.
+	affected := d.computeAffectedFiles([]string{"a.go"}, nil, oldCalleeFiles)
+
+	affectedSet := make(map[string]bool, len(affected))
+	for _, f := range affected {
+		affectedSet[f] = true
+	}
+
+	if !affectedSet["a.go"] {
+		t.Error("expected a.go (changed file) in affected set")
+	}
+	if !affectedSet["b.go"] {
+		t.Error("expected b.go (old callee) in affected set — shard needs to drop stale '← FuncA' entry")
+	}
+}
+
+// TestComputeAffectedFiles_CurrentCallersIncluded verifies that files currently
+// calling a function in the changed file are marked affected (existing behaviour).
+func TestComputeAffectedFiles_CurrentCallersIncluded(t *testing.T) {
+	ir := buildIR(
+		[]api.Node{
+			newNode("file-a", []string{"File"}, "filePath", "a.go"),
+			newNode("fn-a", []string{"Function"}, "filePath", "a.go", "name", "FuncA"),
+			newNode("file-c", []string{"File"}, "filePath", "c.go"),
+			newNode("fn-c", []string{"Function"}, "filePath", "c.go", "name", "FuncC"),
+		},
+		[]api.Relationship{
+			// FuncC (in c.go) calls FuncA (in a.go).
+			newRel("calls-2", "calls", "fn-c", "fn-a"),
+		},
+	)
+	d := NewTestDaemon(ir)
+	d.cache = NewCache()
+	d.cache.Build(ir)
+
+	affected := d.computeAffectedFiles([]string{"a.go"}, nil, nil)
+
+	affectedSet := make(map[string]bool, len(affected))
+	for _, f := range affected {
+		affectedSet[f] = true
+	}
+
+	if !affectedSet["c.go"] {
+		t.Error("expected c.go (current caller) in affected set")
+	}
+}
