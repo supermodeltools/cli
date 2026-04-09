@@ -292,10 +292,11 @@ func isShardPath(name string) bool {
 	return tag == ShardExt
 }
 
-// firstString returns the first non-empty string value from props for the given keys.
-// Returns the last key as a fallback string when none match.
+// firstString returns the first non-empty string value from props found under
+// any of the first len(keys)-1 keys. The last element of keys is returned
+// as a literal fallback string when no key matches — it is not looked up in props.
 func firstString(props map[string]any, keys ...string) string {
-	for _, k := range keys {
+	for _, k := range keys[:len(keys)-1] {
 		if v, ok := props[k]; ok {
 			if s, ok := v.(string); ok && s != "" {
 				return s
