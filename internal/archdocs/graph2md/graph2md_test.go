@@ -12,8 +12,8 @@ import (
 // frontmatter and returns the parsed graphData struct.
 func parseGraphData(t *testing.T, content string) struct {
 	Nodes []struct {
-		ID string  `json:"id"`
-		LC int     `json:"lc"`
+		ID string `json:"id"`
+		LC int    `json:"lc"`
 	} `json:"nodes"`
 } {
 	t.Helper()
