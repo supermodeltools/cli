@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/supermodeltools/cli/internal/archdocs/pssg/config"
 	"github.com/supermodeltools/cli/internal/archdocs/pssg/entity"
@@ -253,7 +254,8 @@ func GroupByLetter(entries []Entry) []LetterGroup {
 		if len(entry.Name) == 0 {
 			continue
 		}
-		first := unicode.ToUpper(rune(entry.Name[0]))
+		r, _ := utf8.DecodeRuneInString(entry.Name)
+		first := unicode.ToUpper(r)
 		var letter string
 		if unicode.IsLetter(first) {
 			letter = string(first)
