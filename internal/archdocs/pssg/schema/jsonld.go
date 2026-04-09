@@ -290,9 +290,10 @@ func stepName(step string) string {
 			return step[:idx+1]
 		}
 	}
-	// Truncate if too long
-	if len(step) > 80 {
-		return step[:77] + "..."
+	// Truncate if too long (rune-aware to avoid splitting multi-byte UTF-8).
+	runes := []rune(step)
+	if len(runes) > 80 {
+		return string(runes[:77]) + "..."
 	}
 	return step
 }

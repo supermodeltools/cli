@@ -1,8 +1,56 @@
 package schema
 
 import (
+	"strings"
 	"testing"
+	"unicode/utf8"
 )
+
+func TestStepName_ShortStep(t *testing.T) {
+	short := "Mix well."
+	if got := stepName(short); got != short {
+		t.Errorf("stepName(%q) = %q, want unchanged", short, got)
+	}
+}
+
+func TestStepName_FirstSentence(t *testing.T) {
+	step := "Sauté the onions. Then add garlic and cook for 2 more minutes."
+	got := stepName(step)
+	if got != "Sauté the onions." {
+		t.Errorf("stepName first-sentence: got %q", got)
+	}
+}
+
+func TestStepName_TruncatesLongASCII(t *testing.T) {
+	long := strings.Repeat("a", 81)
+	got := stepName(long)
+	if !strings.HasSuffix(got, "...") {
+		t.Errorf("long step should end with '...', got %q", got)
+	}
+	if len([]rune(got)) > 80 {
+		t.Errorf("truncated step too long: %d runes", len([]rune(got)))
+	}
+}
+
+// TestStepName_MultiByteUTF8 is the regression test for the byte-based slicing
+// bug: a step whose byte length exceeds 80 but rune count is near the boundary
+// must produce valid UTF-8 when truncated.
+func TestStepName_MultiByteUTF8(t *testing.T) {
+	// "é" is 2 bytes. 75 ASCII chars + 4 "é" = 75 + 8 = 83 bytes > 80,
+	// but only 79 runes — just under the limit.
+	// A step with 81 runes of "é" should be truncated to 77 "é" + "...".
+	long := strings.Repeat("é", 81) // 162 bytes, 81 runes
+	got := stepName(long)
+	if !utf8.ValidString(got) {
+		t.Errorf("stepName output contains invalid UTF-8: %q", got)
+	}
+	if !strings.HasSuffix(got, "...") {
+		t.Errorf("long multi-byte step should be truncated with '...', got %q", got)
+	}
+	if strings.Contains(got, strings.Repeat("é", 81)) {
+		t.Errorf("long multi-byte step should be truncated, not returned in full")
+	}
+}
 
 func TestParseDurationMinutes(t *testing.T) {
 	cases := []struct {
