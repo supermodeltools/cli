@@ -126,18 +126,28 @@ func formatNumber(n interface{}) string {
 	}
 
 	s := strconv.FormatInt(num, 10)
-	if len(s) <= 3 {
-		return s
+
+	// Separate sign from digits so the comma-placement math works on digit
+	// positions only. Without this, -100 produces "-,100" instead of "-100".
+	prefix := ""
+	digits := s
+	if len(s) > 0 && s[0] == '-' {
+		prefix = "-"
+		digits = s[1:]
+	}
+
+	if len(digits) <= 3 {
+		return prefix + digits
 	}
 
 	var result []byte
-	for i, c := range s {
-		if i > 0 && (len(s)-i)%3 == 0 {
+	for i, c := range digits {
+		if i > 0 && (len(digits)-i)%3 == 0 {
 			result = append(result, ',')
 		}
 		result = append(result, byte(c))
 	}
-	return string(result)
+	return prefix + string(result)
 }
 
 var isoDuration = regexp.MustCompile(`PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?`)
