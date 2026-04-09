@@ -40,7 +40,7 @@ enters daemon mode. Listens for file-change notifications from the
 Press Ctrl+C to stop and remove graph files.
 
 See https://supermodeltools.com for documentation.`,
-	Args:         cobra.MaximumNArgs(1),
+	Args:         cobra.NoArgs,
 	SilenceUsage: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Walk up to the root command name to get the subcommand.
@@ -68,10 +68,7 @@ See https://supermodeltools.com for documentation.`,
 		if err := cfg.RequireAPIKey(); err != nil {
 			return err
 		}
-		dir := "."
-		if len(args) > 0 {
-			dir = args[0]
-		}
+		dir := watchDir
 		opts := shards.WatchOptions{
 			CacheFile:    watchCacheFile,
 			Debounce:     watchDebounce,
@@ -84,6 +81,7 @@ See https://supermodeltools.com for documentation.`,
 }
 
 var (
+	watchDir          string
 	watchCacheFile    string
 	watchDebounce     time.Duration
 	watchNotifyPort   int
@@ -92,6 +90,7 @@ var (
 )
 
 func init() {
+	rootCmd.Flags().StringVar(&watchDir, "dir", ".", "project directory")
 	rootCmd.Flags().StringVar(&watchCacheFile, "cache-file", "", "override cache file path")
 	rootCmd.Flags().DurationVar(&watchDebounce, "debounce", 2*time.Second, "debounce duration before processing changes")
 	rootCmd.Flags().IntVar(&watchNotifyPort, "notify-port", 7734, "UDP port for hook notifications")
