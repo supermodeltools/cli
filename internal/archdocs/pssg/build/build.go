@@ -468,7 +468,7 @@ func (b *Builder) renderEntityPage(
 					fullPath := filepath.Join(sourceDir, filePath)
 					if data, err := os.ReadFile(fullPath); err == nil {
 						lines := strings.Split(string(data), "\n")
-						if sl <= len(lines) && el <= len(lines) {
+						if sl <= el && sl <= len(lines) && el <= len(lines) {
 							sourceCode = strings.Join(lines[sl-1:el], "\n")
 						}
 					}
