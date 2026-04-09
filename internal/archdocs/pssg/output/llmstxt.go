@@ -27,7 +27,7 @@ func GenerateLlmsTxt(cfg *config.Config, entities []*entity.Entity, taxonomies [
 	// Entities section
 	entityLabel := cfg.Data.EntityType
 	if entityLabel == "" {
-		entityLabel = "Items"
+		entityLabel = "Item"
 	}
 	lines = append(lines, fmt.Sprintf("## %ss", strings.Title(entityLabel)))
 
