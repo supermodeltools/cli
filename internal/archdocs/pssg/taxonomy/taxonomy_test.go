@@ -40,9 +40,9 @@ func TestGroupByLetterASCII(t *testing.T) {
 // the first byte of É's UTF-8 encoding), not 'E'/'É'.
 func TestGroupByLetterNonASCII(t *testing.T) {
 	entries := []Entry{
-		{Name: "Étoile", Slug: "etoile"},   // É is U+00C9, encoded as 0xC3 0x89
-		{Name: "Ñoño", Slug: "nono"},        // Ñ is U+00D1, encoded as 0xC3 0x91
-		{Name: "Über", Slug: "uber"},        // Ü is U+00DC, encoded as 0xC3 0x9C
+		{Name: "Étoile", Slug: "etoile"}, // É is U+00C9, encoded as 0xC3 0x89
+		{Name: "Ñoño", Slug: "nono"},     // Ñ is U+00D1, encoded as 0xC3 0x91
+		{Name: "Über", Slug: "uber"},     // Ü is U+00DC, encoded as 0xC3 0x9C
 		{Name: "English", Slug: "english"},
 	}
 	groups := GroupByLetter(entries)
