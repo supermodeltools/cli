@@ -8,6 +8,40 @@ import (
 	"testing"
 )
 
+// parseGraphData extracts the "graph_data" JSON from a rendered markdown file's
+// frontmatter and returns the parsed graphData struct.
+func parseGraphData(t *testing.T, content string) struct {
+	Nodes []struct {
+		ID string  `json:"id"`
+		LC int     `json:"lc"`
+	} `json:"nodes"`
+} {
+	t.Helper()
+	const key = `graph_data: "`
+	idx := strings.Index(content, key)
+	if idx < 0 {
+		t.Fatal("graph_data key not found in output")
+	}
+	start := idx + len(key)
+	// graph_data value is a quoted Go string — find the closing unescaped "
+	end := strings.Index(content[start:], "\"\n")
+	if end < 0 {
+		t.Fatal("graph_data closing quote not found")
+	}
+	// Unquote the embedded JSON
+	raw := strings.ReplaceAll(content[start:start+end], `\"`, `"`)
+	var gd struct {
+		Nodes []struct {
+			ID string `json:"id"`
+			LC int    `json:"lc"`
+		} `json:"nodes"`
+	}
+	if err := json.Unmarshal([]byte(raw), &gd); err != nil {
+		t.Fatalf("unmarshal graph_data: %v\nraw: %s", err, raw)
+	}
+	return gd
+}
+
 // buildGraphJSON serialises nodes and relationships into a Graph JSON file
 // that loadGraph can parse.
 func buildGraphJSON(t *testing.T, nodes []Node, rels []Relationship) string {
@@ -138,5 +172,84 @@ func TestLineCountMissingStartLine(t *testing.T) {
 	}
 	if !strings.Contains(string(content), "line_count: 50") {
 		t.Errorf("expected line_count: 50 in output, got:\n%s", content)
+	}
+}
+
+// TestGraphDataLineCountMissingStartLine verifies that the graph_data JSON
+// embedded in the markdown frontmatter uses the same effectiveStart=1 logic
+// as the text line_count field. Before the fix, a node with endLine=50 but
+// no startLine would have lc=0 (condition startLine>0 was false), while the
+// frontmatter line_count correctly showed 50.
+//
+// A DEFINES_FUNCTION relationship to a file is included so that the function
+// node has at least one neighbor; writeGraphData skips output when len(nodes)<2.
+func TestGraphDataLineCountMissingStartLine(t *testing.T) {
+	nodes := []Node{
+		{
+			ID:     "file:src/foo.go",
+			Labels: []string{"File"},
+			Properties: map[string]interface{}{
+				"path":      "src/foo.go",
+				"lineCount": float64(100),
+			},
+		},
+		{
+			ID:     "fn:src/foo.go:bar",
+			Labels: []string{"Function"},
+			Properties: map[string]interface{}{
+				"name":     "bar",
+				"filePath": "src/foo.go",
+				"endLine":  float64(50), // startLine intentionally absent
+			},
+		},
+	}
+	rels := []Relationship{
+		{
+			ID:        "r1",
+			Type:      "DEFINES_FUNCTION",
+			StartNode: "file:src/foo.go",
+			EndNode:   "fn:src/foo.go:bar",
+		},
+	}
+
+	graphFile := buildGraphJSON(t, nodes, rels)
+	outDir := t.TempDir()
+
+	if err := Run(graphFile, outDir, "testrepo", "", 0); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// Find the function's markdown file
+	entries, _ := os.ReadDir(outDir)
+	var fnFile string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "fn-") {
+			fnFile = filepath.Join(outDir, e.Name())
+			break
+		}
+	}
+	if fnFile == "" {
+		t.Fatal("function markdown file not found")
+	}
+
+	content, err := os.ReadFile(fnFile)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+
+	gd := parseGraphData(t, string(content))
+	// Find the function node in graph_data
+	var fnLC int = -1
+	for _, n := range gd.Nodes {
+		if n.ID == "fn:src/foo.go:bar" {
+			fnLC = n.LC
+			break
+		}
+	}
+	if fnLC == -1 {
+		t.Fatalf("function node not found in graph_data nodes: %v", gd.Nodes)
+	}
+	if fnLC != 50 {
+		t.Errorf("graph_data lc = %d, want 50 (endLine=50, effectiveStart=1)", fnLC)
 	}
 }

@@ -1578,8 +1578,12 @@ func (c *renderContext) writeGraphData(sb *strings.Builder) {
 		lineCount := 0
 		startLine := getNum(n.Properties, "startLine")
 		endLine := getNum(n.Properties, "endLine")
-		if startLine > 0 && endLine > 0 {
-			lineCount = endLine - startLine + 1
+		if endLine > 0 {
+			effectiveStart := startLine
+			if effectiveStart <= 0 {
+				effectiveStart = 1
+			}
+			lineCount = endLine - effectiveStart + 1
 		}
 		lang := getStr(n.Properties, "language")
 		callCount := len(c.calls[nodeID])
