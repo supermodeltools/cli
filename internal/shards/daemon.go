@@ -610,7 +610,7 @@ func (d *Daemon) assignNewFilesToDomains(newNodes []api.Node) {
 // oldCalleeFiles maps each function ID (in a changed file) to the set of files
 // its callees lived in BEFORE the merge, so that callee files whose
 // "← caller" entries were removed are also re-rendered.
-func (d *Daemon) computeAffectedFiles(changedFiles []string, oldImports map[string][]string, oldCalleeFiles map[string][]string) []string {
+func (d *Daemon) computeAffectedFiles(changedFiles []string, oldImports, oldCalleeFiles map[string][]string) []string {
 	affected := make(map[string]bool)
 
 	for _, f := range changedFiles {
