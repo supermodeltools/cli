@@ -31,7 +31,7 @@ var noConfigCommands = map[string]bool{
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "supermodel [path]",
+	Use:   "supermodel",
 	Short: "Give your AI coding agent a map of your codebase",
 	Long: `Runs a full generate on startup (using cached graph if available), then
 enters daemon mode. Listens for file-change notifications from the
