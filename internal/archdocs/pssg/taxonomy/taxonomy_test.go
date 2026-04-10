@@ -3,8 +3,152 @@ package taxonomy
 import (
 	"testing"
 
+	"github.com/supermodeltools/cli/internal/archdocs/pssg/config"
 	"github.com/supermodeltools/cli/internal/archdocs/pssg/entity"
 )
+
+// ── BuildAll / buildOne / extractValues ───────────────────────────────────────
+
+func TestBuildAll_Basic(t *testing.T) {
+	entities := []*entity.Entity{
+		{Slug: "pasta", Fields: map[string]interface{}{"cuisine": "Italian"}},
+		{Slug: "ramen", Fields: map[string]interface{}{"cuisine": "Japanese"}},
+		{Slug: "sushi", Fields: map[string]interface{}{"cuisine": "Japanese"}},
+	}
+	tc := config.TaxonomyConfig{Name: "cuisine", Field: "cuisine", MinEntities: 1}
+	taxes := BuildAll(entities, []config.TaxonomyConfig{tc}, nil)
+
+	if len(taxes) != 1 {
+		t.Fatalf("expected 1 taxonomy, got %d", len(taxes))
+	}
+	tax := taxes[0]
+	if tax.Name != "cuisine" {
+		t.Errorf("tax name: got %q, want cuisine", tax.Name)
+	}
+	// 2 unique cuisines: Italian (1 entity), Japanese (2 entities)
+	if len(tax.Entries) != 2 {
+		t.Errorf("expected 2 entries, got %d", len(tax.Entries))
+	}
+}
+
+func TestBuildAll_MinEntitiesFilter(t *testing.T) {
+	entities := []*entity.Entity{
+		{Slug: "pasta", Fields: map[string]interface{}{"cuisine": "Italian"}},
+		{Slug: "ramen", Fields: map[string]interface{}{"cuisine": "Japanese"}},
+		{Slug: "sushi", Fields: map[string]interface{}{"cuisine": "Japanese"}},
+	}
+	tc := config.TaxonomyConfig{Name: "cuisine", Field: "cuisine", MinEntities: 2}
+	taxes := BuildAll(entities, []config.TaxonomyConfig{tc}, nil)
+
+	// Only Japanese (2 entities) passes the min_entities=2 filter.
+	if len(taxes[0].Entries) != 1 {
+		t.Errorf("expected 1 entry (only Japanese), got %d", len(taxes[0].Entries))
+	}
+	if taxes[0].Entries[0].Name != "Japanese" {
+		t.Errorf("expected Japanese, got %q", taxes[0].Entries[0].Name)
+	}
+}
+
+func TestBuildAll_MultiValue(t *testing.T) {
+	entities := []*entity.Entity{
+		{Slug: "pasta", Fields: map[string]interface{}{"tags": []string{"italian", "pasta"}}},
+		{Slug: "pizza", Fields: map[string]interface{}{"tags": []string{"italian", "baked"}}},
+	}
+	tc := config.TaxonomyConfig{Name: "tags", Field: "tags", MultiValue: true, MinEntities: 1}
+	taxes := BuildAll(entities, []config.TaxonomyConfig{tc}, nil)
+
+	// Should have 3 unique tags: italian (2), pasta (1), baked (1)
+	if len(taxes[0].Entries) != 3 {
+		t.Errorf("multi-value: expected 3 entries, got %d: %v", len(taxes[0].Entries), taxes[0].Entries)
+	}
+}
+
+func TestBuildAll_Empty(t *testing.T) {
+	taxes := BuildAll(nil, nil, nil)
+	if taxes != nil {
+		t.Errorf("nil input: want nil, got %v", taxes)
+	}
+}
+
+func TestExtractValues_SingleValue(t *testing.T) {
+	e := &entity.Entity{Fields: map[string]interface{}{"cuisine": "Italian"}}
+	tc := config.TaxonomyConfig{Field: "cuisine"}
+	got := extractValues(e, tc, nil)
+	if len(got) != 1 || got[0] != "Italian" {
+		t.Errorf("single value: got %v, want [Italian]", got)
+	}
+}
+
+func TestExtractValues_Missing(t *testing.T) {
+	e := &entity.Entity{Fields: map[string]interface{}{}}
+	tc := config.TaxonomyConfig{Field: "cuisine"}
+	if got := extractValues(e, tc, nil); got != nil {
+		t.Errorf("missing field: want nil, got %v", got)
+	}
+}
+
+func TestExtractValues_EnrichmentOverride(t *testing.T) {
+	e := &entity.Entity{
+		Slug:   "pasta",
+		Fields: map[string]interface{}{"cuisine": "Italian"},
+	}
+	tc := config.TaxonomyConfig{
+		Field:                   "cuisine",
+		EnrichmentOverrideField: "override_cuisine",
+	}
+	enrichment := map[string]map[string]interface{}{
+		"pasta": {"override_cuisine": "Mediterranean"},
+	}
+	got := extractValues(e, tc, enrichment)
+	if len(got) != 1 || got[0] != "Mediterranean" {
+		t.Errorf("enrichment override: got %v, want [Mediterranean]", got)
+	}
+}
+
+// ── getEnrichmentOverrides ────────────────────────────────────────────────────
+
+func TestGetEnrichmentOverrides_SimpleField(t *testing.T) {
+	data := map[string]interface{}{"cuisine": "Italian"}
+	got := getEnrichmentOverrides(data, "cuisine")
+	if len(got) != 1 || got[0] != "Italian" {
+		t.Errorf("simple field: got %v, want [Italian]", got)
+	}
+}
+
+func TestGetEnrichmentOverrides_SimpleField_Missing(t *testing.T) {
+	data := map[string]interface{}{}
+	if got := getEnrichmentOverrides(data, "cuisine"); got != nil {
+		t.Errorf("missing field: want nil, got %v", got)
+	}
+}
+
+func TestGetEnrichmentOverrides_ArrayPath(t *testing.T) {
+	data := map[string]interface{}{
+		"ingredients": []interface{}{
+			map[string]interface{}{"normalizedName": "tomato"},
+			map[string]interface{}{"normalizedName": "basil"},
+			map[string]interface{}{"normalizedName": ""}, // empty — should be skipped
+		},
+	}
+	got := getEnrichmentOverrides(data, "ingredients[].normalizedName")
+	if len(got) != 2 || got[0] != "tomato" || got[1] != "basil" {
+		t.Errorf("array path: got %v, want [tomato basil]", got)
+	}
+}
+
+func TestGetEnrichmentOverrides_ArrayField_Missing(t *testing.T) {
+	data := map[string]interface{}{}
+	if got := getEnrichmentOverrides(data, "ingredients[].name"); got != nil {
+		t.Errorf("missing array: want nil, got %v", got)
+	}
+}
+
+func TestGetEnrichmentOverrides_ArrayField_NotArray(t *testing.T) {
+	data := map[string]interface{}{"ingredients": "not-an-array"}
+	if got := getEnrichmentOverrides(data, "ingredients[].name"); got != nil {
+		t.Errorf("non-array: want nil, got %v", got)
+	}
+}
 
 // TestGroupByLetterASCII verifies that ASCII entry names are grouped correctly.
 func TestGroupByLetterASCII(t *testing.T) {

@@ -471,6 +471,81 @@ func TestUpdateGitignore_NoTrailingNewlineHandled(t *testing.T) {
 	}
 }
 
+// ── RenderAll ─────────────────────────────────────────────────────────────────
+
+func TestRenderAll_EmptyFiles(t *testing.T) {
+	dir := t.TempDir()
+	c := makeRenderCache(shardIR(nil, nil))
+	n, err := RenderAll(dir, c, nil, false)
+	if err != nil {
+		t.Fatalf("RenderAll(empty): %v", err)
+	}
+	if n != 0 {
+		t.Errorf("expected 0 written, got %d", n)
+	}
+}
+
+func TestRenderAll_WritesShards(t *testing.T) {
+	ir := shardIR(
+		[]api.Node{
+			{ID: "fa", Labels: []string{"File"}, Properties: map[string]any{"filePath": "src/a.go"}},
+			{ID: "fb", Labels: []string{"File"}, Properties: map[string]any{"filePath": "src/b.go"}},
+			{ID: "fn1", Labels: []string{"Function"}, Properties: map[string]any{"name": "doWork", "filePath": "src/a.go"}},
+		},
+		[]api.Relationship{
+			{ID: "r1", Type: "imports", StartNode: "fa", EndNode: "fb"},
+		},
+	)
+	dir := t.TempDir()
+	c := makeRenderCache(ir)
+	n, err := RenderAll(dir, c, []string{"src/a.go"}, false)
+	if err != nil {
+		t.Fatalf("RenderAll: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("expected 1 written, got %d", n)
+	}
+}
+
+func TestRenderAll_DryRun(t *testing.T) {
+	ir := shardIR(
+		[]api.Node{
+			{ID: "fa", Labels: []string{"File"}, Properties: map[string]any{"filePath": "src/a.go"}},
+			{ID: "fb", Labels: []string{"File"}, Properties: map[string]any{"filePath": "src/b.go"}},
+		},
+		[]api.Relationship{
+			{ID: "r1", Type: "imports", StartNode: "fa", EndNode: "fb"},
+		},
+	)
+	dir := t.TempDir()
+	c := makeRenderCache(ir)
+	n, err := RenderAll(dir, c, []string{"src/a.go"}, true)
+	if err != nil {
+		t.Fatalf("RenderAll dryRun: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("dryRun: expected 1 counted, got %d", n)
+	}
+	// No actual files written.
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 0 {
+		t.Errorf("dry-run should not create files, found %d", len(entries))
+	}
+}
+
+func TestRenderAll_SkipsEmptyContent(t *testing.T) {
+	// A file not in the cache produces empty content → no shard written.
+	dir := t.TempDir()
+	c := makeRenderCache(shardIR(nil, nil))
+	n, err := RenderAll(dir, c, []string{"src/unknown.go"}, false)
+	if err != nil {
+		t.Fatalf("RenderAll: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("unknown file should produce 0 written, got %d", n)
+	}
+}
+
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
 func TestHook_InvalidJSONExitsCleanly(t *testing.T) {
