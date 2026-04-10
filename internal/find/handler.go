@@ -141,9 +141,11 @@ func dedupSorted(ss []string) []string {
 	if len(ss) == 0 {
 		return nil
 	}
-	sort.Strings(ss)
-	out := ss[:1]
-	for _, s := range ss[1:] {
+	cp := make([]string, len(ss))
+	copy(cp, ss)
+	sort.Strings(cp)
+	out := cp[:1]
+	for _, s := range cp[1:] {
 		if s != out[len(out)-1] {
 			out = append(out, s)
 		}
