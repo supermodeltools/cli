@@ -1,8 +1,12 @@
 package schema
 
 import (
+	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/supermodeltools/cli/internal/archdocs/pssg/config"
+	"github.com/supermodeltools/cli/internal/archdocs/pssg/entity"
 )
 
 func TestStepName(t *testing.T) {
@@ -47,6 +51,166 @@ func TestStepName(t *testing.T) {
 	got = stepName(multiSentence)
 	if !utf8.ValidString(got) {
 		t.Errorf("multi-byte sentence truncation produced invalid UTF-8: %q", got)
+	}
+}
+
+// ── NewGenerator ──────────────────────────────────────────────────────────────
+
+func TestNewGenerator(t *testing.T) {
+	site := config.SiteConfig{Name: "My Site", BaseURL: "https://example.com"}
+	g := NewGenerator(site, config.SchemaConfig{})
+	if g == nil {
+		t.Fatal("NewGenerator returned nil")
+	}
+	if g.SiteConfig.Name != "My Site" {
+		t.Errorf("SiteConfig.Name: got %q", g.SiteConfig.Name)
+	}
+}
+
+// ── GenerateWebSiteSchema ─────────────────────────────────────────────────────
+
+func TestGenerateWebSiteSchema(t *testing.T) {
+	g := NewGenerator(config.SiteConfig{
+		Name:        "My Site",
+		BaseURL:     "https://example.com",
+		Description: "A recipe site",
+	}, config.SchemaConfig{})
+
+	s := g.GenerateWebSiteSchema("")
+	if s["@type"] != "WebSite" {
+		t.Errorf("@type: got %v", s["@type"])
+	}
+	if s["name"] != "My Site" {
+		t.Errorf("name: got %v", s["name"])
+	}
+	if s["url"] != "https://example.com" {
+		t.Errorf("url: got %v", s["url"])
+	}
+	if _, ok := s["image"]; ok {
+		t.Error("image should not be set when imageURL is empty")
+	}
+
+	// With image
+	s2 := g.GenerateWebSiteSchema("https://example.com/og.png")
+	if s2["image"] != "https://example.com/og.png" {
+		t.Errorf("image: got %v", s2["image"])
+	}
+}
+
+// ── GenerateBreadcrumbSchema ──────────────────────────────────────────────────
+
+func TestGenerateBreadcrumbSchema(t *testing.T) {
+	g := NewGenerator(config.SiteConfig{}, config.SchemaConfig{})
+	items := []BreadcrumbItem{
+		{Name: "Home", URL: "https://example.com/"},
+		{Name: "Recipes", URL: "https://example.com/recipes/"},
+		{Name: "Soup"},
+	}
+	s := g.GenerateBreadcrumbSchema(items)
+	if s["@type"] != "BreadcrumbList" {
+		t.Errorf("@type: got %v", s["@type"])
+	}
+	list := s["itemListElement"].([]map[string]interface{})
+	if len(list) != 3 {
+		t.Fatalf("want 3 items, got %d", len(list))
+	}
+	if list[0]["position"] != 1 {
+		t.Errorf("position 1: got %v", list[0]["position"])
+	}
+	if list[0]["item"] != "https://example.com/" {
+		t.Errorf("item[0].item: got %v", list[0]["item"])
+	}
+	// Last item has no URL, so "item" key should not be present
+	if _, ok := list[2]["item"]; ok {
+		t.Error("item without URL should not have 'item' key")
+	}
+}
+
+// ── GenerateFAQSchema ─────────────────────────────────────────────────────────
+
+func TestGenerateFAQSchema_WithFAQs(t *testing.T) {
+	g := NewGenerator(config.SiteConfig{}, config.SchemaConfig{})
+	faqs := []entity.FAQ{
+		{Question: "How long does this take?", Answer: "30 minutes."},
+		{Question: "Can I freeze it?", Answer: "Yes!"},
+	}
+	s := g.GenerateFAQSchema(faqs)
+	if s["@type"] != "FAQPage" {
+		t.Errorf("@type: got %v", s["@type"])
+	}
+	qs := s["mainEntity"].([]map[string]interface{})
+	if len(qs) != 2 {
+		t.Fatalf("want 2 FAQs, got %d", len(qs))
+	}
+	if qs[0]["name"] != "How long does this take?" {
+		t.Errorf("first question: got %v", qs[0]["name"])
+	}
+}
+
+func TestGenerateFAQSchema_Empty(t *testing.T) {
+	g := NewGenerator(config.SiteConfig{}, config.SchemaConfig{})
+	if got := g.GenerateFAQSchema(nil); got != nil {
+		t.Error("empty FAQs should return nil")
+	}
+}
+
+// ── GenerateItemListSchema ────────────────────────────────────────────────────
+
+func TestGenerateItemListSchema(t *testing.T) {
+	g := NewGenerator(config.SiteConfig{}, config.SchemaConfig{})
+	items := []ItemListEntry{
+		{Name: "Tomato Soup", URL: "https://example.com/tomato-soup"},
+		{Name: "Chicken Stew", URL: "https://example.com/chicken-stew"},
+	}
+	s := g.GenerateItemListSchema("Soups", "A collection of soups", items, "")
+	if s["@type"] != "ItemList" {
+		t.Errorf("@type: got %v", s["@type"])
+	}
+	if s["numberOfItems"] != 2 {
+		t.Errorf("numberOfItems: got %v", s["numberOfItems"])
+	}
+	list := s["itemListElement"].([]map[string]interface{})
+	if len(list) != 2 {
+		t.Fatalf("want 2 items, got %d", len(list))
+	}
+	if list[0]["position"] != 1 {
+		t.Errorf("position: got %v", list[0]["position"])
+	}
+}
+
+// ── MarshalSchemas ────────────────────────────────────────────────────────────
+
+func TestMarshalSchemas_Basic(t *testing.T) {
+	s := map[string]interface{}{"@type": "WebSite", "name": "Test"}
+	got := MarshalSchemas(s)
+	if !strings.HasPrefix(got, `<script type="application/ld+json">`) {
+		t.Errorf("should start with script tag, got: %q", got[:50])
+	}
+	if !strings.Contains(got, `"@type":"WebSite"`) {
+		t.Errorf("should contain @type, got: %q", got)
+	}
+}
+
+func TestMarshalSchemas_NilSkipped(t *testing.T) {
+	s := map[string]interface{}{"@type": "WebSite"}
+	got := MarshalSchemas(nil, s, nil)
+	if strings.Count(got, "<script") != 1 {
+		t.Errorf("nil schemas should be skipped, got %d script tags", strings.Count(got, "<script"))
+	}
+}
+
+func TestMarshalSchemas_Multiple(t *testing.T) {
+	s1 := map[string]interface{}{"@type": "WebSite"}
+	s2 := map[string]interface{}{"@type": "BreadcrumbList"}
+	got := MarshalSchemas(s1, s2)
+	if strings.Count(got, "<script") != 2 {
+		t.Errorf("want 2 script tags, got %d", strings.Count(got, "<script"))
+	}
+}
+
+func TestMarshalSchemas_Empty(t *testing.T) {
+	if got := MarshalSchemas(); got != "" {
+		t.Errorf("no schemas: want empty string, got %q", got)
 	}
 }
 
