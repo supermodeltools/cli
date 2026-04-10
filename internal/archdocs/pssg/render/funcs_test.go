@@ -78,6 +78,41 @@ func TestSliceHelper(t *testing.T) {
 	if len(got) != 2 {
 		t.Errorf("sliceHelper negative start: got %v", got)
 	}
+
+	// Test with []*entity.Entity slice type
+	entities := []*entity.Entity{{Slug: "a"}, {Slug: "b"}, {Slug: "c"}}
+	gotE := sliceHelper(entities, 1, 3).([]*entity.Entity)
+	if len(gotE) != 2 || gotE[0].Slug != "b" {
+		t.Errorf("sliceHelper []*entity.Entity: got %v", gotE)
+	}
+
+	// Test with []interface{} type
+	iface := []interface{}{"x", "y", "z"}
+	gotI := sliceHelper(iface, 0, 2).([]interface{})
+	if len(gotI) != 2 {
+		t.Errorf("sliceHelper []interface{}: got %v", gotI)
+	}
+
+	// Test with unknown type (passthrough)
+	num := 42
+	if sliceHelper(num, 0, 1) != 42 {
+		t.Error("sliceHelper unknown type should pass through")
+	}
+}
+
+// ── BuildFuncMap ──────────────────────────────────────────────────────────────
+
+func TestBuildFuncMap(t *testing.T) {
+	fm := BuildFuncMap()
+	if fm == nil {
+		t.Fatal("BuildFuncMap returned nil")
+	}
+	// Spot-check a few expected function names are present.
+	for _, name := range []string{"slug", "lower", "upper", "join", "seq", "dict", "first", "last"} {
+		if fm[name] == nil {
+			t.Errorf("BuildFuncMap: missing %q", name)
+		}
+	}
 }
 
 func TestFirstLast_EntitySlice(t *testing.T) {

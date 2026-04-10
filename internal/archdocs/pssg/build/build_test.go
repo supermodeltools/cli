@@ -2,8 +2,10 @@ package build
 
 import (
 	"encoding/json"
+	"html/template"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"unicode/utf8"
 
@@ -210,6 +212,64 @@ func TestToBreadcrumbItems(t *testing.T) {
 	}
 	if items[1].Name != "Recipes" {
 		t.Errorf("second item: got %+v", items[1])
+	}
+}
+
+// ── toTemplateHTML ────────────────────────────────────────────────────────────
+
+func TestToTemplateHTML(t *testing.T) {
+	input := "<strong>hello &amp; world</strong>"
+	got := toTemplateHTML(input)
+	if got != template.HTML(input) {
+		t.Errorf("toTemplateHTML: got %q, want %q", got, input)
+	}
+}
+
+// ── writeShareSVG ─────────────────────────────────────────────────────────────
+
+func TestWriteShareSVG(t *testing.T) {
+	outDir := t.TempDir()
+	svg := `<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>`
+	if err := writeShareSVG(outDir, "test.svg", svg); err != nil {
+		t.Fatalf("writeShareSVG: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(outDir, "images", "share", "test.svg"))
+	if err != nil {
+		t.Fatalf("file not created: %v", err)
+	}
+	if !strings.Contains(string(data), "<svg") {
+		t.Error("written file should contain SVG content")
+	}
+}
+
+// ── maybeWriteShareSVG ────────────────────────────────────────────────────────
+
+func TestMaybeWriteShareSVG_Disabled(t *testing.T) {
+	outDir := t.TempDir()
+	b := NewBuilder(&config.Config{
+		Output: config.OutputConfig{ShareImages: false},
+		Paths:  config.PathsConfig{Output: outDir},
+	}, false)
+	if err := b.maybeWriteShareSVG(outDir, "test.svg", "<svg/>"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// File should NOT be written when ShareImages=false.
+	if _, err := os.Stat(filepath.Join(outDir, "images", "share", "test.svg")); !os.IsNotExist(err) {
+		t.Error("share image should not be written when ShareImages=false")
+	}
+}
+
+func TestMaybeWriteShareSVG_Enabled(t *testing.T) {
+	outDir := t.TempDir()
+	b := NewBuilder(&config.Config{
+		Output: config.OutputConfig{ShareImages: true},
+		Paths:  config.PathsConfig{Output: outDir},
+	}, false)
+	if err := b.maybeWriteShareSVG(outDir, "test.svg", "<svg/>"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "images", "share", "test.svg")); err != nil {
+		t.Errorf("share image should be written when ShareImages=true: %v", err)
 	}
 }
 
