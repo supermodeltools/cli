@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/supermodeltools/cli/internal/analyze"
 	"github.com/supermodeltools/cli/internal/api"
@@ -171,6 +172,14 @@ func extract(g *api.Graph, target string, depth int, includeTypes bool) *Slice {
 // reachableImports does a BFS on IMPORTS edges from seed, up to maxDepth hops,
 // and returns the file/package paths of the imported nodes.
 func reachableImports(g *api.Graph, seedID string, nodeByID map[string]*api.Node, rels []api.Relationship, maxDepth int) []string {
+	// Pre-index imports edges by source node to avoid O(queue × rels) inner loop.
+	importEdges := make(map[string][]string, len(rels)/2)
+	for _, rel := range rels {
+		if rel.Type == "imports" || rel.Type == "wildcard_imports" {
+			importEdges[rel.StartNode] = append(importEdges[rel.StartNode], rel.EndNode)
+		}
+	}
+
 	visited := map[string]bool{seedID: true}
 	queue := []string{seedID}
 	var imports []string
@@ -178,16 +187,13 @@ func reachableImports(g *api.Graph, seedID string, nodeByID map[string]*api.Node
 	for depth := 0; depth < maxDepth && len(queue) > 0; depth++ {
 		next := make([]string, 0)
 		for _, cur := range queue {
-			for _, rel := range rels {
-				if rel.Type != "imports" && rel.Type != "wildcard_imports" {
+			for _, endNode := range importEdges[cur] {
+				if visited[endNode] {
 					continue
 				}
-				if rel.StartNode != cur || visited[rel.EndNode] {
-					continue
-				}
-				visited[rel.EndNode] = true
-				next = append(next, rel.EndNode)
-				if n := nodeByID[rel.EndNode]; n != nil {
+				visited[endNode] = true
+				next = append(next, endNode)
+				if n := nodeByID[endNode]; n != nil {
 					p := n.Prop("path", "name", "importPath")
 					if p != "" {
 						imports = append(imports, p)
@@ -265,7 +271,7 @@ func estimateTokens(sl *Slice) int {
 	for _, c := range sl.CalledBy {
 		s += c.Caller + c.File
 	}
-	return len(s) / 4
+	return utf8.RuneCountInString(s) / 4
 }
 
 func pathMatches(nodePath, target string) bool {
