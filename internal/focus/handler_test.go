@@ -302,3 +302,80 @@ func TestRender_MarkdownTokenHint(t *testing.T) {
 		t.Errorf("should show token hint:\n%s", buf.String())
 	}
 }
+
+// ── extractTypes ──────────────────────────────────────────────────────────────
+
+func TestExtractTypes(t *testing.T) {
+	g := &api.Graph{
+		Nodes: []api.Node{
+			{ID: "f1", Labels: []string{"File"}, Properties: map[string]any{"path": "auth/handler.go"}},
+			{ID: "cls1", Labels: []string{"Class"}, Properties: map[string]any{"name": "AuthService", "file": "auth/handler.go"}},
+			{ID: "iface1", Labels: []string{"Interface"}, Properties: map[string]any{"name": "Authenticator", "file": "auth/handler.go"}},
+		},
+		Relationships: []api.Relationship{
+			{ID: "r1", Type: "declares_class", StartNode: "f1", EndNode: "cls1"},
+			{ID: "r2", Type: "defines", StartNode: "f1", EndNode: "iface1"},
+		},
+	}
+	nodeByID := map[string]*api.Node{}
+	for i := range g.Nodes {
+		nodeByID[g.Nodes[i].ID] = &g.Nodes[i]
+	}
+	types := extractTypes(g, "f1", nodeByID, g.Rels())
+	if len(types) != 2 {
+		t.Fatalf("want 2 types, got %d: %v", len(types), types)
+	}
+	// Class should have kind "class"
+	var foundClass bool
+	for _, typ := range types {
+		if typ.Name == "AuthService" && typ.Kind == "class" {
+			foundClass = true
+		}
+	}
+	if !foundClass {
+		t.Errorf("should have AuthService with kind='class', got %v", types)
+	}
+}
+
+func TestExtractTypes_OtherFileExcluded(t *testing.T) {
+	// Relations from a different file should not appear
+	g := &api.Graph{
+		Nodes: []api.Node{
+			{ID: "f1", Labels: []string{"File"}, Properties: map[string]any{"path": "a.go"}},
+			{ID: "f2", Labels: []string{"File"}, Properties: map[string]any{"path": "b.go"}},
+			{ID: "cls1", Labels: []string{"Class"}, Properties: map[string]any{"name": "Foo"}},
+		},
+		Relationships: []api.Relationship{
+			{ID: "r1", Type: "declares_class", StartNode: "f2", EndNode: "cls1"}, // from f2, not f1
+		},
+	}
+	nodeByID := map[string]*api.Node{}
+	for i := range g.Nodes {
+		nodeByID[g.Nodes[i].ID] = &g.Nodes[i]
+	}
+	types := extractTypes(g, "f1", nodeByID, g.Rels())
+	if len(types) != 0 {
+		t.Errorf("other file's types should not appear, got %v", types)
+	}
+}
+
+// ── extract with includeTypes ─────────────────────────────────────────────────
+
+func TestExtract_WithTypes(t *testing.T) {
+	g := &api.Graph{
+		Nodes: []api.Node{
+			{ID: "f1", Labels: []string{"File"}, Properties: map[string]any{"path": "auth.go"}},
+			{ID: "cls1", Labels: []string{"Class"}, Properties: map[string]any{"name": "AuthService"}},
+		},
+		Relationships: []api.Relationship{
+			{ID: "r1", Type: "declares_class", StartNode: "f1", EndNode: "cls1"},
+		},
+	}
+	sl := extract(g, "auth.go", 1, true)
+	if sl == nil {
+		t.Fatal("nil slice")
+	}
+	if len(sl.Types) != 1 || sl.Types[0].Name != "AuthService" {
+		t.Errorf("types: got %v", sl.Types)
+	}
+}
