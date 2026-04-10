@@ -9,6 +9,8 @@ import (
 
 	"github.com/supermodeltools/cli/internal/archdocs/pssg/config"
 	"github.com/supermodeltools/cli/internal/archdocs/pssg/entity"
+	"github.com/supermodeltools/cli/internal/archdocs/pssg/render"
+	"github.com/supermodeltools/cli/internal/archdocs/pssg/taxonomy"
 )
 
 func newBuilder(outDir string) *Builder {
@@ -122,6 +124,92 @@ func TestGenerateSearchIndex_DisabledSearch(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(outDir, "search-index.json")); !os.IsNotExist(err) {
 		t.Error("search-index.json should not be written when search is disabled")
+	}
+}
+
+// ── shareImageURL ─────────────────────────────────────────────────────────────
+
+func TestShareImageURL(t *testing.T) {
+	got := shareImageURL("https://example.com", "recipe-soup.png")
+	want := "https://example.com/images/share/recipe-soup.png"
+	if got != want {
+		t.Errorf("shareImageURL: got %q, want %q", got, want)
+	}
+}
+
+// ── countTaxEntries ───────────────────────────────────────────────────────────
+
+func TestCountTaxEntries(t *testing.T) {
+	taxes := []taxonomy.Taxonomy{
+		{Entries: []taxonomy.Entry{{}, {}}},
+		{Entries: []taxonomy.Entry{{}}},
+	}
+	if got := countTaxEntries(taxes); got != 3 {
+		t.Errorf("countTaxEntries: got %d, want 3", got)
+	}
+	if got := countTaxEntries(nil); got != 0 {
+		t.Errorf("countTaxEntries(nil): got %d, want 0", got)
+	}
+}
+
+// ── countFieldDistribution ────────────────────────────────────────────────────
+
+func TestCountFieldDistribution(t *testing.T) {
+	entities := []*entity.Entity{
+		{Fields: map[string]interface{}{"cuisine": "Italian"}},
+		{Fields: map[string]interface{}{"cuisine": "Italian"}},
+		{Fields: map[string]interface{}{"cuisine": "French"}},
+		{Fields: map[string]interface{}{"cuisine": ""}}, // empty, should be skipped
+	}
+	result := countFieldDistribution(entities, "cuisine", 10)
+	if len(result) != 2 {
+		t.Fatalf("want 2 entries, got %d", len(result))
+	}
+	// Should be sorted desc by count
+	if result[0].Name != "Italian" || result[0].Count != 2 {
+		t.Errorf("first entry: got {%s %d}, want {Italian 2}", result[0].Name, result[0].Count)
+	}
+	if result[1].Name != "French" || result[1].Count != 1 {
+		t.Errorf("second entry: got {%s %d}, want {French 1}", result[1].Name, result[1].Count)
+	}
+}
+
+func TestCountFieldDistribution_Limit(t *testing.T) {
+	entities := []*entity.Entity{
+		{Fields: map[string]interface{}{"tag": "a"}},
+		{Fields: map[string]interface{}{"tag": "a"}},
+		{Fields: map[string]interface{}{"tag": "b"}},
+		{Fields: map[string]interface{}{"tag": "b"}},
+		{Fields: map[string]interface{}{"tag": "c"}},
+	}
+	result := countFieldDistribution(entities, "tag", 2)
+	if len(result) != 2 {
+		t.Errorf("limit=2: want 2 entries, got %d", len(result))
+	}
+}
+
+func TestCountFieldDistribution_Empty(t *testing.T) {
+	if got := countFieldDistribution(nil, "field", 10); len(got) != 0 {
+		t.Errorf("nil entities: want empty, got %v", got)
+	}
+}
+
+// ── toBreadcrumbItems ─────────────────────────────────────────────────────────
+
+func TestToBreadcrumbItems(t *testing.T) {
+	bcs := []render.Breadcrumb{
+		{Name: "Home", URL: "https://example.com/"},
+		{Name: "Recipes", URL: "https://example.com/recipes/"},
+	}
+	items := toBreadcrumbItems(bcs)
+	if len(items) != 2 {
+		t.Fatalf("want 2 items, got %d", len(items))
+	}
+	if items[0].Name != "Home" || items[0].URL != "https://example.com/" {
+		t.Errorf("first item: got %+v", items[0])
+	}
+	if items[1].Name != "Recipes" {
+		t.Errorf("second item: got %+v", items[1])
 	}
 }
 
