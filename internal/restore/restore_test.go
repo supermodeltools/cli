@@ -52,6 +52,18 @@ func TestCountTokens_RealText(t *testing.T) {
 	}
 }
 
+func TestCountTokens_MultiByteChars(t *testing.T) {
+	// Prior bug: used len(text)/4 (bytes) not RuneCountInString/4.
+	// Each CJK character is 3 bytes; 100 of them = 300 bytes but only 100 runes.
+	// charEstimate must be 100/4 = 25, not 300/4 = 75.
+	cjk := strings.Repeat("中", 100) // 100 runes, 300 bytes
+	got := CountTokens(cjk)
+	// charEstimate = 25, wordEstimate = 1*100/75 = 1 → 25
+	if got != 25 {
+		t.Errorf("100 CJK chars: want 25 tokens, got %d (byte-based would give 75)", got)
+	}
+}
+
 // ── isHorizontalRule ─────────────────────────────────────────────────────────
 
 func TestIsHorizontalRule(t *testing.T) {

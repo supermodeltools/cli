@@ -227,6 +227,44 @@ func TestPrintMatches_HumanShowsMatchCount(t *testing.T) {
 	}
 }
 
+// ── dedupSorted ───────────────────────────────────────────────────────────────
+
+func TestDedupSorted_Basic(t *testing.T) {
+	got := dedupSorted([]string{"c", "a", "b", "a"})
+	want := []string{"a", "b", "c"}
+	if len(got) != len(want) {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("index %d: want %q, got %q", i, want[i], got[i])
+		}
+	}
+}
+
+func TestDedupSorted_Empty(t *testing.T) {
+	if got := dedupSorted(nil); got != nil {
+		t.Errorf("nil input: want nil, got %v", got)
+	}
+	if got := dedupSorted([]string{}); got != nil {
+		t.Errorf("empty input: want nil, got %v", got)
+	}
+}
+
+func TestDedupSorted_DoesNotMutateInput(t *testing.T) {
+	// Prior bug: out := ss[:1] shared the backing array, so appends overwrote
+	// the original slice. Verify the input is unchanged after dedupSorted.
+	input := []string{"b", "a", "c", "a"}
+	snapshot := make([]string, len(input))
+	copy(snapshot, input)
+	dedupSorted(input)
+	for i, v := range snapshot {
+		if input[i] != v {
+			t.Errorf("input mutated at index %d: was %q, now %q", i, v, input[i])
+		}
+	}
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func makeGraph() *api.Graph {
