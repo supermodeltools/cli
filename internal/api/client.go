@@ -118,8 +118,8 @@ func (c *Client) pollLoop(ctx context.Context, post func() (*JobResponse, error)
 
 // PreviousDomain holds domain name + subdomain count for seeding the LLM prompt.
 type PreviousDomain struct {
-	Name            string `json:"name"`
-	SubdomainCount  int    `json:"subdomainCount"`
+	Name           string `json:"name"`
+	SubdomainCount int    `json:"subdomainCount"`
 }
 
 // AnalyzeShards uploads a repository ZIP and runs the full analysis pipeline,
