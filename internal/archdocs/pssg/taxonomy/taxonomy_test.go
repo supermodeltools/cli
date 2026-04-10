@@ -90,6 +90,133 @@ func TestGroupByLetterEmpty(t *testing.T) {
 	}
 }
 
+// ── toStringSlice ─────────────────────────────────────────────────────────────
+
+func TestToStringSlice(t *testing.T) {
+	if got := toStringSlice([]string{"a", "b"}); len(got) != 2 || got[0] != "a" {
+		t.Errorf("[]string: got %v", got)
+	}
+	if got := toStringSlice("single"); len(got) != 1 || got[0] != "single" {
+		t.Errorf("string: got %v", got)
+	}
+	if got := toStringSlice([]interface{}{"x", "y"}); len(got) != 2 || got[0] != "x" {
+		t.Errorf("[]interface{}: got %v", got)
+	}
+	if got := toStringSlice(42); got != nil {
+		t.Errorf("int: want nil, got %v", got)
+	}
+}
+
+// ── HubPageURL ────────────────────────────────────────────────────────────────
+
+func TestHubPageURL(t *testing.T) {
+	if got := HubPageURL("cuisine", "italian", 1); got != "/cuisine/italian.html" {
+		t.Errorf("page 1: got %q", got)
+	}
+	if got := HubPageURL("cuisine", "italian", 2); got != "/cuisine/italian-page-2.html" {
+		t.Errorf("page 2: got %q", got)
+	}
+	if got := HubPageURL("cuisine", "italian", 10); got != "/cuisine/italian-page-10.html" {
+		t.Errorf("page 10: got %q", got)
+	}
+}
+
+// ── LetterPageURL ─────────────────────────────────────────────────────────────
+
+func TestLetterPageURL(t *testing.T) {
+	if got := LetterPageURL("cuisine", "A"); got != "/cuisine/letter-a.html" {
+		t.Errorf("A: got %q", got)
+	}
+	if got := LetterPageURL("cuisine", "#"); got != "/cuisine/letter-num.html" {
+		t.Errorf("#: got %q", got)
+	}
+	if got := LetterPageURL("tags", "Z"); got != "/tags/letter-z.html" {
+		t.Errorf("Z: got %q", got)
+	}
+}
+
+// ── FindEntry ─────────────────────────────────────────────────────────────────
+
+func TestFindEntry(t *testing.T) {
+	tx := &Taxonomy{
+		Entries: []Entry{
+			{Slug: "italian", Name: "Italian"},
+			{Slug: "french", Name: "French"},
+		},
+	}
+	e := tx.FindEntry("french")
+	if e == nil {
+		t.Fatal("FindEntry('french') returned nil")
+	}
+	if e.Name != "French" {
+		t.Errorf("FindEntry('french').Name = %q, want 'French'", e.Name)
+	}
+	if tx.FindEntry("japanese") != nil {
+		t.Error("FindEntry for unknown slug should return nil")
+	}
+}
+
+// ── ComputePagination ─────────────────────────────────────────────────────────
+
+func TestComputePagination_SinglePage(t *testing.T) {
+	e := func(n int) []*entity.Entity {
+		s := make([]*entity.Entity, n)
+		for i := range s {
+			s[i] = &entity.Entity{}
+		}
+		return s
+	}
+	entry := Entry{Slug: "italian", Entities: e(5)}
+	info := ComputePagination(entry, 1, 20, "cuisine")
+	if info.TotalPages != 1 {
+		t.Errorf("TotalPages: got %d, want 1", info.TotalPages)
+	}
+	if info.TotalItems != 5 {
+		t.Errorf("TotalItems: got %d, want 5", info.TotalItems)
+	}
+	if info.PrevURL != "" {
+		t.Error("page 1 should have no PrevURL")
+	}
+	if info.NextURL != "" {
+		t.Error("single page should have no NextURL")
+	}
+}
+
+func TestComputePagination_MultiPage(t *testing.T) {
+	e := func(n int) []*entity.Entity {
+		s := make([]*entity.Entity, n)
+		for i := range s {
+			s[i] = &entity.Entity{}
+		}
+		return s
+	}
+	entry := Entry{Slug: "italian", Entities: e(10)}
+	info := ComputePagination(entry, 2, 4, "cuisine")
+	if info.TotalPages != 3 {
+		t.Errorf("TotalPages: got %d, want 3", info.TotalPages)
+	}
+	if info.CurrentPage != 2 {
+		t.Errorf("CurrentPage: got %d, want 2", info.CurrentPage)
+	}
+	if info.PrevURL != "/cuisine/italian.html" {
+		t.Errorf("PrevURL: got %q", info.PrevURL)
+	}
+	if info.NextURL != "/cuisine/italian-page-3.html" {
+		t.Errorf("NextURL: got %q", info.NextURL)
+	}
+	if len(info.PageURLs) != 3 {
+		t.Errorf("PageURLs: got %d entries", len(info.PageURLs))
+	}
+}
+
+func TestComputePagination_Empty(t *testing.T) {
+	entry := Entry{Slug: "empty"}
+	info := ComputePagination(entry, 1, 20, "cuisine")
+	if info.TotalPages != 1 {
+		t.Errorf("empty entries: TotalPages should be 1, got %d", info.TotalPages)
+	}
+}
+
 // TestTopEntries verifies that TopEntries returns entries sorted by entity count.
 func TestTopEntries(t *testing.T) {
 	e := func(n int) []*entity.Entity {
