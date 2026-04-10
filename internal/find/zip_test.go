@@ -14,6 +14,12 @@ func TestIsGitRepo_NotGit(t *testing.T) {
 	}
 }
 
+func TestIsWorktreeClean_NonGitDir(t *testing.T) {
+	if isWorktreeClean(t.TempDir()) {
+		t.Error("non-git dir should not be considered clean")
+	}
+}
+
 func TestWalkZip_IncludesFiles(t *testing.T) {
 	src := t.TempDir()
 	if err := os.WriteFile(filepath.Join(src, "main.go"), []byte("package main"), 0600); err != nil {

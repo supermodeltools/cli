@@ -257,3 +257,103 @@ func TestComputeTotalTime(t *testing.T) {
 		}
 	}
 }
+
+// ── GenerateRecipeSchema ──────────────────────────────────────────────────────
+
+func TestGenerateRecipeSchema_Basic(t *testing.T) {
+	g := NewGenerator(
+		config.SiteConfig{BaseURL: "https://example.com", Name: "My Site"},
+		config.SchemaConfig{DatePublished: "2024-01-15"},
+	)
+	e := &entity.Entity{
+		Slug: "pasta-carbonara",
+		Fields: map[string]interface{}{
+			"title":       "Pasta Carbonara",
+			"description": "A classic Italian pasta dish.",
+		},
+	}
+	schema := g.GenerateRecipeSchema(e, "https://example.com/pasta-carbonara.html")
+	if schema["@type"] != "Recipe" {
+		t.Errorf("@type: got %v, want Recipe", schema["@type"])
+	}
+	if schema["name"] != "Pasta Carbonara" {
+		t.Errorf("name: got %v", schema["name"])
+	}
+	if schema["url"] != "https://example.com/pasta-carbonara.html" {
+		t.Errorf("url: got %v", schema["url"])
+	}
+}
+
+func TestGenerateRecipeSchema_WithAuthorAndTimes(t *testing.T) {
+	g := NewGenerator(
+		config.SiteConfig{BaseURL: "https://example.com"},
+		config.SchemaConfig{},
+	)
+	e := &entity.Entity{
+		Slug: "soup",
+		Fields: map[string]interface{}{
+			"title":           "Tomato Soup",
+			"author":          "Chef Alice",
+			"prep_time":       "PT10M",
+			"cook_time":       "PT30M",
+			"recipe_category": "Soup",
+			"cuisine":         "Italian",
+			"servings":        float64(4),
+			"calories":        float64(200),
+		},
+	}
+	schema := g.GenerateRecipeSchema(e, "https://example.com/soup.html")
+	if _, ok := schema["author"]; !ok {
+		t.Error("schema should have author")
+	}
+	if schema["prepTime"] != "PT10M" {
+		t.Errorf("prepTime: got %v", schema["prepTime"])
+	}
+	if schema["cookTime"] != "PT30M" {
+		t.Errorf("cookTime: got %v", schema["cookTime"])
+	}
+	if _, ok := schema["totalTime"]; !ok {
+		t.Error("schema should have totalTime when both prep and cook are set")
+	}
+	if schema["recipeCategory"] != "Soup" {
+		t.Errorf("recipeCategory: got %v", schema["recipeCategory"])
+	}
+	if schema["recipeCuisine"] != "Italian" {
+		t.Errorf("recipeCuisine: got %v", schema["recipeCuisine"])
+	}
+}
+
+// ── GenerateCollectionPageSchema ──────────────────────────────────────────────
+
+func TestGenerateCollectionPageSchema_Basic(t *testing.T) {
+	g := NewGenerator(config.SiteConfig{BaseURL: "https://example.com"}, config.SchemaConfig{})
+	items := []ItemListEntry{
+		{Name: "Pasta", URL: "https://example.com/pasta.html"},
+		{Name: "Soup", URL: "https://example.com/soup.html"},
+	}
+	schema := g.GenerateCollectionPageSchema("Italian Recipes", "Best Italian food", "https://example.com/italian/", items, "https://example.com/img.png")
+	if schema["@type"] != "CollectionPage" {
+		t.Errorf("@type: got %v, want CollectionPage", schema["@type"])
+	}
+	if schema["name"] != "Italian Recipes" {
+		t.Errorf("name: got %v", schema["name"])
+	}
+	if schema["image"] != "https://example.com/img.png" {
+		t.Errorf("image: got %v", schema["image"])
+	}
+	main, ok := schema["mainEntity"].(map[string]interface{})
+	if !ok {
+		t.Fatal("mainEntity should be a map")
+	}
+	if main["numberOfItems"] != 2 {
+		t.Errorf("numberOfItems: got %v, want 2", main["numberOfItems"])
+	}
+}
+
+func TestGenerateCollectionPageSchema_NoImage(t *testing.T) {
+	g := NewGenerator(config.SiteConfig{}, config.SchemaConfig{})
+	schema := g.GenerateCollectionPageSchema("Name", "Desc", "https://example.com/", nil, "")
+	if _, ok := schema["image"]; ok {
+		t.Error("should not set image when imageURL is empty")
+	}
+}
