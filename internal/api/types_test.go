@@ -232,6 +232,108 @@ func TestError_Error_WithoutCode(t *testing.T) {
 	}
 }
 
+// ── GraphFromShardIR ──────────────────────────────────────────────────────────
+
+func TestGraphFromShardIR_NodesAndRels(t *testing.T) {
+	ir := &ShardIR{
+		Repo: "myorg/myrepo",
+		Graph: ShardGraph{
+			Nodes: []Node{
+				{ID: "n1", Labels: []string{"File"}, Properties: map[string]any{"filePath": "src/a.go"}},
+				{ID: "n2", Labels: []string{"Function"}, Properties: map[string]any{"name": "doThing"}},
+			},
+			Relationships: []Relationship{
+				{ID: "r1", Type: "defines_function", StartNode: "n1", EndNode: "n2"},
+			},
+		},
+	}
+	g := GraphFromShardIR(ir)
+
+	if len(g.Nodes) != 2 {
+		t.Errorf("nodes: got %d, want 2", len(g.Nodes))
+	}
+	if len(g.Relationships) != 1 {
+		t.Errorf("relationships: got %d, want 1", len(g.Relationships))
+	}
+	if g.Nodes[0].ID != "n1" {
+		t.Errorf("first node ID: got %q", g.Nodes[0].ID)
+	}
+}
+
+func TestGraphFromShardIR_RepoID(t *testing.T) {
+	ir := &ShardIR{Repo: "acme/backend"}
+	g := GraphFromShardIR(ir)
+	if got := g.RepoID(); got != "acme/backend" {
+		t.Errorf("RepoID: got %q, want 'acme/backend'", got)
+	}
+}
+
+func TestGraphFromShardIR_RelsViaRels(t *testing.T) {
+	// Rels() should return the Relationships slice (not Edges)
+	ir := &ShardIR{
+		Graph: ShardGraph{
+			Relationships: []Relationship{
+				{ID: "r1", Type: "imports"},
+				{ID: "r2", Type: "calls"},
+			},
+		},
+	}
+	g := GraphFromShardIR(ir)
+	rels := g.Rels()
+	if len(rels) != 2 {
+		t.Errorf("Rels(): got %d, want 2", len(rels))
+	}
+}
+
+func TestGraphFromShardIR_Empty(t *testing.T) {
+	ir := &ShardIR{}
+	g := GraphFromShardIR(ir)
+	if g == nil {
+		t.Fatal("GraphFromShardIR returned nil")
+	}
+	if len(g.Nodes) != 0 {
+		t.Errorf("empty IR: expected 0 nodes, got %d", len(g.Nodes))
+	}
+	if g.RepoID() != "" {
+		t.Errorf("empty IR: expected empty repoId, got %q", g.RepoID())
+	}
+}
+
+func TestGraphFromShardIR_NodeByID(t *testing.T) {
+	ir := &ShardIR{
+		Graph: ShardGraph{
+			Nodes: []Node{
+				{ID: "fn1", Labels: []string{"Function"}, Properties: map[string]any{"name": "myFunc"}},
+			},
+		},
+	}
+	g := GraphFromShardIR(ir)
+	n, ok := g.NodeByID("fn1")
+	if !ok {
+		t.Fatal("NodeByID('fn1') returned false")
+	}
+	if n.Prop("name") != "myFunc" {
+		t.Errorf("name prop: got %q", n.Prop("name"))
+	}
+}
+
+func TestGraphFromShardIR_NodesByLabel(t *testing.T) {
+	ir := &ShardIR{
+		Graph: ShardGraph{
+			Nodes: []Node{
+				{ID: "f1", Labels: []string{"File"}},
+				{ID: "fn1", Labels: []string{"Function"}},
+				{ID: "f2", Labels: []string{"File"}},
+			},
+		},
+	}
+	g := GraphFromShardIR(ir)
+	files := g.NodesByLabel("File")
+	if len(files) != 2 {
+		t.Errorf("NodesByLabel('File'): got %d, want 2", len(files))
+	}
+}
+
 func containsStr(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub ||
 		func() bool {

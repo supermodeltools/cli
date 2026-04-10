@@ -204,6 +204,40 @@ func makeTestGraph() *api.Graph {
 	}
 }
 
+// ── boolArg / intArg ──────────────────────────────────────────────────────────
+
+func TestBoolArg(t *testing.T) {
+	args := map[string]any{"flag": true, "off": false, "num": 42}
+	if !boolArg(args, "flag") {
+		t.Error("boolArg(flag=true) should return true")
+	}
+	if boolArg(args, "off") {
+		t.Error("boolArg(off=false) should return false")
+	}
+	if boolArg(args, "num") {
+		t.Error("boolArg(num=42) should return false (wrong type)")
+	}
+	if boolArg(args, "absent") {
+		t.Error("boolArg(absent) should return false")
+	}
+}
+
+func TestIntArg(t *testing.T) {
+	args := map[string]any{"count": float64(5), "zero": float64(0), "str": "hello"}
+	if got := intArg(args, "count"); got != 5 {
+		t.Errorf("intArg(count=5.0) = %d, want 5", got)
+	}
+	if got := intArg(args, "zero"); got != 0 {
+		t.Errorf("intArg(zero=0.0) = %d, want 0", got)
+	}
+	if got := intArg(args, "str"); got != 0 {
+		t.Errorf("intArg(str='hello') = %d, want 0 (wrong type)", got)
+	}
+	if got := intArg(args, "absent"); got != 0 {
+		t.Errorf("intArg(absent) = %d, want 0", got)
+	}
+}
+
 func TestFormatImpact_NoEntryPoints(t *testing.T) {
 	result := &api.ImpactResult{
 		Metadata: api.ImpactMetadata{TargetsAnalyzed: 1, TotalFiles: 50, TotalFunctions: 200},
