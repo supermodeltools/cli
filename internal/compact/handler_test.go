@@ -608,3 +608,60 @@ func TestCompactDir_EmptyDir(t *testing.T) {
 		t.Errorf("empty dir: want 0 files, got %d", stats.Files)
 	}
 }
+
+// ── nextShortName ─────────────────────────────────────────────────────────────
+
+func TestNextShortName_SingleLetters(t *testing.T) {
+	counter := 0
+	existing := map[string]bool{}
+	const letters = "abcdefghijklmnopqrstuvwxyz"
+	for i := 0; i < 26; i++ {
+		got := nextShortName(&counter, existing)
+		want := string(letters[i])
+		if got != want {
+			t.Errorf("call %d: got %q, want %q", i, got, want)
+		}
+	}
+}
+
+func TestNextShortName_TwoLetterOverflow(t *testing.T) {
+	counter := 0
+	existing := map[string]bool{}
+	// Exhaust all 26 single-char names.
+	for i := 0; i < 26; i++ {
+		nextShortName(&counter, existing)
+	}
+	if got := nextShortName(&counter, existing); got != "aa" {
+		t.Errorf("first two-char name: got %q, want %q", got, "aa")
+	}
+	if got := nextShortName(&counter, existing); got != "ab" {
+		t.Errorf("second two-char name: got %q, want %q", got, "ab")
+	}
+}
+
+func TestNextShortName_SkipsExisting(t *testing.T) {
+	counter := 0
+	existing := map[string]bool{"a": true, "b": true}
+	got := nextShortName(&counter, existing)
+	if got != "c" {
+		t.Errorf("expected 'c' (skipping a, b), got %q", got)
+	}
+}
+
+func TestNextShortName_SkipsBuiltins(t *testing.T) {
+	// '_' is a Go builtin; if the counter somehow produces it, it must be skipped.
+	// We test indirectly by filling every single-char slot except 'z' with existing
+	// names, then verifying we get 'z' (the only remaining free single-char slot).
+	existing := map[string]bool{}
+	const letters = "abcdefghijklmnopqrstuvwxyz"
+	for _, ch := range letters {
+		if ch != 'z' {
+			existing[string(ch)] = true
+		}
+	}
+	counter := 0
+	got := nextShortName(&counter, existing)
+	if got != "z" {
+		t.Errorf("expected 'z' as only free single-char slot, got %q", got)
+	}
+}

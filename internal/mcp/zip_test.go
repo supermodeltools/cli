@@ -1,4 +1,4 @@
-package analyze
+package mcp
 
 import (
 	"archive/zip"
@@ -8,23 +8,19 @@ import (
 	"testing"
 )
 
-func TestIsGitRepo_NonGitDir(t *testing.T) {
-	// isGitRepo uses `git rev-parse --git-dir`; an empty temp dir is not a git repo.
+func TestMCPIsGitRepo_NonGitDir(t *testing.T) {
 	if isGitRepo(t.TempDir()) {
 		t.Error("empty temp dir should not be a git repo")
 	}
 }
 
-// ── isWorktreeClean ───────────────────────────────────────────────────────────
-
-func TestIsWorktreeClean_NonGitDir(t *testing.T) {
-	// git status on a non-repo exits non-zero → returns false
+func TestMCPIsWorktreeClean_NonGitDir(t *testing.T) {
 	if isWorktreeClean(t.TempDir()) {
 		t.Error("non-git dir should not be considered clean")
 	}
 }
 
-func TestWalkZip_IncludesFiles(t *testing.T) {
+func TestMCPWalkZip_IncludesFiles(t *testing.T) {
 	src := t.TempDir()
 	if err := os.WriteFile(filepath.Join(src, "main.go"), []byte("package main"), 0600); err != nil {
 		t.Fatal(err)
@@ -34,13 +30,13 @@ func TestWalkZip_IncludesFiles(t *testing.T) {
 	if err := walkZip(src, dest); err != nil {
 		t.Fatalf("walkZip: %v", err)
 	}
-	entries := readZipEntries(t, dest)
+	entries := readMCPZipEntries(t, dest)
 	if _, ok := entries["main.go"]; !ok {
 		t.Error("zip should contain main.go")
 	}
 }
 
-func TestWalkZip_SkipsHiddenFiles(t *testing.T) {
+func TestMCPWalkZip_SkipsHiddenFiles(t *testing.T) {
 	src := t.TempDir()
 	if err := os.WriteFile(filepath.Join(src, ".env"), []byte("SECRET=x"), 0600); err != nil {
 		t.Fatal(err)
@@ -53,7 +49,7 @@ func TestWalkZip_SkipsHiddenFiles(t *testing.T) {
 	if err := walkZip(src, dest); err != nil {
 		t.Fatal(err)
 	}
-	entries := readZipEntries(t, dest)
+	entries := readMCPZipEntries(t, dest)
 	if _, ok := entries[".env"]; ok {
 		t.Error("zip should not contain .env")
 	}
@@ -62,7 +58,7 @@ func TestWalkZip_SkipsHiddenFiles(t *testing.T) {
 	}
 }
 
-func TestWalkZip_SkipsSkipDirs(t *testing.T) {
+func TestMCPWalkZip_SkipsSkipDirs(t *testing.T) {
 	src := t.TempDir()
 	nmDir := filepath.Join(src, "node_modules")
 	if err := os.Mkdir(nmDir, 0750); err != nil {
@@ -79,7 +75,7 @@ func TestWalkZip_SkipsSkipDirs(t *testing.T) {
 	if err := walkZip(src, dest); err != nil {
 		t.Fatal(err)
 	}
-	entries := readZipEntries(t, dest)
+	entries := readMCPZipEntries(t, dest)
 	for name := range entries {
 		if strings.HasPrefix(name, "node_modules/") || name == "node_modules" {
 			t.Errorf("should not contain node_modules entry: %s", name)
@@ -87,7 +83,7 @@ func TestWalkZip_SkipsSkipDirs(t *testing.T) {
 	}
 }
 
-func TestCreateZip_NonGitDir(t *testing.T) {
+func TestMCPCreateZip_NonGitDir(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main"), 0600); err != nil {
 		t.Fatal(err)
@@ -102,7 +98,7 @@ func TestCreateZip_NonGitDir(t *testing.T) {
 	}
 }
 
-func readZipEntries(t *testing.T, path string) map[string]bool {
+func readMCPZipEntries(t *testing.T, path string) map[string]bool {
 	t.Helper()
 	r, err := zip.OpenReader(path)
 	if err != nil {
