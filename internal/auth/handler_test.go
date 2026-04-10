@@ -186,3 +186,14 @@ func TestLogout(t *testing.T) {
 		t.Errorf("expected empty key after logout, got %q", cfg.APIKey)
 	}
 }
+
+func TestLogout_AlreadyLoggedOut(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("SUPERMODEL_API_KEY", "")
+
+	// No API key set.
+	if err := Logout(context.Background()); err != nil {
+		t.Fatalf("Logout when already logged out: %v", err)
+	}
+}

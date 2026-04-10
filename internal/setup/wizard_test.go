@@ -173,3 +173,17 @@ func TestInstallHook_InvalidJSON(t *testing.T) {
 		t.Error("installHook with invalid JSON: want error to avoid data loss")
 	}
 }
+
+// ── detectClaude ──────────────────────────────────────────────────────────────
+
+func TestDetectClaude_WithDotClaudeDir(t *testing.T) {
+	// Simulate HOME with a .claude directory present.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.Mkdir(filepath.Join(home, ".claude"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if !detectClaude() {
+		t.Error("detectClaude should return true when ~/.claude exists")
+	}
+}

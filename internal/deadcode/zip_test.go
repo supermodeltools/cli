@@ -1,4 +1,4 @@
-package analyze
+package deadcode
 
 import (
 	"archive/zip"
@@ -9,16 +9,12 @@ import (
 )
 
 func TestIsGitRepo_NonGitDir(t *testing.T) {
-	// isGitRepo uses `git rev-parse --git-dir`; an empty temp dir is not a git repo.
 	if isGitRepo(t.TempDir()) {
 		t.Error("empty temp dir should not be a git repo")
 	}
 }
 
-// ── isWorktreeClean ───────────────────────────────────────────────────────────
-
 func TestIsWorktreeClean_NonGitDir(t *testing.T) {
-	// git status on a non-repo exits non-zero → returns false
 	if isWorktreeClean(t.TempDir()) {
 		t.Error("non-git dir should not be considered clean")
 	}
@@ -34,7 +30,7 @@ func TestWalkZip_IncludesFiles(t *testing.T) {
 	if err := walkZip(src, dest); err != nil {
 		t.Fatalf("walkZip: %v", err)
 	}
-	entries := readZipEntries(t, dest)
+	entries := readDeadcodeZipEntries(t, dest)
 	if _, ok := entries["main.go"]; !ok {
 		t.Error("zip should contain main.go")
 	}
@@ -53,7 +49,7 @@ func TestWalkZip_SkipsHiddenFiles(t *testing.T) {
 	if err := walkZip(src, dest); err != nil {
 		t.Fatal(err)
 	}
-	entries := readZipEntries(t, dest)
+	entries := readDeadcodeZipEntries(t, dest)
 	if _, ok := entries[".env"]; ok {
 		t.Error("zip should not contain .env")
 	}
@@ -79,7 +75,7 @@ func TestWalkZip_SkipsSkipDirs(t *testing.T) {
 	if err := walkZip(src, dest); err != nil {
 		t.Fatal(err)
 	}
-	entries := readZipEntries(t, dest)
+	entries := readDeadcodeZipEntries(t, dest)
 	for name := range entries {
 		if strings.HasPrefix(name, "node_modules/") || name == "node_modules" {
 			t.Errorf("should not contain node_modules entry: %s", name)
@@ -102,7 +98,7 @@ func TestCreateZip_NonGitDir(t *testing.T) {
 	}
 }
 
-func readZipEntries(t *testing.T, path string) map[string]bool {
+func readDeadcodeZipEntries(t *testing.T, path string) map[string]bool {
 	t.Helper()
 	r, err := zip.OpenReader(path)
 	if err != nil {

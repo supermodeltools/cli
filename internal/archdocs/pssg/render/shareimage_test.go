@@ -1,9 +1,138 @@
 package render
 
 import (
+	"strings"
 	"testing"
 	"unicode/utf8"
 )
+
+// ── svgEscape ─────────────────────────────────────────────────────────────────
+
+func TestSvgEscape(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"hello", "hello"},
+		{"a & b", "a &amp; b"},
+		{"<tag>", "&lt;tag&gt;"},
+		{`say "hi"`, "say &quot;hi&quot;"},
+		{"a & <b>", "a &amp; &lt;b&gt;"},
+	}
+	for _, tc := range cases {
+		if got := svgEscape(tc.in); got != tc.want {
+			t.Errorf("svgEscape(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// ── renderBarsSVG ─────────────────────────────────────────────────────────────
+
+func TestRenderBarsSVG_Empty(t *testing.T) {
+	if got := renderBarsSVG(nil, 0, 0, 100, 20, 5); got != "" {
+		t.Errorf("empty bars: got %q, want empty", got)
+	}
+}
+
+func TestRenderBarsSVG_SingleBar(t *testing.T) {
+	bars := []NameCount{{Name: "Italian", Count: 10}}
+	got := renderBarsSVG(bars, 60, 200, 400, 20, 5)
+	if !strings.Contains(got, "Italian") {
+		t.Errorf("should contain bar name: %s", got)
+	}
+	if !strings.Contains(got, "<rect") {
+		t.Errorf("should contain rect element: %s", got)
+	}
+}
+
+func TestRenderBarsSVG_AllZeroCount(t *testing.T) {
+	bars := []NameCount{{Name: "A", Count: 0}}
+	got := renderBarsSVG(bars, 0, 0, 100, 20, 5)
+	if !strings.Contains(got, "<rect") {
+		t.Error("zero-count bars should still produce rect elements")
+	}
+}
+
+// ── GenerateHomepageShareSVG ──────────────────────────────────────────────────
+
+func TestGenerateHomepageShareSVG(t *testing.T) {
+	stats := []NameCount{{Name: "Italian", Count: 5}, {Name: "French", Count: 3}}
+	got := GenerateHomepageShareSVG("My Site", "A cooking site", stats, 42)
+	if !strings.HasPrefix(got, "<svg") {
+		t.Errorf("should start with <svg, got: %.50s", got)
+	}
+	if !strings.Contains(got, "42") {
+		t.Error("should contain total entity count")
+	}
+}
+
+func TestGenerateHomepageShareSVG_Empty(t *testing.T) {
+	got := GenerateHomepageShareSVG("Site", "Desc", nil, 0)
+	if !strings.HasPrefix(got, "<svg") {
+		t.Errorf("empty stats should still produce SVG: %.50s", got)
+	}
+}
+
+// ── GenerateEntityShareSVG ────────────────────────────────────────────────────
+
+func TestGenerateEntityShareSVG(t *testing.T) {
+	got := GenerateEntityShareSVG("My Site", "Spaghetti Carbonara", "Main Course", "Italian", "Easy")
+	if !strings.HasPrefix(got, "<svg") {
+		t.Errorf("should start with <svg, got: %.50s", got)
+	}
+	if !strings.Contains(got, "Spaghetti") {
+		t.Error("should contain entity title")
+	}
+}
+
+// ── GenerateHubShareSVG ───────────────────────────────────────────────────────
+
+func TestGenerateHubShareSVG(t *testing.T) {
+	topTypes := []NameCount{{Name: "Pasta", Count: 10}}
+	got := GenerateHubShareSVG("My Site", "Italian", "Cuisine", 25, topTypes)
+	if !strings.HasPrefix(got, "<svg") {
+		t.Errorf("should start with <svg, got: %.50s", got)
+	}
+	if !strings.Contains(got, "Italian") {
+		t.Error("should contain hub name")
+	}
+}
+
+// ── GenerateTaxIndexShareSVG ──────────────────────────────────────────────────
+
+func TestGenerateTaxIndexShareSVG(t *testing.T) {
+	topEntries := []NameCount{{Name: "Italian", Count: 5}}
+	got := GenerateTaxIndexShareSVG("My Site", "Cuisine", topEntries)
+	if !strings.HasPrefix(got, "<svg") {
+		t.Errorf("should start with <svg, got: %.50s", got)
+	}
+}
+
+// ── GenerateAllEntitiesShareSVG ───────────────────────────────────────────────
+
+func TestGenerateAllEntitiesShareSVG(t *testing.T) {
+	typeDist := []NameCount{{Name: "Dinner", Count: 50}, {Name: "Lunch", Count: 30}}
+	got := GenerateAllEntitiesShareSVG("My Site", 100, typeDist)
+	if !strings.HasPrefix(got, "<svg") {
+		t.Errorf("should start with <svg, got: %.50s", got)
+	}
+}
+
+func TestGenerateAllEntitiesShareSVG_Empty(t *testing.T) {
+	got := GenerateAllEntitiesShareSVG("My Site", 0, nil)
+	if !strings.HasPrefix(got, "<svg") {
+		t.Errorf("empty dist: should produce SVG, got: %.50s", got)
+	}
+}
+
+// ── GenerateLetterShareSVG ────────────────────────────────────────────────────
+
+func TestGenerateLetterShareSVG(t *testing.T) {
+	got := GenerateLetterShareSVG("My Site", "Cuisine", "A", 7)
+	if !strings.HasPrefix(got, "<svg") {
+		t.Errorf("should start with <svg, got: %.50s", got)
+	}
+	if !strings.Contains(got, "7") {
+		t.Error("should contain entry count")
+	}
+}
 
 func TestTruncateASCII(t *testing.T) {
 	cases := []struct {

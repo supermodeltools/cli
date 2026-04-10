@@ -62,6 +62,312 @@ func buildGraphJSON(t *testing.T, nodes []Node, rels []Relationship) string {
 	return f.Name()
 }
 
+// ── getStr ────────────────────────────────────────────────────────────────────
+
+func TestGetStr(t *testing.T) {
+	m := map[string]interface{}{"name": "foo", "num": 42, "empty": ""}
+	if got := getStr(m, "name"); got != "foo" {
+		t.Errorf("got %q, want %q", got, "foo")
+	}
+	if got := getStr(m, "num"); got != "" {
+		t.Errorf("non-string: got %q, want empty", got)
+	}
+	if got := getStr(m, "missing"); got != "" {
+		t.Errorf("missing key: got %q, want empty", got)
+	}
+	if got := getStr(m, "empty"); got != "" {
+		t.Errorf("empty string: got %q, want empty", got)
+	}
+}
+
+// ── getNum ────────────────────────────────────────────────────────────────────
+
+func TestGetNum(t *testing.T) {
+	m := map[string]interface{}{"f64": float64(7), "i": 9, "str": "x"}
+	if got := getNum(m, "f64"); got != 7 {
+		t.Errorf("float64: got %d, want 7", got)
+	}
+	if got := getNum(m, "i"); got != 9 {
+		t.Errorf("int: got %d, want 9", got)
+	}
+	if got := getNum(m, "str"); got != 0 {
+		t.Errorf("wrong type: got %d, want 0", got)
+	}
+	if got := getNum(m, "missing"); got != 0 {
+		t.Errorf("missing key: got %d, want 0", got)
+	}
+}
+
+// ── mermaidID ─────────────────────────────────────────────────────────────────
+
+func TestMermaidID(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"fn:src/foo.go:bar", "fn_src_foo_go_bar"},
+		{"hello_world", "hello_world"},
+		{"ABC123", "ABC123"},
+		{"", "node"},
+		{"---", "___"},
+	}
+	for _, tc := range cases {
+		got := mermaidID(tc.in)
+		if got != tc.want {
+			t.Errorf("mermaidID(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// ── generateSlug ─────────────────────────────────────────────────────────────
+
+func TestGenerateSlug_File(t *testing.T) {
+	n := Node{Properties: map[string]interface{}{"path": "src/main.go"}}
+	got := generateSlug(n, "File")
+	if !strings.HasPrefix(got, "file-") {
+		t.Errorf("File slug: got %q, want prefix 'file-'", got)
+	}
+	// empty path → empty slug
+	n2 := Node{Properties: map[string]interface{}{}}
+	if got2 := generateSlug(n2, "File"); got2 != "" {
+		t.Errorf("empty path File slug: got %q, want empty", got2)
+	}
+}
+
+func TestGenerateSlug_Function(t *testing.T) {
+	n := Node{Properties: map[string]interface{}{"name": "run", "filePath": "internal/api/handler.go"}}
+	got := generateSlug(n, "Function")
+	if !strings.HasPrefix(got, "fn-") {
+		t.Errorf("Function slug with path: got %q, want prefix 'fn-'", got)
+	}
+	n2 := Node{Properties: map[string]interface{}{"name": "run"}}
+	got2 := generateSlug(n2, "Function")
+	if !strings.HasPrefix(got2, "fn-") {
+		t.Errorf("Function slug without path: got %q, want prefix 'fn-'", got2)
+	}
+	n3 := Node{Properties: map[string]interface{}{}}
+	if got3 := generateSlug(n3, "Function"); got3 != "" {
+		t.Errorf("empty name: got %q, want empty", got3)
+	}
+}
+
+func TestGenerateSlug_ClassTypeLabels(t *testing.T) {
+	for _, label := range []string{"Class", "Type"} {
+		prefix := strings.ToLower(label) + "-"
+		n := Node{Properties: map[string]interface{}{"name": "MyEntity", "filePath": "src/foo.go"}}
+		got := generateSlug(n, label)
+		if !strings.HasPrefix(got, prefix) {
+			t.Errorf("%s slug: got %q, want prefix %q", label, got, prefix)
+		}
+		n2 := Node{Properties: map[string]interface{}{"name": "MyEntity"}}
+		got2 := generateSlug(n2, label)
+		if !strings.HasPrefix(got2, prefix) {
+			t.Errorf("%s slug without path: got %q, want prefix %q", label, got2, prefix)
+		}
+		n3 := Node{Properties: map[string]interface{}{}}
+		if got3 := generateSlug(n3, label); got3 != "" {
+			t.Errorf("%s empty name: got %q, want empty", label, got3)
+		}
+	}
+}
+
+func TestGenerateSlug_DomainSubdomain(t *testing.T) {
+	dn := Node{Properties: map[string]interface{}{"name": "auth"}}
+	if got := generateSlug(dn, "Domain"); !strings.HasPrefix(got, "domain-") {
+		t.Errorf("Domain: got %q, want prefix 'domain-'", got)
+	}
+	sn := Node{Properties: map[string]interface{}{"name": "users"}}
+	if got := generateSlug(sn, "Subdomain"); !strings.HasPrefix(got, "subdomain-") {
+		t.Errorf("Subdomain: got %q, want prefix 'subdomain-'", got)
+	}
+	empty := Node{Properties: map[string]interface{}{}}
+	if got := generateSlug(empty, "Domain"); got != "" {
+		t.Errorf("Domain empty name: got %q, want empty", got)
+	}
+	if got := generateSlug(empty, "Subdomain"); got != "" {
+		t.Errorf("Subdomain empty name: got %q, want empty", got)
+	}
+}
+
+func TestGenerateSlug_Directory(t *testing.T) {
+	n := Node{Properties: map[string]interface{}{"path": "internal/api"}}
+	if got := generateSlug(n, "Directory"); !strings.HasPrefix(got, "dir-") {
+		t.Errorf("Directory: got %q, want prefix 'dir-'", got)
+	}
+	// path containing /app/repo-root/ → empty
+	n2 := Node{Properties: map[string]interface{}{"path": "/app/repo-root/internal"}}
+	if got := generateSlug(n2, "Directory"); got != "" {
+		t.Errorf("repo-root path: got %q, want empty", got)
+	}
+	// empty path → empty
+	n3 := Node{Properties: map[string]interface{}{}}
+	if got := generateSlug(n3, "Directory"); got != "" {
+		t.Errorf("empty path: got %q, want empty", got)
+	}
+}
+
+func TestGenerateSlug_Unknown(t *testing.T) {
+	n := Node{Properties: map[string]interface{}{"name": "foo"}}
+	if got := generateSlug(n, "Unknown"); got != "" {
+		t.Errorf("unknown label: got %q, want empty", got)
+	}
+}
+
+// ── node-type rendering ───────────────────────────────────────────────────────
+
+// TestRunClassNode verifies that a Class node generates a markdown file
+// containing class-specific frontmatter fields.
+func TestRunClassNode(t *testing.T) {
+	nodes := []Node{
+		{
+			ID:     "class:src/auth.go:UserAuth",
+			Labels: []string{"Class"},
+			Properties: map[string]interface{}{
+				"name":      "UserAuth",
+				"filePath":  "src/auth.go",
+				"startLine": float64(10),
+				"endLine":   float64(50),
+				"language":  "go",
+			},
+		},
+	}
+	graphFile := buildGraphJSON(t, nodes, nil)
+	outDir := t.TempDir()
+	if err := Run(graphFile, outDir, "myrepo", "https://github.com/example/myrepo", 0); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	entries, _ := os.ReadDir(outDir)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 output file, got %d", len(entries))
+	}
+	content, err := os.ReadFile(filepath.Join(outDir, entries[0].Name()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(content)
+	for _, want := range []string{`node_type: "Class"`, `class_name: "UserAuth"`, `language: "go"`, `start_line: 10`, `end_line: 50`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q in class output:\n%s", want, body)
+		}
+	}
+}
+
+// TestRunTypeNode verifies that a Type node generates type-specific frontmatter.
+func TestRunTypeNode(t *testing.T) {
+	nodes := []Node{
+		{
+			ID:     "type:src/types.go:UserID",
+			Labels: []string{"Type"},
+			Properties: map[string]interface{}{
+				"name":     "UserID",
+				"filePath": "src/types.go",
+			},
+		},
+	}
+	graphFile := buildGraphJSON(t, nodes, nil)
+	outDir := t.TempDir()
+	if err := Run(graphFile, outDir, "myrepo", "", 0); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	entries, _ := os.ReadDir(outDir)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 output file, got %d", len(entries))
+	}
+	content, _ := os.ReadFile(filepath.Join(outDir, entries[0].Name()))
+	body := string(content)
+	for _, want := range []string{`node_type: "Type"`, `type_name: "UserID"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q in type output:\n%s", want, body)
+		}
+	}
+}
+
+// TestRunDomainNode verifies that a Domain node generates domain-specific frontmatter.
+func TestRunDomainNode(t *testing.T) {
+	nodes := []Node{
+		{
+			ID:     "domain:auth",
+			Labels: []string{"Domain"},
+			Properties: map[string]interface{}{
+				"name":        "auth",
+				"description": "Authentication domain",
+			},
+		},
+	}
+	graphFile := buildGraphJSON(t, nodes, nil)
+	outDir := t.TempDir()
+	if err := Run(graphFile, outDir, "myrepo", "", 0); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	entries, _ := os.ReadDir(outDir)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 output file, got %d", len(entries))
+	}
+	content, _ := os.ReadFile(filepath.Join(outDir, entries[0].Name()))
+	body := string(content)
+	for _, want := range []string{`node_type: "Domain"`, `domain: "auth"`, `summary: "Authentication domain"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q in domain output:\n%s", want, body)
+		}
+	}
+}
+
+// TestRunSubdomainNode verifies that a Subdomain node generates subdomain frontmatter.
+func TestRunSubdomainNode(t *testing.T) {
+	nodes := []Node{
+		{
+			ID:     "subdomain:users",
+			Labels: []string{"Subdomain"},
+			Properties: map[string]interface{}{
+				"name": "users",
+			},
+		},
+	}
+	graphFile := buildGraphJSON(t, nodes, nil)
+	outDir := t.TempDir()
+	if err := Run(graphFile, outDir, "myrepo", "", 0); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	entries, _ := os.ReadDir(outDir)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 output file, got %d", len(entries))
+	}
+	content, _ := os.ReadFile(filepath.Join(outDir, entries[0].Name()))
+	body := string(content)
+	for _, want := range []string{`node_type: "Subdomain"`, `subdomain: "users"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q in subdomain output:\n%s", want, body)
+		}
+	}
+}
+
+// TestRunDirectoryNode verifies that a Directory node generates directory frontmatter.
+func TestRunDirectoryNode(t *testing.T) {
+	nodes := []Node{
+		{
+			ID:     "dir:internal/api",
+			Labels: []string{"Directory"},
+			Properties: map[string]interface{}{
+				"name": "api",
+				"path": "internal/api",
+			},
+		},
+	}
+	graphFile := buildGraphJSON(t, nodes, nil)
+	outDir := t.TempDir()
+	if err := Run(graphFile, outDir, "myrepo", "", 0); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	entries, _ := os.ReadDir(outDir)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 output file, got %d", len(entries))
+	}
+	content, _ := os.ReadFile(filepath.Join(outDir, entries[0].Name()))
+	body := string(content)
+	for _, want := range []string{`node_type: "Directory"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q in directory output:\n%s", want, body)
+		}
+	}
+}
+
 // TestSlugCollisionResolution verifies that when two nodes produce the same
 // base slug, the second gets a "-2" suffix, AND that a third node which
 // naturally produces that same "-2" slug does not silently collide with it.

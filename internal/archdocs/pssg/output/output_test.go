@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/supermodeltools/cli/internal/archdocs/pssg/config"
+	"github.com/supermodeltools/cli/internal/archdocs/pssg/entity"
 )
 
 // ── GenerateRobotsTxt ─────────────────────────────────────────────────────────
@@ -200,5 +201,88 @@ func TestGenerateSitemapFiles_ValidXML(t *testing.T) {
 	}
 	if !strings.Contains(content, "https://example.com/page") {
 		t.Error("sitemap should contain the URL")
+	}
+}
+
+// ── GenerateRSSFeeds ──────────────────────────────────────────────────────────
+
+func TestGenerateRSSFeeds_Disabled(t *testing.T) {
+	cfg := &config.Config{RSS: config.RSSConfig{Enabled: false}}
+	feeds := GenerateRSSFeeds(nil, cfg, nil)
+	if feeds != nil {
+		t.Errorf("expected nil when RSS disabled, got %v", feeds)
+	}
+}
+
+func TestGenerateRSSFeeds_MainFeed(t *testing.T) {
+	cfg := &config.Config{
+		RSS:  config.RSSConfig{Enabled: true, MainFeed: "feed.xml"},
+		Site: config.SiteConfig{Name: "My Site", BaseURL: "https://example.com", Description: "A site", Language: "en"},
+	}
+	entities := []*entity.Entity{
+		{Slug: "recipe-soup", Fields: map[string]interface{}{"title": "Soup", "description": "A warm soup"}},
+	}
+	feeds := GenerateRSSFeeds(entities, cfg, nil)
+	if len(feeds) != 1 {
+		t.Fatalf("expected 1 feed, got %d", len(feeds))
+	}
+	if feeds[0].RelativePath != "feed.xml" {
+		t.Errorf("path: got %q, want %q", feeds[0].RelativePath, "feed.xml")
+	}
+	if !strings.Contains(feeds[0].Content, "<?xml") {
+		t.Error("feed content should start with XML declaration")
+	}
+	if !strings.Contains(feeds[0].Content, "Soup") {
+		t.Error("feed should contain entity title")
+	}
+	if !strings.Contains(feeds[0].Content, "recipe-soup") {
+		t.Error("feed should contain entity slug")
+	}
+}
+
+func TestGenerateRSSFeeds_DefaultMainFeedPath(t *testing.T) {
+	cfg := &config.Config{
+		RSS:  config.RSSConfig{Enabled: true},
+		Site: config.SiteConfig{Name: "Site", BaseURL: "https://example.com"},
+	}
+	feeds := GenerateRSSFeeds(nil, cfg, nil)
+	if len(feeds) != 1 {
+		t.Fatalf("expected 1 feed, got %d", len(feeds))
+	}
+	if feeds[0].RelativePath != "feed.xml" {
+		t.Errorf("default path: got %q, want %q", feeds[0].RelativePath, "feed.xml")
+	}
+}
+
+func TestGenerateRSSFeeds_CategoryFeeds(t *testing.T) {
+	cfg := &config.Config{
+		RSS: config.RSSConfig{
+			Enabled:          true,
+			CategoryFeeds:    true,
+			CategoryTaxonomy: "cuisine",
+		},
+		Site: config.SiteConfig{Name: "Site", BaseURL: "https://example.com"},
+	}
+	taxEntries := map[string][]*entity.Entity{
+		"italian": {
+			{Slug: "pasta", Fields: map[string]interface{}{"title": "Pasta"}},
+		},
+	}
+	feeds := GenerateRSSFeeds(nil, cfg, taxEntries)
+	// main feed + 1 category feed
+	if len(feeds) != 2 {
+		t.Fatalf("expected 2 feeds, got %d", len(feeds))
+	}
+	var catFeed *RSSFeed
+	for i := range feeds {
+		if strings.HasPrefix(feeds[i].RelativePath, "cuisine/") {
+			catFeed = &feeds[i]
+		}
+	}
+	if catFeed == nil {
+		t.Fatal("category feed not found")
+	}
+	if catFeed.RelativePath != "cuisine/italian/feed.xml" {
+		t.Errorf("category feed path: got %q", catFeed.RelativePath)
 	}
 }
