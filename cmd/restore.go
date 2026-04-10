@@ -245,7 +245,9 @@ func copyFileIntoZip(path string, w io.Writer) error {
 		return err
 	}
 	_, err = io.Copy(w, src)
-	src.Close()
+	if closeErr := src.Close(); err == nil {
+		err = closeErr
+	}
 	return err
 }
 
