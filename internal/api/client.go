@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -115,11 +116,26 @@ func (c *Client) pollLoop(ctx context.Context, post func() (*JobResponse, error)
 	return job, nil
 }
 
+// PreviousDomain holds domain name + subdomain count for seeding the LLM prompt.
+type PreviousDomain struct {
+	Name           string `json:"name"`
+	SubdomainCount int    `json:"subdomainCount"`
+}
+
 // AnalyzeShards uploads a repository ZIP and runs the full analysis pipeline,
 // returning the complete ShardIR response with full Node/Relationship data
 // required for sidecar rendering (IDs, labels, properties preserved).
-func (c *Client) AnalyzeShards(ctx context.Context, zipPath, idempotencyKey string) (*ShardIR, error) {
-	job, err := c.pollUntilComplete(ctx, zipPath, idempotencyKey)
+// If previousDomains is non-nil, passes them as a query param to seed domain names.
+func (c *Client) AnalyzeShards(ctx context.Context, zipPath, idempotencyKey string, previousDomains []PreviousDomain) (*ShardIR, error) {
+	endpoint := analyzeEndpoint
+	if len(previousDomains) > 0 {
+		pd, err := json.Marshal(previousDomains)
+		if err == nil {
+			endpoint += "?previousDomains=" + url.QueryEscape(string(pd))
+		}
+	}
+	post := func() (*JobResponse, error) { return c.postZipTo(ctx, zipPath, idempotencyKey, endpoint) }
+	job, err := c.pollLoop(ctx, post)
 	if err != nil {
 		return nil, err
 	}

@@ -213,7 +213,7 @@ func (d *Daemon) fullGenerate(ctx context.Context) error {
 	}
 	defer os.Remove(zipPath)
 
-	ir, err := d.client.AnalyzeShards(ctx, zipPath, idemKey)
+	ir, err := d.client.AnalyzeShards(ctx, zipPath, idemKey, nil)
 	if err != nil {
 		return err
 	}
@@ -251,7 +251,7 @@ func (d *Daemon) incrementalUpdate(ctx context.Context, changedFiles []string) {
 	}
 	defer os.Remove(zipPath)
 
-	ir, err := d.client.AnalyzeShards(ctx, zipPath, "incremental-"+idemKey[:8])
+	ir, err := d.client.AnalyzeShards(ctx, zipPath, "incremental-"+idemKey[:8], nil)
 	if err != nil {
 		d.logf("Incremental API error: %v", err)
 		return

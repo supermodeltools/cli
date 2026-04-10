@@ -93,11 +93,25 @@ func Generate(ctx context.Context, cfg *config.Config, dir string, opts Generate
 	}
 	defer os.Remove(zipPath)
 
+	// Read previous domains from cache for LLM seeding (stabilizes names across refreshes)
+	var prevDomains []api.PreviousDomain
+	if data, readErr := os.ReadFile(cacheFile); readErr == nil {
+		var prev api.ShardIR
+		if json.Unmarshal(data, &prev) == nil && len(prev.Domains) > 0 {
+			for _, d := range prev.Domains {
+				prevDomains = append(prevDomains, api.PreviousDomain{
+					Name:           d.Name,
+					SubdomainCount: len(d.Subdomains),
+				})
+			}
+		}
+	}
+
 	client := api.New(cfg)
 	idemKey := newUUID()
 
 	spin = ui.Start("Uploading and analyzing repository…")
-	ir, err := client.AnalyzeShards(ctx, zipPath, "shards-"+idemKey[:8])
+	ir, err := client.AnalyzeShards(ctx, zipPath, "shards-"+idemKey[:8], prevDomains)
 	spin.Stop()
 	if err != nil {
 		return err

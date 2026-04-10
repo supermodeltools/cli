@@ -73,7 +73,7 @@ func GetGraph(ctx context.Context, cfg *config.Config, dir string, force bool) (
 
 	client := api.New(cfg)
 	spin = ui.Start("Uploading and analyzing repository…")
-	ir, err := client.AnalyzeShards(ctx, zipPath, "analyze-"+hash[:16])
+	ir, err := client.AnalyzeShards(ctx, zipPath, "analyze-"+hash[:16], nil)
 	spin.Stop()
 	if err != nil {
 		return nil, hash, err
