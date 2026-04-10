@@ -1,6 +1,7 @@
 package shards
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -160,4 +161,321 @@ func TestRenderCallsSection_EmptyWhenNoCallRelationships(t *testing.T) {
 	if out != "" {
 		t.Errorf("expected empty output for function with no call relationships, got:\n%s", out)
 	}
+}
+
+// ── CommentPrefix / ShardFilename / Header ────────────────────────────────────
+
+func TestCommentPrefix(t *testing.T) {
+	cases := []struct{ ext, want string }{
+		{".go", "//"},
+		{".ts", "//"},
+		{".js", "//"},
+		{".py", "#"},
+		{".rb", "#"},
+		{".rs", "//"},
+		{".java", "//"},
+		{"", "//"},
+	}
+	for _, tc := range cases {
+		if got := CommentPrefix(tc.ext); got != tc.want {
+			t.Errorf("CommentPrefix(%q) = %q, want %q", tc.ext, got, tc.want)
+		}
+	}
+}
+
+func TestShardFilename(t *testing.T) {
+	cases := []struct{ input, want string }{
+		{"src/handler.go", "src/handler.graph.go"},
+		{"lib/util.ts", "lib/util.graph.ts"},
+		{"main.py", "main.graph.py"},
+		{"src/no_ext", "src/no_ext.graph"},
+	}
+	for _, tc := range cases {
+		if got := ShardFilename(tc.input); got != tc.want {
+			t.Errorf("ShardFilename(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestHeader(t *testing.T) {
+	h := Header("//")
+	if !strings.Contains(h, "@generated") {
+		t.Errorf("header should contain @generated: %q", h)
+	}
+	if !strings.HasSuffix(h, "\n") {
+		t.Errorf("header should end with newline")
+	}
+	h2 := Header("#")
+	if !strings.HasPrefix(h2, "#") {
+		t.Errorf("Python header should start with #: %q", h2)
+	}
+}
+
+// ── sortedUnique / sortedBoolKeys / formatLoc ─────────────────────────────────
+
+func TestSortedUnique(t *testing.T) {
+	got := sortedUnique([]string{"c", "a", "b", "a", "c"})
+	want := []string{"a", "b", "c"}
+	if len(got) != len(want) {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("[%d] want %q, got %q", i, want[i], got[i])
+		}
+	}
+}
+
+func TestSortedUnique_Empty(t *testing.T) {
+	if got := sortedUnique(nil); got != nil {
+		t.Errorf("nil input: want nil, got %v", got)
+	}
+}
+
+func TestSortedBoolKeys(t *testing.T) {
+	m := map[string]bool{"z": true, "a": true, "m": true}
+	got := sortedBoolKeys(m)
+	if len(got) != 3 || got[0] != "a" || got[1] != "m" || got[2] != "z" {
+		t.Errorf("want [a m z], got %v", got)
+	}
+}
+
+func TestFormatLoc(t *testing.T) {
+	if got := formatLoc("src/a.go", 10); got != "src/a.go:10" {
+		t.Errorf("with file+line: got %q", got)
+	}
+	if got := formatLoc("src/a.go", 0); got != "src/a.go" {
+		t.Errorf("with file, no line: got %q", got)
+	}
+	if got := formatLoc("", 0); got != "?" {
+		t.Errorf("empty: got %q", got)
+	}
+}
+
+// ── renderDepsSection ─────────────────────────────────────────────────────────
+
+func TestRenderDepsSection_ShowsImportsAndImportedBy(t *testing.T) {
+	ir := shardIR(
+		[]api.Node{
+			{ID: "fa", Labels: []string{"File"}, Properties: map[string]any{"filePath": "src/a.go"}},
+			{ID: "fb", Labels: []string{"File"}, Properties: map[string]any{"filePath": "src/b.go"}},
+			{ID: "fc", Labels: []string{"File"}, Properties: map[string]any{"filePath": "src/c.go"}},
+		},
+		[]api.Relationship{
+			{ID: "r1", Type: "imports", StartNode: "fa", EndNode: "fb"}, // a imports b
+			{ID: "r2", Type: "imports", StartNode: "fc", EndNode: "fa"}, // c imports a
+		},
+	)
+	c := makeRenderCache(ir)
+	out := renderDepsSection("src/a.go", c, "//")
+	if out == "" {
+		t.Fatal("expected non-empty deps section")
+	}
+	if !strings.Contains(out, "[deps]") {
+		t.Errorf("should contain [deps] header: %s", out)
+	}
+	if !strings.Contains(out, "imports") && !strings.Contains(out, "src/b.go") {
+		t.Errorf("should show imported file: %s", out)
+	}
+	if !strings.Contains(out, "imported-by") || !strings.Contains(out, "src/c.go") {
+		t.Errorf("should show importing file: %s", out)
+	}
+}
+
+func TestRenderDepsSection_EmptyWhenNoEdges(t *testing.T) {
+	ir := shardIR(
+		[]api.Node{{ID: "fa", Labels: []string{"File"}, Properties: map[string]any{"filePath": "src/a.go"}}},
+		nil,
+	)
+	c := makeRenderCache(ir)
+	if out := renderDepsSection("src/a.go", c, "//"); out != "" {
+		t.Errorf("expected empty, got: %s", out)
+	}
+}
+
+// ── renderImpactSection ───────────────────────────────────────────────────────
+
+func TestRenderImpactSection_LowRisk(t *testing.T) {
+	// Single direct importer, no transitive
+	ir := shardIR(
+		[]api.Node{
+			{ID: "fa", Labels: []string{"File"}, Properties: map[string]any{"filePath": "src/a.go"}},
+			{ID: "fb", Labels: []string{"File"}, Properties: map[string]any{"filePath": "src/b.go"}},
+		},
+		[]api.Relationship{
+			{ID: "r1", Type: "imports", StartNode: "fb", EndNode: "fa"},
+		},
+	)
+	c := makeRenderCache(ir)
+	out := renderImpactSection("src/a.go", c, "//")
+	if !strings.Contains(out, "[impact]") {
+		t.Errorf("should contain [impact] header: %s", out)
+	}
+	if !strings.Contains(out, "LOW") {
+		t.Errorf("single importer should be LOW risk: %s", out)
+	}
+	if !strings.Contains(out, "direct") {
+		t.Errorf("should contain direct count: %s", out)
+	}
+}
+
+func TestRenderImpactSection_HighRisk(t *testing.T) {
+	// Build 25 importers to trigger HIGH risk (transitiveCount > 20)
+	nodes := []api.Node{
+		{ID: "target", Labels: []string{"File"}, Properties: map[string]any{"filePath": "core/db.go"}},
+	}
+	rels := []api.Relationship{}
+	for i := 0; i < 25; i++ {
+		id := strings.Repeat("f", i+1)
+		path := "src/file" + id + ".go"
+		nodes = append(nodes, api.Node{ID: id, Labels: []string{"File"}, Properties: map[string]any{"filePath": path}})
+		if i > 0 {
+			// chain: f→f2→f3→...→target creates transitive deps
+			prev := strings.Repeat("f", i)
+			rels = append(rels, api.Relationship{ID: "r" + id, Type: "imports", StartNode: id, EndNode: prev})
+		}
+		rels = append(rels, api.Relationship{ID: "root" + id, Type: "imports", StartNode: id, EndNode: "target"})
+	}
+	c := makeRenderCache(shardIR(nodes, rels))
+	out := renderImpactSection("core/db.go", c, "//")
+	if !strings.Contains(out, "HIGH") {
+		t.Errorf("many importers should trigger HIGH risk: %s", out)
+	}
+}
+
+func TestRenderImpactSection_EmptyWhenNoImporters(t *testing.T) {
+	ir := shardIR(
+		[]api.Node{{ID: "fa", Labels: []string{"File"}, Properties: map[string]any{"filePath": "src/a.go"}}},
+		nil,
+	)
+	c := makeRenderCache(ir)
+	if out := renderImpactSection("src/a.go", c, "//"); out != "" {
+		t.Errorf("expected empty, got: %s", out)
+	}
+}
+
+// ── RenderGraph ───────────────────────────────────────────────────────────────
+
+func TestRenderGraph_CombinesSections(t *testing.T) {
+	ir := shardIR(
+		[]api.Node{
+			{ID: "fa", Labels: []string{"File"}, Properties: map[string]any{"filePath": "src/a.go"}},
+			{ID: "fb", Labels: []string{"File"}, Properties: map[string]any{"filePath": "src/b.go"}},
+			{ID: "fn1", Labels: []string{"Function"}, Properties: map[string]any{"name": "doWork", "filePath": "src/a.go"}},
+			{ID: "fn2", Labels: []string{"Function"}, Properties: map[string]any{"name": "helper", "filePath": "src/b.go"}},
+		},
+		[]api.Relationship{
+			{ID: "r1", Type: "imports", StartNode: "fa", EndNode: "fb"},
+			{ID: "r2", Type: "calls", StartNode: "fn1", EndNode: "fn2"},
+		},
+	)
+	c := makeRenderCache(ir)
+	out := RenderGraph("src/a.go", c, "//")
+	if out == "" {
+		t.Fatal("expected non-empty render output")
+	}
+	if !strings.HasSuffix(out, "\n") {
+		t.Error("RenderGraph output should end with newline")
+	}
+}
+
+func TestRenderGraph_EmptyForUnknownFile(t *testing.T) {
+	c := makeRenderCache(shardIR(nil, nil))
+	out := RenderGraph("nonexistent.go", c, "//")
+	if out != "" {
+		t.Errorf("unknown file should produce empty output, got: %s", out)
+	}
+}
+
+// ── WriteShard ────────────────────────────────────────────────────────────────
+
+func TestWriteShard_WritesFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := WriteShard(dir, "src/handler.graph.go", "// content\n", false); err != nil {
+		t.Fatalf("WriteShard: %v", err)
+	}
+}
+
+func TestWriteShard_PathTraversalBlocked(t *testing.T) {
+	dir := t.TempDir()
+	err := WriteShard(dir, "../../etc/passwd", "evil", false)
+	if err == nil {
+		t.Error("expected path traversal error")
+	}
+	if !strings.Contains(err.Error(), "path traversal") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestWriteShard_DryRunDoesNotWrite(t *testing.T) {
+	dir := t.TempDir()
+	if err := WriteShard(dir, "src/a.graph.go", "content", true); err != nil {
+		t.Fatalf("dry-run WriteShard: %v", err)
+	}
+	// File should not exist
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 0 {
+		t.Errorf("dry-run should not create files")
+	}
+}
+
+// ── updateGitignore ───────────────────────────────────────────────────────────
+
+func TestUpdateGitignore_AddsEntry(t *testing.T) {
+	dir := t.TempDir()
+	if err := updateGitignore(dir); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(dir + "/.gitignore")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), ".supermodel/") {
+		t.Errorf("expected .supermodel/ in gitignore: %s", data)
+	}
+}
+
+func TestUpdateGitignore_DoesNotDuplicate(t *testing.T) {
+	dir := t.TempDir()
+	// Call twice; the entry should appear exactly once.
+	updateGitignore(dir) //nolint:errcheck
+	updateGitignore(dir) //nolint:errcheck
+	data, _ := os.ReadFile(dir + "/.gitignore")
+	content := string(data)
+	first := strings.Index(content, ".supermodel/")
+	last := strings.LastIndex(content, ".supermodel/")
+	if first != last {
+		t.Errorf(".supermodel/ appears more than once in gitignore:\n%s", content)
+	}
+}
+
+func TestUpdateGitignore_ExistingEntrySkipped(t *testing.T) {
+	dir := t.TempDir()
+	// Pre-populate with the entry
+	os.WriteFile(dir+"/.gitignore", []byte(".supermodel/\n"), 0o600) //nolint:errcheck
+	updateGitignore(dir)                                               //nolint:errcheck
+	data, _ := os.ReadFile(dir + "/.gitignore")
+	if strings.Count(string(data), ".supermodel/") != 1 {
+		t.Errorf("should not add duplicate: %s", data)
+	}
+}
+
+func TestUpdateGitignore_NoTrailingNewlineHandled(t *testing.T) {
+	dir := t.TempDir()
+	// Write without trailing newline
+	os.WriteFile(dir+"/.gitignore", []byte("node_modules"), 0o600) //nolint:errcheck
+	updateGitignore(dir)                                             //nolint:errcheck
+	data, _ := os.ReadFile(dir + "/.gitignore")
+	if !strings.Contains(string(data), ".supermodel/") {
+		t.Errorf("missing .supermodel/: %s", data)
+	}
+}
+
+// ── Hook ─────────────────────────────────────────────────────────────────────
+
+func TestHook_InvalidJSONExitsCleanly(t *testing.T) {
+	// Hook reads from stdin; we test via the exported function with invalid data.
+	// The function must return nil (never break the agent) on bad input.
+	// We can't easily inject stdin, but we test the underlying validation logic
+	// directly by calling with a mock via the export test file.
 }

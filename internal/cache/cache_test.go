@@ -193,6 +193,67 @@ func TestPut_OverwritesExisting(t *testing.T) {
 	}
 }
 
+// ── PutJSON / GetJSON ─────────────────────────────────────────────────────────
+
+func TestPutGetJSON_RoundTrip(t *testing.T) {
+	withTempCacheDir(t)
+
+	type payload struct {
+		Name  string `json:"name"`
+		Count int    `json:"count"`
+	}
+	v := payload{Name: "deadcode", Count: 42}
+
+	if err := PutJSON("jsonhash1", v); err != nil {
+		t.Fatalf("PutJSON: %v", err)
+	}
+
+	var got payload
+	hit, err := GetJSON("jsonhash1", &got)
+	if err != nil {
+		t.Fatalf("GetJSON: %v", err)
+	}
+	if !hit {
+		t.Fatal("GetJSON: expected cache hit")
+	}
+	if got.Name != "deadcode" || got.Count != 42 {
+		t.Errorf("GetJSON: got %+v, want {deadcode 42}", got)
+	}
+}
+
+func TestGetJSON_Miss(t *testing.T) {
+	withTempCacheDir(t)
+
+	var v any
+	hit, err := GetJSON("nonexistent", &v)
+	if err != nil {
+		t.Fatalf("GetJSON miss: want nil error, got %v", err)
+	}
+	if hit {
+		t.Error("GetJSON miss: want hit=false")
+	}
+}
+
+func TestPutGetJSON_Overwrite(t *testing.T) {
+	withTempCacheDir(t)
+
+	if err := PutJSON("overwrite-key", map[string]string{"v": "1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := PutJSON("overwrite-key", map[string]string{"v": "2"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var got map[string]string
+	hit, err := GetJSON("overwrite-key", &got)
+	if err != nil || !hit {
+		t.Fatalf("GetJSON: hit=%v err=%v", hit, err)
+	}
+	if got["v"] != "2" {
+		t.Errorf("expected overwritten value '2', got %q", got["v"])
+	}
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func writeTempFile(t *testing.T, content []byte) string {
