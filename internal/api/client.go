@@ -329,8 +329,8 @@ func (c *Client) request(ctx context.Context, method, path, contentType string, 
 			return &apiErr
 		}
 		snippet := string(respBody)
-		if len(snippet) > 300 {
-			snippet = snippet[:300] + "..."
+		if runes := []rune(snippet); len(runes) > 300 {
+			snippet = string(runes[:300]) + "..."
 		}
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, snippet)
 	}

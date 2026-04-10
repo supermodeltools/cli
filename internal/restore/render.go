@@ -7,6 +7,7 @@ import (
 	gotmpl "text/template"
 	"time"
 	"unicode"
+	"unicode/utf8"
 )
 
 const maxCyclesToShow = 10
@@ -288,7 +289,7 @@ func CountTokens(text string) int {
 			inWord = true
 		}
 	}
-	charEstimate := len(text) / 4
+	charEstimate := utf8.RuneCountInString(text) / 4
 	wordEstimate := words * 100 / 75
 	if charEstimate > wordEstimate {
 		return charEstimate

@@ -194,10 +194,11 @@ func boolPtr(b bool) *bool { return &b }
 
 // maskKey returns a display-safe version of the API key.
 func maskKey(key string) string {
-	if len(key) <= 12 {
-		return strings.Repeat("*", len(key))
+	runes := []rune(key)
+	if len(runes) <= 12 {
+		return strings.Repeat("*", len(runes))
 	}
-	return key[:8] + "..." + key[len(key)-4:]
+	return string(runes[:8]) + "..." + string(runes[len(runes)-4:])
 }
 
 // findGitRoot detects the git root from the current working directory.
