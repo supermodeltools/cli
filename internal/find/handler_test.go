@@ -209,6 +209,22 @@ func TestPrintMatches_HumanNoFile(t *testing.T) {
 	}
 }
 
+func TestPrintMatches_HumanWithCallees(t *testing.T) {
+	matches := []Match{
+		{ID: "n1", Kind: "Function", Name: "handleRequest", Callees: []string{"parseToken", "respond"}},
+	}
+	var buf bytes.Buffer
+	if err := printMatches(&buf, matches, "handle", ui.FormatHuman); err != nil {
+		t.Fatalf("printMatches: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{"parseToken", "respond", "calls:"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("should contain %q:\n%s", want, out)
+		}
+	}
+}
+
 func TestPrintMatches_HumanShowsMatchCount(t *testing.T) {
 	matches := []Match{
 		{ID: "n1", Kind: "Function", Name: "foo"},

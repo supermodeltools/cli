@@ -245,6 +245,34 @@ func TestWriteDOT_FilterExcludesEdgesToFilteredNodes(t *testing.T) {
 	}
 }
 
+func TestWriteDOT_FilterExcludesEdgesFromFilteredStartNode(t *testing.T) {
+	// StartNode (fn1) has label Function — filtered out when filter="File".
+	// EndNode (file1) has label File — included.
+	// The edge fn1→file1 should be skipped because fn1 is not in nodeLabel.
+	g := &api.Graph{
+		Nodes: []api.Node{
+			{ID: "fn1", Labels: []string{"Function"}, Properties: map[string]any{"name": "doWork"}},
+			{ID: "file1", Labels: []string{"File"}, Properties: map[string]any{"path": "a.go"}},
+		},
+		Relationships: []api.Relationship{
+			{ID: "r1", Type: "DEFINED_IN", StartNode: "fn1", EndNode: "file1"},
+		},
+	}
+	var buf bytes.Buffer
+	if err := writeDOT(&buf, g, "File"); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	// fn1 is not in nodeLabel (filtered), so the edge must not appear
+	if strings.Contains(out, "->") {
+		t.Errorf("edge from filtered start node should not appear:\n%s", out)
+	}
+	// file1 should still appear as a node
+	if !strings.Contains(out, "file1") {
+		t.Errorf("included File node should appear in output:\n%s", out)
+	}
+}
+
 func TestWriteDOT_LongNameTruncated(t *testing.T) {
 	longName := strings.Repeat("a", 50)
 	g := &api.Graph{
@@ -333,5 +361,24 @@ func TestWriteDOT_LongNameTruncated_MultiByteUTF8(t *testing.T) {
 	}
 	if strings.Contains(out, longName) {
 		t.Errorf("long multi-byte name should be truncated in DOT output")
+	}
+}
+
+// TestWriteDOT_NodeWithNoNameUsesID covers L100: when a node has no name/path/file
+// property, writeDOT falls back to using the node ID as the label.
+func TestWriteDOT_NodeWithNoNameUsesID(t *testing.T) {
+	g := &api.Graph{
+		Nodes: []api.Node{
+			// No name, path, or file properties → label falls back to ID
+			{ID: "node-without-name", Labels: []string{"Unknown"}, Properties: map[string]any{}},
+		},
+	}
+	var buf strings.Builder
+	if err := writeDOT(&buf, g, ""); err != nil {
+		t.Fatalf("writeDOT: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "node-without-name") {
+		t.Errorf("node ID should appear as fallback label:\n%s", out)
 	}
 }

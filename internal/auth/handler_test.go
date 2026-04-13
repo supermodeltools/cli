@@ -197,3 +197,82 @@ func TestLogout_AlreadyLoggedOut(t *testing.T) {
 		t.Fatalf("Logout when already logged out: %v", err)
 	}
 }
+
+func TestLoginWithToken_ConfigLoadError(t *testing.T) {
+	// Make config.yaml a directory → os.ReadFile returns a non-NotExist error.
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("SUPERMODEL_API_KEY", "")
+	cfgDir := filepath.Join(tmp, ".supermodel")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Create a directory where config.yaml would be → ReadFile fails.
+	if err := os.Mkdir(filepath.Join(cfgDir, "config.yaml"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := LoginWithToken("smsk_live_test"); err == nil {
+		t.Error("expected error when config.Load fails")
+	}
+}
+
+func TestLoginWithToken_SaveError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("skipping chmod-based test in CI")
+	}
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("SUPERMODEL_API_KEY", "")
+	cfgDir := filepath.Join(tmp, ".supermodel")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(cfgDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(cfgDir, 0o755) }) //nolint:errcheck
+	if err := LoginWithToken("smsk_live_test"); err == nil {
+		t.Error("expected error when cfg.Save fails")
+	}
+}
+
+func TestLogout_ConfigLoadError(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("SUPERMODEL_API_KEY", "")
+	cfgDir := filepath.Join(tmp, ".supermodel")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(cfgDir, "config.yaml"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := Logout(context.Background()); err == nil {
+		t.Error("expected error when config.Load fails")
+	}
+}
+
+func TestLogout_SaveError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("skipping chmod-based test in CI")
+	}
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("SUPERMODEL_API_KEY", "")
+	// Pre-create a config with a key so Logout proceeds to Save.
+	cfgDir := filepath.Join(tmp, ".supermodel")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{APIKey: "smsk_live_toremove"}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(cfgDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(cfgDir, 0o755) }) //nolint:errcheck
+	if err := Logout(context.Background()); err == nil {
+		t.Error("expected error when cfg.Save fails during logout")
+	}
+}

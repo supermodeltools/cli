@@ -232,6 +232,15 @@ func TestError_Error_WithoutCode(t *testing.T) {
 	}
 }
 
+func TestError_Error_FallsBackToStatus(t *testing.T) {
+	// When StatusCode is 0, Error() should use the Status field.
+	e := &Error{StatusCode: 0, Status: 404, Message: "not found"}
+	got := e.Error()
+	if !containsStr(got, "404") {
+		t.Errorf("Error() = %q, should contain '404' (from Status field)", got)
+	}
+}
+
 // ── GraphFromShardIR ──────────────────────────────────────────────────────────
 
 func TestGraphFromShardIR_NodesAndRels(t *testing.T) {

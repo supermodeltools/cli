@@ -1,6 +1,7 @@
 package render
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -119,6 +120,89 @@ func TestGenerateAllEntitiesShareSVG_Empty(t *testing.T) {
 	got := GenerateAllEntitiesShareSVG("My Site", 0, nil)
 	if !strings.HasPrefix(got, "<svg") {
 		t.Errorf("empty dist: should produce SVG, got: %.50s", got)
+	}
+}
+
+// TestGenerateAllEntitiesShareSVG_AllZeroCounts covers the totalForBar==0 branch
+// (L190): typeDist is non-nil but every Count is 0, so totalForBar is set to 1
+// to avoid division by zero.
+func TestGenerateAllEntitiesShareSVG_AllZeroCounts(t *testing.T) {
+	dist := []NameCount{
+		{Name: "Dinner", Count: 0},
+		{Name: "Lunch", Count: 0},
+	}
+	got := GenerateAllEntitiesShareSVG("My Site", 0, dist)
+	if !strings.HasPrefix(got, "<svg") {
+		t.Errorf("all-zero counts: should produce SVG, got: %.50s", got)
+	}
+}
+
+// ── limit capping branches ────────────────────────────────────────────────────
+
+func TestGenerateHomepageShareSVG_OverLimit(t *testing.T) {
+	// >8 items should be capped at 8
+	var stats []NameCount
+	for i := 0; i < 12; i++ {
+		stats = append(stats, NameCount{Name: fmt.Sprintf("Cat%d", i), Count: i + 1})
+	}
+	got := GenerateHomepageShareSVG("My Site", "A cooking site", stats, 100)
+	if !strings.HasPrefix(got, "<svg") {
+		t.Errorf("over-limit stats should still produce SVG")
+	}
+}
+
+func TestGenerateHubShareSVG_OverLimit(t *testing.T) {
+	// >6 items should be capped at 6
+	var topTypes []NameCount
+	for i := 0; i < 9; i++ {
+		topTypes = append(topTypes, NameCount{Name: fmt.Sprintf("Type%d", i), Count: i + 1})
+	}
+	got := GenerateHubShareSVG("My Site", "Italian", "Cuisine", 50, topTypes)
+	if !strings.HasPrefix(got, "<svg") {
+		t.Errorf("over-limit hub should still produce SVG")
+	}
+}
+
+func TestGenerateTaxIndexShareSVG_OverLimit(t *testing.T) {
+	// >10 entries should be capped at 10
+	var entries []NameCount
+	for i := 0; i < 15; i++ {
+		entries = append(entries, NameCount{Name: fmt.Sprintf("Entry%d", i), Count: i + 1})
+	}
+	got := GenerateTaxIndexShareSVG("My Site", "Cuisine", entries)
+	if !strings.HasPrefix(got, "<svg") {
+		t.Errorf("over-limit tax index should still produce SVG")
+	}
+}
+
+func TestGenerateAllEntitiesShareSVG_OverLimit(t *testing.T) {
+	// >8 type dist items should be capped at 8
+	// Use very uneven counts to trigger the w < 2 minimum-width branch.
+	dist := []NameCount{
+		{Name: "Big", Count: 1000},
+		{Name: "Tiny", Count: 1}, // 1*1080/1001 = 1 → w < 2 → w = 2
+		{Name: "Type2", Count: 10},
+		{Name: "Type3", Count: 20},
+		{Name: "Type4", Count: 15},
+		{Name: "Type5", Count: 8},
+		{Name: "Type6", Count: 5},
+		{Name: "Type7", Count: 3},
+		{Name: "Type8", Count: 2},
+		{Name: "Type9", Count: 2},
+		{Name: "TypeA", Count: 1},
+		{Name: "TypeB", Count: 1},
+	}
+	got := GenerateAllEntitiesShareSVG("My Site", 200, dist)
+	if !strings.HasPrefix(got, "<svg") {
+		t.Errorf("over-limit all-entities should still produce SVG")
+	}
+}
+
+func TestGenerateEntityShareSVG_EmptyPills(t *testing.T) {
+	// All pill labels empty → all pills skipped via continue
+	got := GenerateEntityShareSVG("My Site", "Dish Name", "", "", "")
+	if !strings.HasPrefix(got, "<svg") {
+		t.Errorf("empty pills should still produce SVG")
 	}
 }
 

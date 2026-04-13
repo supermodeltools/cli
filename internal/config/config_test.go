@@ -145,6 +145,107 @@ func TestApplyEnv_ShardsDisabled(t *testing.T) {
 	}
 }
 
+func TestLoad_CorruptYAML(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cfgFile := filepath.Join(home, ".supermodel", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(cfgFile), 0700); err != nil {
+		t.Fatal(err)
+	}
+	// Write invalid YAML
+	if err := os.WriteFile(cfgFile, []byte(": invalid: [yaml"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load()
+	if err == nil {
+		t.Error("Load with corrupt YAML should return error")
+	}
+}
+
+// ── Load read error (non-IsNotExist) ─────────────────────────────────────────
+
+func TestLoad_ReadError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		// Some CI environments run as root and can read everything.
+		t.Skip("skipping permission test in CI")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// Create a directory at the config file path → ReadFile returns EISDIR,
+	// which is not IsNotExist → covers the "read config: ..." error path.
+	cfgPath := filepath.Join(home, ".supermodel", "config.yaml")
+	if err := os.MkdirAll(cfgPath, 0700); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load()
+	if err == nil {
+		t.Error("Load should fail when config path is a directory")
+	}
+}
+
+// ── Save error paths ──────────────────────────────────────────────────────────
+
+// TestSave_MkdirAllError covers L63-65: MkdirAll fails when ~/.supermodel exists
+// as a regular file rather than a directory.
+func TestSave_MkdirAllError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	// Place a regular file at ~/.supermodel so MkdirAll fails with ENOTDIR.
+	if err := os.WriteFile(filepath.Join(home, ".supermodel"), []byte("not a dir"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &Config{APIKey: "test"}
+	if err := cfg.Save(); err == nil {
+		t.Error("Save should fail when config directory cannot be created")
+	}
+}
+
+// TestSave_WriteFileError covers L72-74: WriteFile fails when the config directory
+// is read-only, preventing the .tmp file from being created.
+func TestSave_WriteFileError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("skipping chmod-based test in CI")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cfgDir := filepath.Join(home, ".supermodel")
+	if err := os.MkdirAll(cfgDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(cfgDir, 0555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(cfgDir, 0755) }) //nolint:errcheck
+	cfg := &Config{APIKey: "test"}
+	if err := cfg.Save(); err == nil {
+		t.Error("Save should fail when config file cannot be written")
+	}
+}
+
+// ── Save Rename error ─────────────────────────────────────────────────────────
+
+func TestSave_RenameError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("skipping rename-error test in CI")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// Create a directory at the config file path → os.Rename(tmp, dest) will fail
+	// because dest is a directory, triggering the os.Remove(tmp) cleanup branch.
+	cfgPath := filepath.Join(home, ".supermodel", "config.yaml")
+	if err := os.MkdirAll(cfgPath, 0700); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &Config{APIKey: "test"}
+	if err := cfg.Save(); err == nil {
+		t.Error("Save should fail when config path is a directory")
+	}
+}
+
 // ── applyDefaults ─────────────────────────────────────────────────────────────
 
 func TestApplyDefaults_FilledFromFile(t *testing.T) {

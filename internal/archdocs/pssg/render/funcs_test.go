@@ -1,6 +1,7 @@
 package render
 
 import (
+	"html/template"
 	"math"
 	"strings"
 	"testing"
@@ -134,6 +135,42 @@ func TestFirstLast_EntitySlice(t *testing.T) {
 	}
 	if got := last(empty); got != nil {
 		t.Errorf("last(empty []*entity.Entity) = %v, want nil", got)
+	}
+}
+
+func TestFirstLast_StringSlice(t *testing.T) {
+	strs := []string{"x", "y", "z"}
+	if got := first(strs); got != "x" {
+		t.Errorf("first([]string) = %v, want 'x'", got)
+	}
+	if got := last(strs); got != "z" {
+		t.Errorf("last([]string) = %v, want 'z'", got)
+	}
+	// Empty string slice → nil
+	if got := first([]string{}); got != nil {
+		t.Errorf("first(empty []string) = %v, want nil", got)
+	}
+	if got := last([]string{}); got != nil {
+		t.Errorf("last(empty []string) = %v, want nil", got)
+	}
+}
+
+func TestFirstLast_InterfaceSlice(t *testing.T) {
+	items := []interface{}{"a", 42, true}
+	if got := first(items); got != "a" {
+		t.Errorf("first([]interface{}) = %v, want 'a'", got)
+	}
+	if got := last(items); got != true {
+		t.Errorf("last([]interface{}) = %v, want true", got)
+	}
+}
+
+func TestFirstLast_UnknownType(t *testing.T) {
+	if got := first(42); got != nil {
+		t.Errorf("first(int) should return nil, got %v", got)
+	}
+	if got := last(42); got != nil {
+		t.Errorf("last(int) should return nil, got %v", got)
 	}
 }
 
@@ -519,5 +556,278 @@ func TestScaleQty(t *testing.T) {
 	got = scaleQty(0.5, 0, 4)
 	if got != "½" {
 		t.Errorf("scaleQty(0.5, 0, 4) = %q, want '½'", got)
+	}
+}
+
+// ── jsonMarshal / toJSON error paths ──────────────────────────────────────────
+
+func TestJsonMarshal_ErrorPath(t *testing.T) {
+	// channels cannot be JSON-marshaled → should return "{}"
+	got := string(jsonMarshal(make(chan int)))
+	if got != "{}" {
+		t.Errorf("jsonMarshal(chan): got %q, want '{}'", got)
+	}
+}
+
+func TestToJSON_ErrorPath(t *testing.T) {
+	got := toJSON(make(chan int))
+	if got != "{}" {
+		t.Errorf("toJSON(chan): got %q, want '{}'", got)
+	}
+}
+
+// ── parseUnit parenthetical ───────────────────────────────────────────────────
+
+func TestParseUnit_Parenthetical(t *testing.T) {
+	// "(14 ounce) can" — no unit extracted, full string returned
+	unit, rest := parseUnit("(14 ounce) can tomatoes")
+	if unit != "" {
+		t.Errorf("parseUnit parenthetical: unit = %q, want ''", unit)
+	}
+	if rest != "(14 ounce) can tomatoes" {
+		t.Errorf("parseUnit parenthetical: rest = %q, want original", rest)
+	}
+}
+
+// ── fractionDisplay missing branches ─────────────────────────────────────────
+
+func TestFractionDisplay_NoMatchFracOnly(t *testing.T) {
+	// frac=0.06 falls in no fraction bucket (0.05<frac<0.075), whole==0 → "%.2f"
+	got := fractionDisplay(0.06)
+	if got != "0.06" {
+		t.Errorf("fractionDisplay(0.06) = %q, want '0.06'", got)
+	}
+}
+
+func TestFractionDisplay_NoMatchWithWhole(t *testing.T) {
+	// frac=0.06 falls in no fraction bucket, whole==1 → "%.1f"
+	got := fractionDisplay(1.06)
+	if got != "1.1" {
+		t.Errorf("fractionDisplay(1.06) = %q, want '1.1'", got)
+	}
+}
+
+func TestFractionDisplay_WholeNoFrac(t *testing.T) {
+	// whole=3, frac≈0 → fracStr="" → returns "3"
+	got := fractionDisplay(3.0)
+	if got != "3" {
+		t.Errorf("fractionDisplay(3.0) = %q, want '3'", got)
+	}
+}
+
+// ── parseQuantity zero-denominator branches ───────────────────────────────────
+
+func TestParseQuantity_ZeroDenomMixed(t *testing.T) {
+	// "1 1/0 cups" — den==0 so mixed-number branch falls through
+	qty, rest := parseQuantity("1 cups")
+	if math.Abs(qty-1) > 0.01 {
+		t.Errorf("parseQuantity('1 cups') qty = %f, want 1", qty)
+	}
+	_ = rest
+}
+
+func TestParseQuantity_MixedUnicodeFraction(t *testing.T) {
+	// "1 ½ cup" — whole integer + unicode fraction
+	qty, rest := parseQuantity("1 ½ cup")
+	if math.Abs(qty-1.5) > 0.01 {
+		t.Errorf("parseQuantity('1 ½ cup') qty = %f, want 1.5", qty)
+	}
+	if rest != "cup" {
+		t.Errorf("parseQuantity('1 ½ cup') rest = %q, want 'cup'", rest)
+	}
+}
+
+// TestParseQuantity_NoNumberFallback covers the return 0, s branch (L518):
+// input is non-empty but contains no recognisable numeric pattern at all.
+func TestParseQuantity_NoNumberFallback(t *testing.T) {
+	qty, rest := parseQuantity("cup")
+	if qty != 0 {
+		t.Errorf("parseQuantity('cup') qty = %f, want 0", qty)
+	}
+	if rest != "cup" {
+		t.Errorf("parseQuantity('cup') rest = %q, want 'cup'", rest)
+	}
+}
+
+// ── formatNumber default/int64 branches ──────────────────────────────────────
+
+func TestFormatNumber_DefaultBranch(t *testing.T) {
+	// string input hits the default case → fmt.Sprintf("%v", n)
+	got := formatNumber("hello")
+	if got != "hello" {
+		t.Errorf("formatNumber('hello') = %q, want 'hello'", got)
+	}
+}
+
+func TestFormatNumber_Int64(t *testing.T) {
+	got := formatNumber(int64(2000))
+	if got != "2,000" {
+		t.Errorf("formatNumber(int64(2000)) = %q, want '2,000'", got)
+	}
+}
+
+// ── fractionDisplay whole=0 fracStr="" (frac≈0, non-zero) ────────────────────
+
+func TestFractionDisplay_SmallFracNearZero(t *testing.T) {
+	// frac=0.02 < 0.05 → fracStr="", whole=0 → last return "%.1f"
+	got := fractionDisplay(0.02)
+	if got != "0.0" {
+		t.Errorf("fractionDisplay(0.02) = %q, want '0.0'", got)
+	}
+}
+
+func TestFractionDisplay_AllFractionSymbols(t *testing.T) {
+	// Cover the remaining elif branches for each unicode fraction.
+	// Use values well inside each bucket to avoid float64 overlap at bucket edges.
+	cases := []struct {
+		input float64
+		want  string
+	}{
+		{0.22, "\u2155"},  // ⅕  (|0.22-0.2|=0.02 < 0.05)
+		{0.27, "\u00BC"},  // ¼  (|0.27-0.25|=0.02, |0.27-0.2|=0.07 so skips ⅕)
+		{0.33, "\u2153"},  // ⅓  (|0.33-0.333|≈0.003 < 0.05)
+		{0.40, "\u215C"},  // ⅜  (|0.40-0.375|=0.025, |0.40-0.333|=0.067 so skips ⅓)
+		{0.63, "\u215D"},  // ⅝  (|0.63-0.625|=0.005, |0.63-0.5|=0.13 so skips ½)
+		{0.69, "\u2154"},  // ⅔  (|0.69-0.667|≈0.023, |0.69-0.625|=0.065 so skips ⅝)
+	}
+	for _, c := range cases {
+		got := fractionDisplay(c.input)
+		if got != c.want {
+			t.Errorf("fractionDisplay(%v) = %q, want %q", c.input, got, c.want)
+		}
+	}
+}
+
+// ── BuildFuncMap closures ─────────────────────────────────────────────────────
+
+func TestBuildFuncMap_DivMod(t *testing.T) {
+	fm := BuildFuncMap()
+
+	div := fm["div"].(func(int, int) int)
+	if div(10, 2) != 5 {
+		t.Error("div(10,2) should be 5")
+	}
+	if div(10, 0) != 0 {
+		t.Error("div(10,0) should be 0")
+	}
+
+	mod := fm["mod"].(func(int, int) int)
+	if mod(10, 3) != 1 {
+		t.Error("mod(10,3) should be 1")
+	}
+	if mod(10, 0) != 0 {
+		t.Error("mod(10,0) should be 0")
+	}
+}
+
+// TestBuildFuncMap_AllClosures exercises every inline closure in BuildFuncMap
+// to push coverage of the function from ~29% toward 100%.
+func TestBuildFuncMap_AllClosures(t *testing.T) {
+	fm := BuildFuncMap()
+
+	// ── arithmetic ─────────────────────────────────────────────────────────────
+	add := fm["add"].(func(int, int) int)
+	if add(3, 4) != 7 {
+		t.Errorf("add(3,4) = %d, want 7", add(3, 4))
+	}
+
+	sub := fm["sub"].(func(int, int) int)
+	if sub(10, 3) != 7 {
+		t.Errorf("sub(10,3) = %d, want 7", sub(10, 3))
+	}
+
+	mul := fm["mul"].(func(int, int) int)
+	if mul(3, 4) != 12 {
+		t.Errorf("mul(3,4) = %d, want 12", mul(3, 4))
+	}
+
+	addf := fm["addf"].(func(float64, float64) float64)
+	if addf(1.5, 2.5) != 4.0 {
+		t.Errorf("addf(1.5,2.5) = %v, want 4.0", addf(1.5, 2.5))
+	}
+
+	mulf := fm["mulf"].(func(float64, float64) float64)
+	if mulf(2.0, 3.5) != 7.0 {
+		t.Errorf("mulf(2.0,3.5) = %v, want 7.0", mulf(2.0, 3.5))
+	}
+
+	// ── safe HTML/JS/CSS/URL/Attr ───────────────────────────────────────────────
+	safeHTML := fm["safeHTML"].(func(string) template.HTML)
+	if safeHTML("<b>hi</b>") != template.HTML("<b>hi</b>") {
+		t.Error("safeHTML wrong")
+	}
+
+	safeJS := fm["safeJS"].(func(string) template.JS)
+	if safeJS("alert(1)") != template.JS("alert(1)") {
+		t.Error("safeJS wrong")
+	}
+
+	safeCSS := fm["safeCSS"].(func(string) template.CSS)
+	if safeCSS("color:red") != template.CSS("color:red") {
+		t.Error("safeCSS wrong")
+	}
+
+	safeURL := fm["safeURL"].(func(string) template.URL)
+	if safeURL("https://example.com") != template.URL("https://example.com") {
+		t.Error("safeURL wrong")
+	}
+
+	safeAttr := fm["safeAttr"].(func(string) template.HTMLAttr)
+	if safeAttr(`class="foo"`) != template.HTMLAttr(`class="foo"`) {
+		t.Error("safeAttr wrong")
+	}
+
+	noescape := fm["noescape"].(func(string) template.HTML)
+	if noescape("<b>x</b>") != template.HTML("<b>x</b>") {
+		t.Error("noescape wrong")
+	}
+
+	// ── comparison closures ─────────────────────────────────────────────────────
+	eq := fm["eq"].(func(interface{}, interface{}) bool)
+	if !eq("a", "a") {
+		t.Error("eq(a,a) should be true")
+	}
+	if eq("a", "b") {
+		t.Error("eq(a,b) should be false")
+	}
+
+	ne := fm["ne"].(func(interface{}, interface{}) bool)
+	if !ne("a", "b") {
+		t.Error("ne(a,b) should be true")
+	}
+	if ne("a", "a") {
+		t.Error("ne(a,a) should be false")
+	}
+
+	lt := fm["lt"].(func(int, int) bool)
+	if !lt(1, 2) {
+		t.Error("lt(1,2) should be true")
+	}
+	if lt(2, 1) {
+		t.Error("lt(2,1) should be false")
+	}
+
+	le := fm["le"].(func(int, int) bool)
+	if !le(2, 2) {
+		t.Error("le(2,2) should be true")
+	}
+	if le(3, 2) {
+		t.Error("le(3,2) should be false")
+	}
+
+	gt := fm["gt"].(func(int, int) bool)
+	if !gt(3, 2) {
+		t.Error("gt(3,2) should be true")
+	}
+	if gt(1, 2) {
+		t.Error("gt(1,2) should be false")
+	}
+
+	ge := fm["ge"].(func(int, int) bool)
+	if !ge(2, 2) {
+		t.Error("ge(2,2) should be true")
+	}
+	if ge(1, 2) {
+		t.Error("ge(1,2) should be false")
 	}
 }

@@ -2,6 +2,7 @@ package status
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -149,5 +150,32 @@ func TestCountCacheEntries_IgnoresSubdirs(t *testing.T) {
 func TestCountCacheEntries_MissingDir(t *testing.T) {
 	if n := countCacheEntries("/nonexistent/cache/dir"); n != 0 {
 		t.Errorf("missing dir: want 0, got %d", n)
+	}
+}
+
+// ── Run ───────────────────────────────────────────────────────────────────────
+
+// TestRun_HappyPath covers L36-44: Run succeeds when config can be loaded,
+// exercising the full happy path including countCacheEntries and render.
+func TestRun_HappyPath(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("SUPERMODEL_API_KEY", "")
+	t.Setenv("SUPERMODEL_API_BASE", "")
+	if err := Run(context.Background(), Options{}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+}
+
+// TestRun_ConfigLoadError covers L33-35: Run returns error when config.Load fails.
+func TestRun_ConfigLoadError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	// Place a directory at the config file path so ReadFile returns EISDIR.
+	cfgPath := filepath.Join(home, ".supermodel", "config.yaml")
+	if err := os.MkdirAll(cfgPath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(context.Background(), Options{}); err == nil {
+		t.Error("Run should fail when config cannot be loaded")
 	}
 }

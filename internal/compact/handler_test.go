@@ -133,6 +133,15 @@ var hello string
 	}
 }
 
+func TestCompactGoParseError(t *testing.T) {
+	// Invalid Go source should produce a parse error from compactGo.
+	src := []byte("package foo\nfunc {{{")
+	_, err := CompactSource(src, Go)
+	if err == nil {
+		t.Error("expected parse error for invalid Go source, got nil")
+	}
+}
+
 func TestCompactGoReducesSize(t *testing.T) {
 	src := []byte(`// Package math provides basic math utilities.
 // It is intentionally simple.
@@ -609,6 +618,71 @@ func TestCompactDir_EmptyDir(t *testing.T) {
 	}
 }
 
+func TestCompactDir_SkipsParseError(t *testing.T) {
+	// CompactDir should skip (not fail) files that fail to parse.
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "broken.go"), []byte("package foo\nfunc {{{"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "good.go"), []byte("package foo\nfunc Noop() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	stats, err := CompactDir(dir, "")
+	if err != nil {
+		t.Fatalf("CompactDir should not error on parse failure: %v", err)
+	}
+	// Only the valid file is counted
+	if stats.Files != 1 {
+		t.Errorf("want 1 file (broken skipped), got %d", stats.Files)
+	}
+}
+
+// ── shortenFuncLocals: range value and var spec ───────────────────────────────
+
+func TestShortenRangeValueVar(t *testing.T) {
+	src := []byte(`package foo
+func processItems(items []string) {
+	for _, itemValue := range items {
+		_ = itemValue
+	}
+}
+`)
+	got, err := CompactSource(src, Go)
+	if err != nil {
+		t.Fatalf("CompactSource error: %v", err)
+	}
+	text := string(got)
+	if strings.Contains(text, "itemValue") {
+		t.Errorf("range value 'itemValue' should be shortened:\n%s", text)
+	}
+	fset := token.NewFileSet()
+	if _, err := parser.ParseFile(fset, "", got, 0); err != nil {
+		t.Fatalf("output is not valid Go: %v\n%s", err, got)
+	}
+}
+
+func TestShortenVarStatement(t *testing.T) {
+	src := []byte(`package foo
+func buildMessage() string {
+	var messageContent string
+	messageContent = "hello"
+	return messageContent
+}
+`)
+	got, err := CompactSource(src, Go)
+	if err != nil {
+		t.Fatalf("CompactSource error: %v", err)
+	}
+	text := string(got)
+	if strings.Contains(text, "messageContent") {
+		t.Errorf("var 'messageContent' should be shortened:\n%s", text)
+	}
+	fset := token.NewFileSet()
+	if _, err := parser.ParseFile(fset, "", got, 0); err != nil {
+		t.Fatalf("output is not valid Go: %v\n%s", err, got)
+	}
+}
+
 // ── nextShortName ─────────────────────────────────────────────────────────────
 
 func TestNextShortName_SingleLetters(t *testing.T) {
@@ -663,5 +737,130 @@ func TestNextShortName_SkipsBuiltins(t *testing.T) {
 	got := nextShortName(&counter, existing)
 	if got != "z" {
 		t.Errorf("expected 'z' as only free single-char slot, got %q", got)
+	}
+}
+
+// ── shortenFuncLocals: KeyValueExpr branch ────────────────────────────────────
+
+// TestDoNotShortenStructLiteralKey covers the KeyValueExpr branch (L221-224):
+// a struct literal key inside a function must be protected from renaming because
+// the key is a field name, not a local variable.
+func TestDoNotShortenStructLiteralKey(t *testing.T) {
+	src := []byte(`package foo
+type Point struct{ x, y int }
+func makePoint() Point {
+	longXValue := 5
+	longYValue := 10
+	return Point{x: longXValue, y: longYValue}
+}
+`)
+	got, err := CompactSource(src, Go)
+	if err != nil {
+		t.Fatalf("CompactSource error: %v", err)
+	}
+	text := string(got)
+	// Struct literal keys 'x' and 'y' are field names — they must not be renamed.
+	if !strings.Contains(text, "x:") {
+		t.Errorf("struct literal key 'x' should not be renamed:\n%s", text)
+	}
+	if !strings.Contains(text, "y:") {
+		t.Errorf("struct literal key 'y' should not be renamed:\n%s", text)
+	}
+	fset := token.NewFileSet()
+	if _, err := parser.ParseFile(fset, "", got, 0); err != nil {
+		t.Fatalf("output is not valid Go: %v\n%s", err, got)
+	}
+}
+
+// ── stripComments: backtick string with backslash ─────────────────────────────
+
+// TestStripComments_BacktickWithBackslash covers L406-409: when a backtick string
+// (JS/TS template literal) contains a backslash, the next character must be
+// consumed together to avoid mistaking an escaped backtick (\`) for a terminator.
+func TestStripComments_BacktickWithBackslash(t *testing.T) {
+	// TypeScript template literal: const s = `foo\nbar`;  // comment
+	// The \n inside the backtick string hits c=='\\' at L406.
+	src := []byte("const s = `foo\\nbar`; // comment")
+	got, _ := CompactSource(src, TypeScript)
+	text := string(got)
+	if !strings.Contains(text, "foo") {
+		t.Errorf("backtick string content should be preserved:\n%s", text)
+	}
+	// The trailing comment must be stripped.
+	if strings.Contains(text, "comment") {
+		t.Errorf("line comment after backtick string should be stripped:\n%s", text)
+	}
+}
+
+// ── CompactDir error paths ────────────────────────────────────────────────────
+
+// TestCompactDir_ReadFileError covers L477-479: WalkDir lists a file that cannot
+// be read → os.ReadFile returns an error → CompactDir returns error.
+func TestCompactDir_ReadFileError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("skipping chmod-based test in CI")
+	}
+	dir := t.TempDir()
+	f := filepath.Join(dir, "main.go")
+	if err := os.WriteFile(f, []byte("package main\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(f, 0000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(f, 0600) }) //nolint:errcheck
+	_, err := CompactDir(dir, "")
+	if err == nil {
+		t.Error("CompactDir should fail when a source file is unreadable")
+	}
+}
+
+// TestCompactDir_OutDirMkdirAllError covers L494-496: when outDir is set and a
+// blocking file exists where a subdirectory would be created, MkdirAll fails.
+func TestCompactDir_OutDirMkdirAllError(t *testing.T) {
+	dir := t.TempDir()
+	out := t.TempDir()
+
+	// Create dir/sub/main.go so the relative path is "sub/main.go".
+	subDir := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(subDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(subDir, "main.go"), []byte("package main\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Block out/sub creation by placing a regular file there.
+	if err := os.WriteFile(filepath.Join(out, "sub"), []byte("blocker"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := CompactDir(dir, out)
+	if err == nil {
+		t.Error("CompactDir should fail when output subdirectory cannot be created")
+	}
+}
+
+// TestCompactDir_WalkDirError covers L466-468: when WalkDir calls the callback
+// with a non-nil error (unreadable subdirectory), CompactDir returns that error.
+func TestCompactDir_WalkDirError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("skipping chmod-based test in CI")
+	}
+	dir := t.TempDir()
+	subdir := filepath.Join(dir, "locked")
+	if err := os.Mkdir(subdir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(subdir, "main.go"), []byte("package main\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(subdir, 0000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(subdir, 0o700) }) //nolint:errcheck
+	_, err := CompactDir(dir, "")
+	if err == nil {
+		t.Error("CompactDir should fail when a subdirectory is unreadable")
 	}
 }

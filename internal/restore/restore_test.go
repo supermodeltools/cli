@@ -820,6 +820,61 @@ func TestRender_ContainsProjectOverview(t *testing.T) {
 	}
 }
 
+// TestRender_LanguageList covers the languageList FuncMap lambda (L21) by supplying
+// Stats.Languages which is rendered via {{languageList .Graph.Stats.Languages}}.
+func TestRender_LanguageList(t *testing.T) {
+	g := &ProjectGraph{
+		Name:     "proj",
+		Language: "Go",
+		Stats:    Stats{TotalFiles: 5, Languages: []string{"Go", "TypeScript"}},
+	}
+	output, _, err := Render(g, "proj", RenderOptions{MaxTokens: 5000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output, "TypeScript") {
+		t.Errorf("languageList should render languages: %s", output)
+	}
+}
+
+// TestRender_CriticalFilesAdd1 covers the add1 FuncMap lambda (L22) by including
+// CriticalFiles which are rendered with {{add1 $i}} for 1-based numbering.
+func TestRender_CriticalFilesAdd1(t *testing.T) {
+	g := &ProjectGraph{
+		Name:     "proj",
+		Language: "Go",
+		Stats:    Stats{TotalFiles: 5},
+		CriticalFiles: []CriticalFile{
+			{Path: "core/db.go", RelationshipCount: 8},
+		},
+	}
+	output, _, err := Render(g, "proj", RenderOptions{MaxTokens: 5000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output, "core/db.go") {
+		t.Errorf("critical file should appear: %s", output)
+	}
+}
+
+// TestRender_StaleWithStaleAt covers L99-101: staleDuration computed when
+// opts.Stale=true and opts.StaleAt is non-nil inside Render().
+func TestRender_StaleWithStaleAt(t *testing.T) {
+	staleAt := time.Now().Add(-3 * time.Hour)
+	g := &ProjectGraph{Name: "proj", Language: "Go", Stats: Stats{TotalFiles: 1}}
+	output, _, err := Render(g, "proj", RenderOptions{
+		MaxTokens: 5000,
+		Stale:     true,
+		StaleAt:   &staleAt,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output, "STALE") {
+		t.Errorf("output should contain STALE banner: %s", output)
+	}
+}
+
 // ── truncateToTokenBudget ─────────────────────────────────────────────────────
 
 func TestTruncateToTokenBudget_TinyBudgetFallback(t *testing.T) {
@@ -1088,6 +1143,58 @@ pydantic = "^2.0"
 	}
 }
 
+func TestDetectExternalDeps_PyprojectTomlProjectSection(t *testing.T) {
+	// Tests the [project] section with a multi-line dependencies array.
+	dir := t.TempDir()
+	pyproject := `[project]
+name = "myapp"
+dependencies = [
+    "requests>=2.0",
+    "pydantic",
+    "fastapi ; python_version>='3.8'",
+]
+`
+	writeFile(t, dir, "pyproject.toml", pyproject)
+	deps := DetectExternalDeps(dir)
+	for _, want := range []string{"requests", "pydantic", "fastapi"} {
+		if !contains(deps, want) {
+			t.Errorf("should include %q, got %v", want, deps)
+		}
+	}
+}
+
+func TestDetectExternalDeps_PyprojectTomlProjectInlineArray(t *testing.T) {
+	// Tests the [project] section with an inline array on one line.
+	dir := t.TempDir()
+	pyproject := `[project]
+name = "myapp"
+dependencies = ["requests", "pydantic"]
+`
+	writeFile(t, dir, "pyproject.toml", pyproject)
+	deps := DetectExternalDeps(dir)
+	for _, want := range []string{"requests", "pydantic"} {
+		if !contains(deps, want) {
+			t.Errorf("should include %q in inline array, got %v", want, deps)
+		}
+	}
+}
+
+func TestDetectExternalDeps_NpmDevDepsFillRemainingCapacity(t *testing.T) {
+	// 14 non-npm deps from requirements.txt + 1 npm runtime + 2 npm dev;
+	// only 1 slot remains after non-npm, so only 1 npm runtime should be added.
+	dir := t.TempDir()
+	lines := make([]string, 14)
+	for i := range lines {
+		lines[i] = "dep" + strings.Repeat("x", i+1)
+	}
+	writeFile(t, dir, "requirements.txt", strings.Join(lines, "\n"))
+	writeFile(t, dir, "package.json", `{"dependencies":{"npm-a":"^1.0"},"devDependencies":{"npm-dev":"^1.0"}}`)
+	deps := DetectExternalDeps(dir)
+	if len(deps) > 15 {
+		t.Errorf("should cap at 15, got %d: %v", len(deps), deps)
+	}
+}
+
 func TestDetectExternalDeps_CapAt15(t *testing.T) {
 	dir := t.TempDir()
 	lines := make([]string, 20)
@@ -1198,6 +1305,177 @@ func TestBuildProjectGraph_ReadsREADMEDescription(t *testing.T) {
 	}
 	if !strings.Contains(g.Description, "command-line") {
 		t.Errorf("should extract description from README, got %q", g.Description)
+	}
+}
+
+// ── collectFiles edge cases ───────────────────────────────────────────────────
+
+// TestBuildProjectGraph_NonExistentRoot covers L325-327: WalkDir calls the
+// callback with a non-nil error for the root directory when it does not exist.
+func TestBuildProjectGraph_NonExistentRoot(t *testing.T) {
+	ctx := context.Background()
+	_, err := BuildProjectGraph(ctx, "/nonexistent-dir-for-collectfiles-test-xyz", "proj")
+	if err == nil {
+		t.Error("BuildProjectGraph should fail for a non-existent root directory")
+	}
+}
+
+// TestBuildProjectGraph_HiddenAndIgnoredDirs covers L335-337: a hidden directory
+// and an ignoreDirs entry (node_modules) are both skipped during the walk.
+func TestBuildProjectGraph_HiddenAndIgnoredDirs(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "main.go", "package main\n")
+	// Hidden dir (starts with "."): should be skipped.
+	if err := os.MkdirAll(filepath.Join(dir, ".hidden_dir"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, ".hidden_dir/secret.go", "package hidden\n")
+	// ignoreDirs entry (node_modules): should be skipped.
+	if err := os.MkdirAll(filepath.Join(dir, "node_modules"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, "node_modules/pkg.js", "x\n")
+
+	ctx := context.Background()
+	g, err := BuildProjectGraph(ctx, dir, "proj")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Only main.go should be counted; hidden and ignored dirs must not add files.
+	if g.Stats.TotalFiles != 1 {
+		t.Errorf("want 1 file (hidden and node_modules skipped), got %d", g.Stats.TotalFiles)
+	}
+}
+
+// TestBuildProjectGraph_SymlinkSkipped covers L340-342: a symlink entry in the
+// walk is silently skipped.
+func TestBuildProjectGraph_SymlinkSkipped(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main.go")
+	writeFile(t, dir, "main.go", "package main\n")
+	link := filepath.Join(dir, "link.go")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skip("symlink creation not supported: " + err.Error())
+	}
+
+	ctx := context.Background()
+	g, err := BuildProjectGraph(ctx, dir, "proj")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The symlink must not be counted as a separate file.
+	if g.Stats.TotalFiles != 1 {
+		t.Errorf("want 1 file (symlink skipped), got %d", g.Stats.TotalFiles)
+	}
+}
+
+// TestBuildProjectGraph_HiddenFileSkipped covers L348-350: a hidden file
+// (starting with ".") in the walk is silently skipped.
+func TestBuildProjectGraph_HiddenFileSkipped(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "main.go", "package main\n")
+	writeFile(t, dir, ".hidden_file", "not a source file\n")
+
+	ctx := context.Background()
+	g, err := BuildProjectGraph(ctx, dir, "proj")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.Stats.TotalFiles != 1 {
+		t.Errorf("want 1 file (.hidden_file skipped), got %d", g.Stats.TotalFiles)
+	}
+}
+
+// ── DetectExternalDeps edge cases ─────────────────────────────────────────────
+
+// TestDetectExternalDeps_DuplicateDep covers L99-101: the seen[name] check in the
+// add closure skips an already-added dependency.
+func TestDetectExternalDeps_DuplicateDep(t *testing.T) {
+	dir := t.TempDir()
+	// Same dep listed under two different top-level require statements → add called
+	// twice with "cobra", second call hits seen[name] == true branch.
+	writeFile(t, dir, "go.mod", "module example.com/x\n\nrequire github.com/spf13/cobra v1.0.0\nrequire github.com/spf13/cobra v1.8.0\n")
+	deps := DetectExternalDeps(dir)
+	count := 0
+	for _, d := range deps {
+		if d == "cobra" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("duplicate dep 'cobra' should appear once, got %d times in %v", count, deps)
+	}
+}
+
+// TestDetectExternalDeps_GoModInlineComment covers L132-134: a require block entry
+// with an inline // comment has the comment stripped before the module name is parsed.
+func TestDetectExternalDeps_GoModInlineComment(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "go.mod", `module example.com/x
+
+go 1.21
+
+require (
+	github.com/spf13/cobra v1.8.0 // indirect
+	github.com/pkg/errors v0.9.0
+)
+`)
+	deps := DetectExternalDeps(dir)
+	if !contains(deps, "cobra") {
+		t.Errorf("should detect cobra from require block with // comment, got %v", deps)
+	}
+}
+
+// TestDetectExternalDeps_RequirementsURLSpec covers L175-177: a requirements.txt
+// line using the "name @ URL" PEP 440 URL specifier strips the URL part.
+func TestDetectExternalDeps_RequirementsURLSpec(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "requirements.txt", "requests @ https://files.pythonhosted.org/requests.tar.gz\nflask\n")
+	deps := DetectExternalDeps(dir)
+	if !contains(deps, "requests") {
+		t.Errorf("should detect 'requests' from URL spec line, got %v", deps)
+	}
+}
+
+// TestDetectExternalDeps_CargoNegativeDepth covers L206-208: a rogue "}" in
+// Cargo.toml when depth is already 0 would make depth negative; the guard resets
+// it to 0 so subsequent lines are still processed correctly.
+func TestDetectExternalDeps_CargoNegativeDepth(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Cargo.toml", `[package]
+name = "myapp"
+
+[dependencies]
+serde = "1.0"
+}
+anyhow = "1.0"
+`)
+	deps := DetectExternalDeps(dir)
+	if !contains(deps, "serde") {
+		t.Errorf("should detect 'serde' despite rogue }, got %v", deps)
+	}
+}
+
+// TestDetectExternalDeps_NpmRuntimeCapAtMaxDeps covers L294-295: when deps is
+// already at maxDeps (15) from non-npm sources, the npmRuntime loop breaks
+// immediately at L294.
+func TestDetectExternalDeps_NpmRuntimeCapAtMaxDeps(t *testing.T) {
+	dir := t.TempDir()
+	// 15 requirements.txt deps to fill the cap, plus one npm runtime dep.
+	pyDeps := make([]string, 15)
+	for i := range pyDeps {
+		pyDeps[i] = "pydep" + strings.Repeat("x", i+1)
+	}
+	writeFile(t, dir, "requirements.txt", strings.Join(pyDeps, "\n"))
+	writeFile(t, dir, "package.json", `{"dependencies":{"npm-extra":"^1.0"}}`)
+	deps := DetectExternalDeps(dir)
+	// Cap must be respected.
+	if len(deps) > 15 {
+		t.Errorf("deps should be capped at 15, got %d", len(deps))
+	}
+	// npm-extra should not appear because the cap was already hit.
+	if contains(deps, "npm-extra") {
+		t.Errorf("npm-extra should be excluded due to cap, got %v", deps)
 	}
 }
 
@@ -1312,4 +1590,123 @@ func contains(ss []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// ── truncateToTokenBudget additional branches ─────────────────────────────────
+
+func TestTruncateToTokenBudget_CriticalFilesWithRelCount(t *testing.T) {
+	g := &ProjectGraph{
+		Name:     "proj",
+		Language: "Go",
+		Stats:    Stats{TotalFiles: 5},
+		CriticalFiles: []CriticalFile{
+			{Path: "core/db.go", RelationshipCount: 10},
+			{Path: "util/helpers.go", RelationshipCount: 0},
+		},
+	}
+	output, _, err := truncateToTokenBudget(g, "proj", RenderOptions{MaxTokens: 500})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output, "Critical Files") {
+		t.Error("should contain Critical Files section")
+	}
+	if !strings.Contains(output, "relationships") {
+		t.Errorf("file with RelationshipCount>0 should show 'relationships': %s", output)
+	}
+}
+
+func TestTruncateToTokenBudget_CriticalFilesTruncatedByBudget(t *testing.T) {
+	// Very tight budget: Critical Files header fits but individual file lines don't.
+	files := make([]CriticalFile, 5)
+	for i := range files {
+		files[i] = CriticalFile{
+			Path:              strings.Repeat("a", 80),
+			RelationshipCount: i + 1,
+		}
+	}
+	g := &ProjectGraph{
+		Name:          "proj",
+		Language:      "Go",
+		Stats:         Stats{TotalFiles: 5},
+		CriticalFiles: files,
+	}
+	// Small enough that not all files fit
+	_, tokens, err := truncateToTokenBudget(g, "proj", RenderOptions{MaxTokens: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tokens > 130 {
+		t.Errorf("tokens %d should stay close to budget 100", tokens)
+	}
+}
+
+func TestTruncateToTokenBudget_StaleBanner(t *testing.T) {
+	staleAt := time.Now().Add(-2 * time.Hour)
+	g := &ProjectGraph{Name: "proj", Language: "Go", Stats: Stats{TotalFiles: 1}}
+	opts := RenderOptions{
+		MaxTokens: 500,
+		Stale:     true,
+		StaleAt:   &staleAt,
+	}
+	output, _, err := truncateToTokenBudget(g, "proj", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output, "STALE") {
+		t.Errorf("stale output should contain 'STALE': %s", output)
+	}
+}
+
+// TestTruncateToTokenBudget_LocalMode covers L156-158: local mode banner appended
+// in truncateToTokenBudget when opts.LocalMode is true.
+func TestTruncateToTokenBudget_LocalMode(t *testing.T) {
+	g := &ProjectGraph{Name: "proj", Language: "Go", Stats: Stats{TotalFiles: 1}}
+	output, _, err := truncateToTokenBudget(g, "proj", RenderOptions{
+		MaxTokens: 500,
+		LocalMode: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output, "local mode") {
+		t.Errorf("output should contain local mode banner: %s", output)
+	}
+}
+
+// TestTruncateToTokenBudget_CircularOneCycle covers L163-168: the
+// CircularDependencyCycles>0 branch and the ==1 singular "cycle" label.
+func TestTruncateToTokenBudget_CircularOneCycle(t *testing.T) {
+	g := &ProjectGraph{
+		Name:     "proj",
+		Language: "Go",
+		Stats:    Stats{TotalFiles: 1, CircularDependencyCycles: 1},
+	}
+	output, _, err := truncateToTokenBudget(g, "proj", RenderOptions{MaxTokens: 500})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output, "circular dependency") {
+		t.Errorf("output should mention circular dependency: %s", output)
+	}
+	// Singular "cycle" (not "cycles") is used when count == 1.
+	if !strings.Contains(output, "cycle") {
+		t.Errorf("singular 'cycle' should appear for count=1: %s", output)
+	}
+}
+
+// TestTruncateToTokenBudget_ClaudeMD covers L231-240: ClaudeMD section written
+// when opts.ClaudeMD is non-empty and fits within remaining budget.
+func TestTruncateToTokenBudget_ClaudeMD(t *testing.T) {
+	g := &ProjectGraph{Name: "proj", Language: "Go", Stats: Stats{TotalFiles: 1}}
+	output, _, err := truncateToTokenBudget(g, "proj", RenderOptions{
+		MaxTokens: 1000,
+		ClaudeMD:  "## Instructions\nDo the thing.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output, "Do the thing.") {
+		t.Errorf("output should contain ClaudeMD content: %s", output)
+	}
 }
