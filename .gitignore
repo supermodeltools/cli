@@ -4,3 +4,18 @@ npm/bin/
 /supermodel
 /cli
 .supermodel/
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Go test coverage
+cover*.out
+
+# Supermodel graph sidecars
+*.graph.go
+*.graph.py
