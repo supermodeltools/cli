@@ -26,6 +26,13 @@ func ShardFilename(sourcePath string) string {
 	return stem + ".graph" + ext
 }
 
+// ThreeFileShardNames generates the .calls, .deps, .impact shard paths.
+func ThreeFileShardNames(sourcePath string) (calls, deps, impact string) {
+	ext := filepath.Ext(sourcePath)
+	stem := strings.TrimSuffix(sourcePath, ext)
+	return stem + ".calls" + ext, stem + ".deps" + ext, stem + ".impact" + ext
+}
+
 // Header returns the @generated header line.
 func Header(prefix string) string {
 	return prefix + " @generated supermodel-shard — do not edit\n"
@@ -268,6 +275,53 @@ func RenderAll(repoDir string, cache *Cache, files []string, dryRun bool) (int, 
 			return written, err
 		}
 		written++
+	}
+
+	return written, nil
+}
+
+// RenderAllThreeFile generates .calls, .deps, and .impact files per source file.
+func RenderAllThreeFile(repoDir string, cache *Cache, files []string, dryRun bool) (int, error) {
+	sort.Strings(files)
+	written := 0
+
+	for _, srcFile := range files {
+		ext := filepath.Ext(srcFile)
+		prefix := CommentPrefix(ext)
+		header := Header(prefix)
+		goPrefix := ""
+		if ext == ".go" {
+			goPrefix = "//go:build ignore\n\npackage ignore\n"
+		}
+
+		callsPath, depsPath, impactPath := ThreeFileShardNames(srcFile)
+
+		deps := renderDepsSection(srcFile, cache, prefix)
+		calls := renderCallsSection(srcFile, cache, prefix)
+		impact := renderImpactSection(srcFile, cache, prefix)
+
+		for _, item := range []struct {
+			path    string
+			content string
+		}{
+			{depsPath, deps},
+			{callsPath, calls},
+			{impactPath, impact},
+		} {
+			if item.content == "" {
+				full := filepath.Join(repoDir, item.path)
+				_ = os.Remove(full)
+				continue
+			}
+			fullContent := goPrefix + header + item.content + "\n"
+			if err := WriteShard(repoDir, item.path, fullContent, dryRun); err != nil {
+				if strings.Contains(err.Error(), "path traversal") {
+					continue
+				}
+				return written, err
+			}
+			written++
+		}
 	}
 
 	return written, nil

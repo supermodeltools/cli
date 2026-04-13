@@ -11,6 +11,7 @@ import (
 func init() {
 	var opts analyze.Options
 	var noShards bool
+	var threeFile bool
 
 	c := &cobra.Command{
 		Use:   "analyze [path]",
@@ -40,7 +41,7 @@ Use --no-shards to skip writing graph files.`,
 				// Shard mode: Generate handles the full pipeline (API call +
 				// cache + shards) in a single upload. Running analyze.Run
 				// first would duplicate the API call.
-				return shards.Generate(cmd.Context(), cfg, dir, shards.GenerateOptions{Force: opts.Force})
+				return shards.Generate(cmd.Context(), cfg, dir, shards.GenerateOptions{Force: opts.Force, ThreeFile: threeFile})
 			}
 			return analyze.Run(cmd.Context(), cfg, dir, opts)
 		},
@@ -49,6 +50,7 @@ Use --no-shards to skip writing graph files.`,
 	c.Flags().BoolVar(&opts.Force, "force", false, "re-analyze even if a cached result exists")
 	c.Flags().StringVarP(&opts.Output, "output", "o", "", "output format: human|json")
 	c.Flags().BoolVar(&noShards, "no-shards", false, "skip writing .graph.* shard files")
+	c.Flags().BoolVar(&threeFile, "three-file", false, "generate .calls/.deps/.impact files instead of single .graph")
 
 	rootCmd.AddCommand(c)
 }
