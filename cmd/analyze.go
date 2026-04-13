@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 
 	"github.com/supermodeltools/cli/internal/analyze"
@@ -32,6 +34,9 @@ Use --no-shards to skip writing graph files.`,
 			}
 			if err := cfg.RequireAPIKey(); err != nil {
 				return err
+			}
+			if noShards && threeFile {
+				return fmt.Errorf("--three-file cannot be used with --no-shards")
 			}
 			dir := "."
 			if len(args) > 0 {
