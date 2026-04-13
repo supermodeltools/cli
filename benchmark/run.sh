@@ -38,6 +38,13 @@ docker build \
   "$REPO_ROOT" \
   2>&1 | tail -3
 
+echo "==> Building bench-threefile (three-file shard format)..."
+docker build \
+  -f "$SCRIPT_DIR/Dockerfile.threefile" \
+  -t bench-threefile \
+  "$REPO_ROOT" \
+  2>&1 | tail -3
+
 echo
 
 # ── Run containers ────────────────────────────────────────────────────────────
@@ -57,5 +64,13 @@ docker run --rm \
   2>&1 | tee "$RESULTS_DIR/supermodel.txt"
 
 echo
+echo "==> Running three-file container..."
+docker run --rm \
+  -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+  -e SUPERMODEL_API_KEY="$SUPERMODEL_API_KEY" \
+  bench-threefile \
+  2>&1 | tee "$RESULTS_DIR/threefile.txt"
+
+echo
 echo "==> Comparing results..."
-"$SCRIPT_DIR/compare.sh" "$RESULTS_DIR/naked.txt" "$RESULTS_DIR/supermodel.txt"
+"$SCRIPT_DIR/compare.sh" "$RESULTS_DIR/naked.txt" "$RESULTS_DIR/supermodel.txt" "$RESULTS_DIR/threefile.txt"
