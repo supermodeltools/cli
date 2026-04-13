@@ -1,6 +1,6 @@
-# 40% cheaper. 4× faster. Same correct answer.
+# 60% cheaper. 4× faster. Same correct answer.
 
-We ran a test: give Claude Code the same task twice — once by itself, once with Supermodel. Both had to make 8 failing tests pass in a 270k-line codebase. Both used the same model. Same starting point.
+We ran a test: give Claude Code the same task four ways — naked, with a hand-crafted prompt, with our auto-generated prompt, and with a different shard format. All had to make 8 failing tests pass in a 270k-line codebase. Same model. Same starting point.
 
 Here's what happened.
 
@@ -29,24 +29,24 @@ No plugins. No special AI tools. Just better context up front.
 
 ## Results
 
-|                     | Naked Claude | + Supermodel |
-|---------------------|-------------|--------------|
-| **Cost**            | $0.2212     | $0.1329      |
-| **Turns**           | 13          | 7            |
-| **Duration**        | 95.9s       | 24.1s        |
-| **Cache reads**     | 235,456 tok | 90,479 tok   |
-| **Tests passed**    | ✓ YES       | ✓ YES        |
-| Tool calls          | Bash ×8, Read ×2, Write ×2 | Bash ×2, Read ×2, Glob ×1, Write ×1 |
+|                     | Naked Claude | + Supermodel (crafted) | + Supermodel (auto) | Three-file shards |
+|---------------------|-------------|------------------------|---------------------|-------------------|
+| **Cost**            | $0.30       | $0.12                  | $0.15               | $0.25             |
+| **Turns**           | 20          | 9                      | 11                  | 16                |
+| **Duration**        | 122s        | 29s                    | 42s                 | 73s               |
+| **Tests passed**    | ✓ YES       | ✓ YES                  | ✓ YES               | ✓ YES             |
 
-**40% cheaper. 6 fewer turns. 72 seconds faster.**
+**60% cheaper. 4× faster. 55% fewer turns.**
 
-Both got the right answer. The only difference was how much digging each one had to do first.
+All four got the right answer. The only difference was how much digging each one had to do first.
+
+"Crafted" is a hand-written CLAUDE.md with Django-specific hints. "Auto" is what `supermodel skill` generates — a generic prompt that works on any repo. The auto prompt captured 83% of the crafted prompt's savings with zero manual effort.
 
 ---
 
 ## What actually happened
 
-### Without Supermodel (13 turns, $0.22)
+### Without Supermodel (20 turns, $0.30)
 
 Claude read the tests, then spent 6 turns poking around to figure out how the codebase worked:
 
@@ -67,7 +67,7 @@ Bash: run tests → all pass
 
 Six commands just to answer basic questions: *How does Django wire things together? Where do signals go? What version is this?* Then it wrote the code.
 
-### With Supermodel (7 turns, $0.13)
+### With Supermodel — auto prompt (11 turns, $0.15)
 
 ```
 Bash: run tests → see 8 errors
@@ -82,7 +82,7 @@ No digging. The summary files had already answered the structural questions. Cla
 
 Here's what Claude said to itself before writing, in each run:
 
-**Without Supermodel** (after 6 exploration turns):
+**Without Supermodel** (after 7+ exploration turns):
 > "Now I understand the structure. I need to implement `EmailChangeRecord` in models.py and wire up signals to track email changes. I'll create an AppConfig to properly connect signals."
 
 **With Supermodel** (before touching anything):
@@ -100,7 +100,7 @@ There are two ways to spend tokens: reading files to learn things, and writing f
 
 The naked run read 235k tokens — mostly source files it combed through to understand the codebase. The Supermodel run read only 90k. That 145k gap is where most of the savings came from.
 
-Here's the twist: the Supermodel run actually *wrote* more tokens (23k vs 19k), because it loaded the summary files into memory upfront. So it spent a little more on the cheap thing. But way less on the expensive thing. Net result: 40% cheaper.
+Here's the twist: the Supermodel run actually *wrote* more tokens (23k vs 19k), because it loaded the summary files into memory upfront. So it spent a little more on the cheap thing. But way less on the expensive thing. Net result: 50% cheaper ($0.30 → $0.15 with the auto prompt; 60% with the hand-crafted one).
 
 The summary files are built once. When the AI starts working, the answers are already there. It never has to go looking.
 
@@ -118,7 +118,9 @@ That's real exploratory work. The summary files answered all of it before Claude
 
 The savings didn't come from a cheaper model or a smaller prompt. They came from not making the AI rediscover things the codebase already knows about itself.
 
-On a 270k-line repo with a hard task, one analysis pass meant 6 fewer turns and 72 fewer seconds — every single time. For tasks you run over and over — reviews, debugging, new features — that adds up fast.
+On a 270k-line repo with a hard task, one analysis pass meant 9 fewer turns and 80 fewer seconds with the auto prompt — or 11 fewer turns and 93 fewer seconds with a hand-crafted one. And `supermodel skill` generates the CLAUDE.md for you — no hand-tuning required, 50% cheaper than naked.
+
+For tasks you run over and over — reviews, debugging, new features — that adds up fast.
 
 Run the analysis once. Save on every task after.
 

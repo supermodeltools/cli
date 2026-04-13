@@ -174,7 +174,10 @@ func TestCreateZip_CleanGitRepo(t *testing.T) {
 // TestCreateZip_CreateTempError covers L48-50: createZip returns an error when
 // os.CreateTemp fails due to an invalid TMPDIR.
 func TestCreateZip_CreateTempError(t *testing.T) {
-	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "nonexistent-tmp"))
+	badTmp := filepath.Join(t.TempDir(), "nonexistent-tmp")
+	t.Setenv("TMPDIR", badTmp)
+	t.Setenv("TMP", badTmp)
+	t.Setenv("TEMP", badTmp)
 	_, err := createZip(t.TempDir())
 	if err == nil {
 		t.Error("createZip should fail when os.CreateTemp fails")
