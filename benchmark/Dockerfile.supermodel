@@ -1,0 +1,46 @@
+# Benchmark container: Claude Code + supermodel on django/django
+# Build from repo root: docker build -f benchmark/Dockerfile.supermodel -t bench-supermodel .
+
+# Stage 1: Build supermodel binary
+FROM golang:alpine AS supermodel-builder
+ENV GOTOOLCHAIN=auto
+WORKDIR /build
+COPY . .
+RUN go build \
+    -ldflags="-s -w -X github.com/supermodeltools/cli/internal/build.Version=benchmark" \
+    -o /build/supermodel \
+    .
+
+# Stage 2: Runtime
+FROM python:3.12-slim
+
+# System deps + Node.js 20
+RUN apt-get update && apt-get install -y curl ca-certificates git && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Claude Code + supermodel
+RUN npm install -g @anthropic-ai/claude-code
+COPY --from=supermodel-builder /build/supermodel /usr/local/bin/supermodel
+
+# Clone Django source at a fixed tag
+RUN git clone --depth=1 --branch 5.0.6 \
+    https://github.com/django/django.git /app
+
+# Install Django in editable mode
+RUN pip install --no-cache-dir -e /app
+
+# Drop in the change_tracking test app
+COPY benchmark/change_tracking/ /app/tests/change_tracking/
+
+# Copy task + CLAUDE.md
+COPY benchmark/task.md /benchmark/task.md
+COPY benchmark/CLAUDE.md /app/CLAUDE.md
+
+# Non-root user
+RUN useradd -m -s /bin/bash bench && chown -R bench:bench /app /benchmark
+USER bench
+
+COPY benchmark/entrypoint.supermodel.sh /entrypoint.sh
+ENTRYPOINT ["/bin/bash", "/entrypoint.sh"]
