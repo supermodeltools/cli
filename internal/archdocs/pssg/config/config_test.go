@@ -189,17 +189,18 @@ func TestResolvePaths_RelativePaths(t *testing.T) {
 }
 
 func TestResolvePaths_AbsPathPreserved(t *testing.T) {
+	absData := filepath.Join(string(filepath.Separator), "absolute", "data")
 	cfg := &Config{
-		ConfigDir: "/base",
+		ConfigDir: filepath.Join(string(filepath.Separator), "base"),
 		Paths: PathsConfig{
-			Data:      "/absolute/data",
-			Templates: "/absolute/templates",
-			Output:    "/absolute/docs",
-			Cache:     "/absolute/.cache",
+			Data:      absData,
+			Templates: filepath.Join(string(filepath.Separator), "absolute", "templates"),
+			Output:    filepath.Join(string(filepath.Separator), "absolute", "docs"),
+			Cache:     filepath.Join(string(filepath.Separator), "absolute", ".cache"),
 		},
 	}
 	resolvePaths(cfg)
-	if cfg.Paths.Data != "/absolute/data" {
+	if cfg.Paths.Data != absData {
 		t.Errorf("absolute path should be preserved: got %q", cfg.Paths.Data)
 	}
 }

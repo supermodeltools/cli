@@ -564,14 +564,15 @@ func TestDryRunList_WithSubdir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DryRunList(subdir): %v", err)
 	}
+	want := filepath.Join("pkg", "util.go")
 	found := false
 	for _, f := range files {
-		if f == "pkg/util.go" {
+		if f == want {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("pkg/util.go should be in DryRunList; got %v", files)
+		t.Errorf("%s should be in DryRunList; got %v", want, files)
 	}
 }
 
@@ -833,6 +834,8 @@ func TestDryRunList_WalkError(t *testing.T) {
 // an error when os.CreateTemp fails (TMPDIR points to a nonexistent directory).
 func TestCreateZipFile_CreateTempError(t *testing.T) {
 	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "nonexistent-tmp-dir"))
+	t.Setenv("TMP", filepath.Join(t.TempDir(), "nonexistent-tmp-dir"))
+	t.Setenv("TEMP", filepath.Join(t.TempDir(), "nonexistent-tmp-dir"))
 	_, err := CreateZipFile(t.TempDir(), nil)
 	if err == nil {
 		t.Error("expected error when os.CreateTemp fails due to invalid TMPDIR")

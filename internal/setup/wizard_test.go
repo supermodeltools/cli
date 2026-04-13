@@ -84,6 +84,7 @@ func TestDetectCursor_WithoutDir(t *testing.T) {
 	dir := t.TempDir()
 	// Override HOME so global ~/.cursor doesn't interfere.
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
 	if detectCursor(dir) {
 		t.Error("detectCursor: should return false when no .cursor dir exists")
 	}
@@ -180,6 +181,7 @@ func TestDetectClaude_WithDotClaudeDir(t *testing.T) {
 	// Simulate HOME with a .claude directory present.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	if err := os.Mkdir(filepath.Join(home, ".claude"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -192,6 +194,7 @@ func TestDetectClaude_NoClaude(t *testing.T) {
 	// Empty PATH so LookPath("claude") always fails, then empty HOME so Stat fails.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("PATH", "")
 	// With empty PATH and no ~/.claude dir, detectClaude must return false.
 	if detectClaude() {
@@ -203,6 +206,7 @@ func TestDetectClaude_ViaHomeDotClaude(t *testing.T) {
 	// Empty PATH (so LookPath fails) but ~/.claude exists → covers the stat success path.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("PATH", "")
 	if err := os.Mkdir(filepath.Join(home, ".claude"), 0755); err != nil {
 		t.Fatal(err)
@@ -217,6 +221,7 @@ func TestDetectClaude_ViaHomeDotClaude(t *testing.T) {
 func TestDetectCursor_GlobalDotCursorDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	if err := os.Mkdir(filepath.Join(home, ".cursor"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -228,6 +233,7 @@ func TestDetectCursor_GlobalDotCursorDir(t *testing.T) {
 func TestDetectCursor_MacOSLibraryPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	macPath := filepath.Join(home, "Library", "Application Support", "Cursor")
 	if err := os.MkdirAll(macPath, 0755); err != nil {
 		t.Fatal(err)

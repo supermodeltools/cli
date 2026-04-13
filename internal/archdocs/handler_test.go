@@ -327,6 +327,8 @@ func TestResolveTemplates_Override(t *testing.T) {
 
 func TestResolveTemplates_MkdirTempError(t *testing.T) {
 	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "nonexistent-tmp"))
+	t.Setenv("TMP", filepath.Join(t.TempDir(), "nonexistent-tmp"))
+	t.Setenv("TEMP", filepath.Join(t.TempDir(), "nonexistent-tmp"))
 	_, cleanup, err := resolveTemplates("")
 	if err == nil {
 		if cleanup != nil {

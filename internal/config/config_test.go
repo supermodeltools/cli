@@ -9,6 +9,7 @@ import (
 
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
 	t.Setenv("SUPERMODEL_API_KEY", "")
 	t.Setenv("SUPERMODEL_API_BASE", "")
 	cfg, err := Load()
@@ -25,6 +26,7 @@ func TestLoadDefaults(t *testing.T) {
 
 func TestSaveAndLoad(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
 	t.Setenv("SUPERMODEL_API_KEY", "")
 	t.Setenv("SUPERMODEL_API_BASE", "")
 	cfg := &Config{APIKey: "test-key", APIBase: DefaultAPIBase, Output: "json"}
@@ -67,6 +69,7 @@ func TestRequireAPIKey(t *testing.T) {
 func TestPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	if runtime.GOOS == "windows" {
 		t.Skip("HOME env var not used for config path on Windows")
 	}
@@ -105,6 +108,7 @@ func TestShardsEnabled_ExplicitTrue(t *testing.T) {
 
 func TestApplyEnv_APIKey(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
 	t.Setenv("SUPERMODEL_API_KEY", "env-key-123")
 	t.Setenv("SUPERMODEL_API_BASE", "")
 	t.Setenv("SUPERMODEL_SHARDS", "")
@@ -119,6 +123,7 @@ func TestApplyEnv_APIKey(t *testing.T) {
 
 func TestApplyEnv_APIBase(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
 	t.Setenv("SUPERMODEL_API_KEY", "")
 	t.Setenv("SUPERMODEL_API_BASE", "https://custom.api.com")
 	t.Setenv("SUPERMODEL_SHARDS", "")
@@ -133,6 +138,7 @@ func TestApplyEnv_APIBase(t *testing.T) {
 
 func TestApplyEnv_ShardsDisabled(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
 	t.Setenv("SUPERMODEL_API_KEY", "")
 	t.Setenv("SUPERMODEL_API_BASE", "")
 	t.Setenv("SUPERMODEL_SHARDS", "false")
@@ -148,6 +154,7 @@ func TestApplyEnv_ShardsDisabled(t *testing.T) {
 func TestLoad_CorruptYAML(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	cfgFile := filepath.Join(home, ".supermodel", "config.yaml")
 	if err := os.MkdirAll(filepath.Dir(cfgFile), 0700); err != nil {
 		t.Fatal(err)
@@ -171,6 +178,7 @@ func TestLoad_ReadError(t *testing.T) {
 	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
 	// Create a directory at the config file path → ReadFile returns EISDIR,
 	// which is not IsNotExist → covers the "read config: ..." error path.
@@ -192,6 +200,7 @@ func TestLoad_ReadError(t *testing.T) {
 func TestSave_MkdirAllError(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	// Place a regular file at ~/.supermodel so MkdirAll fails with ENOTDIR.
 	if err := os.WriteFile(filepath.Join(home, ".supermodel"), []byte("not a dir"), 0600); err != nil {
 		t.Fatal(err)
@@ -210,6 +219,7 @@ func TestSave_WriteFileError(t *testing.T) {
 	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	cfgDir := filepath.Join(home, ".supermodel")
 	if err := os.MkdirAll(cfgDir, 0700); err != nil {
 		t.Fatal(err)
@@ -232,6 +242,7 @@ func TestSave_RenameError(t *testing.T) {
 	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
 	// Create a directory at the config file path → os.Rename(tmp, dest) will fail
 	// because dest is a directory, triggering the os.Remove(tmp) cleanup branch.
@@ -251,6 +262,7 @@ func TestSave_RenameError(t *testing.T) {
 func TestApplyDefaults_FilledFromFile(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("SUPERMODEL_API_KEY", "")
 	t.Setenv("SUPERMODEL_API_BASE", "")
 	t.Setenv("SUPERMODEL_SHARDS", "")

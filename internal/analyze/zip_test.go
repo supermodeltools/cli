@@ -163,6 +163,8 @@ func TestWalkZip_OpenFileError(t *testing.T) {
 
 func TestCreateZip_CreateTempError(t *testing.T) {
 	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "nonexistent-tmp"))
+	t.Setenv("TMP", filepath.Join(t.TempDir(), "nonexistent-tmp"))
+	t.Setenv("TEMP", filepath.Join(t.TempDir(), "nonexistent-tmp"))
 	_, err := createZip(t.TempDir())
 	if err == nil {
 		t.Error("createZip should fail when os.CreateTemp fails")

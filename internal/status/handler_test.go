@@ -159,6 +159,7 @@ func TestCountCacheEntries_MissingDir(t *testing.T) {
 // exercising the full happy path including countCacheEntries and render.
 func TestRun_HappyPath(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
 	t.Setenv("SUPERMODEL_API_KEY", "")
 	t.Setenv("SUPERMODEL_API_BASE", "")
 	if err := Run(context.Background(), Options{}); err != nil {
@@ -170,6 +171,7 @@ func TestRun_HappyPath(t *testing.T) {
 func TestRun_ConfigLoadError(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	// Place a directory at the config file path so ReadFile returns EISDIR.
 	cfgPath := filepath.Join(home, ".supermodel", "config.yaml")
 	if err := os.MkdirAll(cfgPath, 0700); err != nil {

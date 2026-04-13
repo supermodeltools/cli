@@ -18,6 +18,7 @@ func TestLoginWithToken(t *testing.T) {
 	// Point config to a temp dir so we don't touch real config.
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("SUPERMODEL_API_KEY", "")
 
 	if err := LoginWithToken("smsk_live_test123"); err != nil {
@@ -42,6 +43,7 @@ func TestLoginWithToken_Empty(t *testing.T) {
 func TestLoginWithToken_Whitespace(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("SUPERMODEL_API_KEY", "")
 
 	if err := LoginWithToken("  smsk_live_padded  "); err != nil {
@@ -170,6 +172,7 @@ func TestRandomState(t *testing.T) {
 func TestLogout(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("SUPERMODEL_API_KEY", "")
 
 	// Set up a config with a key.
@@ -190,6 +193,7 @@ func TestLogout(t *testing.T) {
 func TestLogout_AlreadyLoggedOut(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("SUPERMODEL_API_KEY", "")
 
 	// No API key set.
@@ -202,6 +206,7 @@ func TestLoginWithToken_ConfigLoadError(t *testing.T) {
 	// Make config.yaml a directory → os.ReadFile returns a non-NotExist error.
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("SUPERMODEL_API_KEY", "")
 	cfgDir := filepath.Join(tmp, ".supermodel")
 	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
@@ -222,6 +227,7 @@ func TestLoginWithToken_SaveError(t *testing.T) {
 	}
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("SUPERMODEL_API_KEY", "")
 	cfgDir := filepath.Join(tmp, ".supermodel")
 	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
@@ -239,6 +245,7 @@ func TestLoginWithToken_SaveError(t *testing.T) {
 func TestLogout_ConfigLoadError(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("SUPERMODEL_API_KEY", "")
 	cfgDir := filepath.Join(tmp, ".supermodel")
 	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
@@ -258,6 +265,7 @@ func TestLogout_SaveError(t *testing.T) {
 	}
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("SUPERMODEL_API_KEY", "")
 	// Pre-create a config with a key so Logout proceeds to Save.
 	cfgDir := filepath.Join(tmp, ".supermodel")

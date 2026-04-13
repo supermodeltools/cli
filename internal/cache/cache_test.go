@@ -16,7 +16,11 @@ func withTempCacheDir(t *testing.T) func() {
 	// config.Dir() returns filepath.Join(os.UserHomeDir(), ".supermodel")
 	// We redirect it by pointing HOME at a temp dir.
 	t.Setenv("HOME", tmp)
-	return func() { t.Setenv("HOME", orig) }
+	t.Setenv("USERPROFILE", tmp)
+	return func() {
+		t.Setenv("HOME", orig)
+		t.Setenv("USERPROFILE", orig)
+	}
 }
 
 // ── HashFile ──────────────────────────────────────────────────────────────────
@@ -324,6 +328,7 @@ func TestGetJSON_NonNotExistError(t *testing.T) {
 func TestPut_MkdirAllError(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	// Create a regular file where ~/.supermodel would be → MkdirAll fails.
 	smFile := home + "/.supermodel"
 	if err := os.WriteFile(smFile, []byte("not a dir"), 0600); err != nil {
@@ -346,6 +351,7 @@ func TestPutJSON_MarshalError(t *testing.T) {
 func TestPutJSON_MkdirAllError(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	smFile := home + "/.supermodel"
 	if err := os.WriteFile(smFile, []byte("not a dir"), 0600); err != nil {
 		t.Fatal(err)
@@ -361,6 +367,7 @@ func TestPutJSON_WriteFileError(t *testing.T) {
 	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	cacheDir := home + "/.supermodel/cache"
 	if err := os.MkdirAll(cacheDir, 0700); err != nil {
 		t.Fatal(err)
@@ -377,6 +384,7 @@ func TestPutJSON_WriteFileError(t *testing.T) {
 func TestPut_RenameError(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	cacheDir := filepath.Join(home, ".supermodel", "cache")
 	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 		t.Fatal(err)
@@ -396,6 +404,7 @@ func TestPut_RenameError(t *testing.T) {
 func TestPutJSON_RenameError(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	cacheDir := filepath.Join(home, ".supermodel", "cache")
 	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 		t.Fatal(err)
@@ -417,6 +426,7 @@ func TestPut_WriteFileError(t *testing.T) {
 	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	// Create the cache dir but make it read-only so WriteFile fails.
 	cacheDir := home + "/.supermodel/cache"
 	if err := os.MkdirAll(cacheDir, 0700); err != nil {
