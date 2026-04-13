@@ -183,7 +183,7 @@ func (d *Daemon) loadOrGenerate(ctx context.Context) error {
 			d.mu.Unlock()
 
 			files := d.cache.SourceFiles()
-			written, renderErr := RenderAll(d.cfg.RepoDir, d.cache, files, false)
+			written, renderErr := RenderAll(d.cfg.RepoDir, d.cache, files, false, false)
 			if renderErr != nil {
 				return renderErr
 			}
@@ -226,7 +226,7 @@ func (d *Daemon) fullGenerate(ctx context.Context) error {
 	d.mu.Unlock()
 
 	files := d.cache.SourceFiles()
-	written, err := RenderAll(d.cfg.RepoDir, d.cache, files, false)
+	written, err := RenderAll(d.cfg.RepoDir, d.cache, files, false, false)
 	if err != nil {
 		return err
 	}
@@ -301,7 +301,7 @@ func (d *Daemon) incrementalUpdate(ctx context.Context, changedFiles []string) {
 
 	d.logf("Re-rendering %d affected shards", len(affected))
 
-	written, err := RenderAll(d.cfg.RepoDir, cacheSnapshot, affected, false)
+	written, err := RenderAll(d.cfg.RepoDir, cacheSnapshot, affected, false, false)
 	if err != nil {
 		d.logf("Render error: %v", err)
 		return

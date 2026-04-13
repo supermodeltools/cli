@@ -593,7 +593,7 @@ func TestUpdateGitignore_NoTrailingNewlineHandled(t *testing.T) {
 func TestRenderAll_EmptyFiles(t *testing.T) {
 	dir := t.TempDir()
 	c := makeRenderCache(shardIR(nil, nil))
-	n, err := RenderAll(dir, c, nil, false)
+	n, err := RenderAll(dir, c, nil, false, false)
 	if err != nil {
 		t.Fatalf("RenderAll(empty): %v", err)
 	}
@@ -615,7 +615,7 @@ func TestRenderAll_WritesShards(t *testing.T) {
 	)
 	dir := t.TempDir()
 	c := makeRenderCache(ir)
-	n, err := RenderAll(dir, c, []string{"src/a.go"}, false)
+	n, err := RenderAll(dir, c, []string{"src/a.go"}, false, false)
 	if err != nil {
 		t.Fatalf("RenderAll: %v", err)
 	}
@@ -636,7 +636,7 @@ func TestRenderAll_DryRun(t *testing.T) {
 	)
 	dir := t.TempDir()
 	c := makeRenderCache(ir)
-	n, err := RenderAll(dir, c, []string{"src/a.go"}, true)
+	n, err := RenderAll(dir, c, []string{"src/a.go"}, false, true)
 	if err != nil {
 		t.Fatalf("RenderAll dryRun: %v", err)
 	}
@@ -654,7 +654,7 @@ func TestRenderAll_SkipsEmptyContent(t *testing.T) {
 	// A file not in the cache produces empty content → no shard written.
 	dir := t.TempDir()
 	c := makeRenderCache(shardIR(nil, nil))
-	n, err := RenderAll(dir, c, []string{"src/unknown.go"}, false)
+	n, err := RenderAll(dir, c, []string{"src/unknown.go"}, false, false)
 	if err != nil {
 		t.Fatalf("RenderAll: %v", err)
 	}
@@ -678,7 +678,7 @@ func TestRenderAll_PathTraversalSkipped(t *testing.T) {
 	)
 	dir := t.TempDir()
 	c := makeRenderCache(ir)
-	n, err := RenderAll(dir, c, []string{"../../evil.go"}, false)
+	n, err := RenderAll(dir, c, []string{"../../evil.go"}, false, false)
 	if err != nil {
 		t.Fatalf("RenderAll path-traversal: %v", err)
 	}
@@ -710,7 +710,7 @@ func TestRenderAll_WriteshardError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := RenderAll(dir, c, []string{"sub/a.go"}, false)
+	_, err := RenderAll(dir, c, []string{"sub/a.go"}, false, false)
 	if err == nil {
 		t.Error("expected error when shard directory cannot be created")
 	}

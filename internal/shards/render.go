@@ -273,8 +273,10 @@ func removeStaleGraph(repoDir, srcFile string) {
 }
 
 // RenderAll generates and writes .graph shards for the given source files.
+// When narrate is true, each shard is prefixed with a prose narrative preamble
+// that describes the file's role in the graph as sentences.
 // Returns the count of shards written.
-func RenderAll(repoDir string, cache *Cache, files []string, dryRun bool) (int, error) {
+func RenderAll(repoDir string, cache *Cache, files []string, narrate, dryRun bool) (int, error) {
 	sort.Strings(files)
 	written := 0
 
@@ -293,7 +295,15 @@ func RenderAll(repoDir string, cache *Cache, files []string, dryRun bool) (int, 
 			continue
 		}
 
-		fullContent := header + content
+		var narrative string
+		if narrate {
+			narrative = RenderNarrative(srcFile, cache, prefix)
+			if narrative != "" {
+				narrative += prefix + "\n"
+			}
+		}
+
+		fullContent := header + narrative + content
 		if ext == ".go" {
 			fullContent = "//go:build ignore\n\npackage ignore\n" + fullContent
 		}
@@ -312,7 +322,9 @@ func RenderAll(repoDir string, cache *Cache, files []string, dryRun bool) (int, 
 }
 
 // RenderAllThreeFile generates .calls, .deps, and .impact files per source file.
-func RenderAllThreeFile(repoDir string, cache *Cache, files []string, dryRun bool) (int, error) {
+// When narrate is true, each of the three shards is prefixed with a prose
+// narrative preamble.
+func RenderAllThreeFile(repoDir string, cache *Cache, files []string, narrate, dryRun bool) (int, error) {
 	sort.Strings(files)
 	written := 0
 
@@ -334,6 +346,14 @@ func RenderAllThreeFile(repoDir string, cache *Cache, files []string, dryRun boo
 		calls := renderCallsSection(srcFile, cache, prefix)
 		impact := renderImpactSection(srcFile, cache, prefix)
 
+		var narrative string
+		if narrate {
+			narrative = RenderNarrative(srcFile, cache, prefix)
+			if narrative != "" {
+				narrative += prefix + "\n"
+			}
+		}
+
 		for _, item := range []struct {
 			path    string
 			content string
@@ -346,7 +366,7 @@ func RenderAllThreeFile(repoDir string, cache *Cache, files []string, dryRun boo
 				safeRemove(repoDir, item.path)
 				continue
 			}
-			fullContent := goPrefix + header + item.content + "\n"
+			fullContent := goPrefix + header + narrative + item.content + "\n"
 			if err := WriteShard(repoDir, item.path, fullContent, dryRun); err != nil {
 				if strings.Contains(err.Error(), "path traversal") {
 					continue

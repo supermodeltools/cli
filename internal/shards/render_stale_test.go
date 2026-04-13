@@ -72,7 +72,7 @@ func TestRenderAll_RemovesStaleThreeFiles(t *testing.T) {
 	touchFile(t, filepath.Join(dir, "src", "index.impact.ts"))
 
 	cache := testCache()
-	_, err := RenderAll(dir, cache, []string{"src/index.ts"}, false)
+	_, err := RenderAll(dir, cache, []string{"src/index.ts"}, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestRenderAllThreeFile_RemovesStaleGraphFile(t *testing.T) {
 	touchFile(t, filepath.Join(dir, "src", "index.graph.ts"))
 
 	cache := testCache()
-	_, err := RenderAllThreeFile(dir, cache, []string{"src/index.ts"}, false)
+	_, err := RenderAllThreeFile(dir, cache, []string{"src/index.ts"}, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestRenderAllThreeFile_CallsContent(t *testing.T) {
 	os.MkdirAll(filepath.Join(dir, "src"), 0o755)
 
 	cache := testCache()
-	_, err := RenderAllThreeFile(dir, cache, []string{"src/index.ts"}, false)
+	_, err := RenderAllThreeFile(dir, cache, []string{"src/index.ts"}, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestRenderAllThreeFile_DepsContent(t *testing.T) {
 	os.MkdirAll(filepath.Join(dir, "src"), 0o755)
 
 	cache := testCache()
-	_, err := RenderAllThreeFile(dir, cache, []string{"src/index.ts"}, false)
+	_, err := RenderAllThreeFile(dir, cache, []string{"src/index.ts"}, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestRenderAllThreeFile_ImpactContent(t *testing.T) {
 
 	cache := testCache()
 	// utils.ts has an importer (index.ts) so it will have impact data
-	_, err := RenderAllThreeFile(dir, cache, []string{"src/utils.ts"}, false)
+	_, err := RenderAllThreeFile(dir, cache, []string{"src/utils.ts"}, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +201,7 @@ func TestRenderAll_GraphContent(t *testing.T) {
 	os.MkdirAll(filepath.Join(dir, "src"), 0o755)
 
 	cache := testCache()
-	_, err := RenderAll(dir, cache, []string{"src/index.ts"}, false)
+	_, err := RenderAll(dir, cache, []string{"src/index.ts"}, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +236,7 @@ func TestRenderAllThreeFile_EmptySectionRemovesStaleFile(t *testing.T) {
 	touchFile(t, filepath.Join(dir, "src", "lonely.impact.ts"))
 
 	cache := testCacheNoImpact()
-	_, err := RenderAllThreeFile(dir, cache, []string{"src/lonely.ts"}, false)
+	_, err := RenderAllThreeFile(dir, cache, []string{"src/lonely.ts"}, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}

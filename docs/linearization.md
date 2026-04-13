@@ -110,22 +110,36 @@ The preamble is a one-paragraph summary derived from the same cache used for
 the structured sections — no new data, just a second rendering targeted at the
 model's native reading style. Flag-gated so users can A/B.
 
-## CLI surface
+## CLI surface (implemented)
+
+Standalone:
 
 ```
 supermodel tour [--strategy topo|bfs-seed|dfs-seed|centrality]
                 [--seed <file>]
                 [--narrate]
                 [--budget-tokens <N>]
+                [--dry-run]
                 [path]
+```
+
+Integrated with `analyze` so a single command emits shards + spine:
+
+```
+supermodel analyze [--tour]
+                   [--tour-strategy topo|bfs-seed|dfs-seed|centrality]
+                   [--tour-seed <file>]
+                   [--tour-budget <N>]
+                   [--narrate]
+                   [path]
 ```
 
 - Reads `.supermodel/shards.json` (errors if absent — prompts `analyze` first).
 - Writes `.supermodel/TOUR.md`.
-- With `--narrate`, rewrites existing `.graph.*` shards in place to include
-  the narrative preamble.
-- `--budget-tokens` chunks the tour into `TOUR.01.md`, `TOUR.02.md`, ... so a
-  single chapter fits in a single turn.
+- With `--narrate`, rewrites existing `.graph.*` shards in place to include a
+  prose narrative preamble.
+- `--budget-tokens` chunks the tour into `TOUR.01.md`, `TOUR.02.md`, ... with
+  `TOUR.md` becoming an index. Each chapter has prev/next cross-links.
 
 No API call. No new cache. Pure reshaping of what `analyze` already produced.
 
@@ -148,6 +162,11 @@ No API call. No new cache. Pure reshaping of what `analyze` already produced.
 - Should there be a `--focus <glob>` filter so tours scope to a subtree?
 - Does `arch-docs` want to consume TOUR.md as its entry point (replacing its
   own traversal)?
+- Running `supermodel tour` with a different `--budget-tokens` should probably
+  clean up stale `TOUR.NN.md` files from a prior chunked run. Cosmetic.
+- Benchmark: we need numbers. Plan to wire through
+  `supermodeltools/supermodel-benchmarks/shard-ab-test/` to measure
+  agent performance with/without TOUR + narrate.
 
 ## References
 

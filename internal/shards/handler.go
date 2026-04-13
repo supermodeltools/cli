@@ -27,17 +27,67 @@ const (
 
 // GenerateOptions configures the generate command.
 type GenerateOptions struct {
-	Force     bool
-	DryRun    bool
-	CacheFile string
-	ThreeFile bool // generate .calls/.deps/.impact instead of single .graph
+	Force        bool
+	DryRun       bool
+	CacheFile    string
+	ThreeFile    bool   // generate .calls/.deps/.impact instead of single .graph
+	Narrate      bool   // prefix each shard with a prose narrative preamble
+	Tour         bool   // also write .supermodel/TOUR.md after shards
+	TourStrategy string // strategy name: topo|bfs-seed|dfs-seed|centrality
+	TourSeed     string // seed file for bfs-seed/dfs-seed
+	TourBudget   int    // chunk tour into chapters of this token budget (0 = no chunking)
 }
 
-func renderShards(repoDir string, cache *Cache, files []string, dryRun, threeFile bool) (int, error) {
+func renderShards(repoDir string, cache *Cache, files []string, dryRun, threeFile, narrate bool) (int, error) {
 	if threeFile {
-		return RenderAllThreeFile(repoDir, cache, files, dryRun)
+		return RenderAllThreeFile(repoDir, cache, files, narrate, dryRun)
 	}
-	return RenderAll(repoDir, cache, files, dryRun)
+	return RenderAll(repoDir, cache, files, narrate, dryRun)
+}
+
+// maybeWriteTour writes the tour when opts.Tour is set. Errors during tour
+// generation are reported but don't fail the whole command since shards are
+// the primary artifact.
+func maybeWriteTour(repoDir string, cache *Cache, opts GenerateOptions) {
+	if !opts.Tour {
+		return
+	}
+	strategy, err := ResolveStrategy(opts.TourStrategy, opts.TourSeed)
+	if err != nil {
+		ui.Warn("Tour skipped: %v", err)
+		return
+	}
+	out, err := WriteTour(repoDir, cache, strategy, opts.TourBudget, opts.DryRun)
+	if err != nil {
+		ui.Warn("Tour write failed: %v", err)
+		return
+	}
+	if !opts.DryRun {
+		ui.Success("Wrote tour to %s (strategy: %s)", out, strategy.Name())
+	}
+}
+
+// ResolveStrategy picks a TourStrategy by name. Returns an error if the name is
+// unknown or if a seeded strategy is missing its seed.
+func ResolveStrategy(name, seed string) (TourStrategy, error) {
+	switch name {
+	case "", "topo":
+		return TopoStrategy{}, nil
+	case "bfs-seed":
+		if seed == "" {
+			return nil, fmt.Errorf("bfs-seed requires --seed <file>")
+		}
+		return BFSSeedStrategy{Seed: seed}, nil
+	case "dfs-seed":
+		if seed == "" {
+			return nil, fmt.Errorf("dfs-seed requires --seed <file>")
+		}
+		return DFSSeedStrategy{Seed: seed}, nil
+	case "centrality":
+		return CentralityStrategy{}, nil
+	default:
+		return nil, fmt.Errorf("unknown strategy %q (supported: topo, bfs-seed, dfs-seed, centrality)", name)
+	}
 }
 
 // WatchOptions configures the watch command.
@@ -54,6 +104,7 @@ type RenderOptions struct {
 	CacheFile string
 	DryRun    bool
 	ThreeFile bool
+	Narrate   bool
 }
 
 // guardDir returns an error if dir is the filesystem root or the user's home
@@ -99,12 +150,13 @@ func Generate(ctx context.Context, cfg *config.Config, dir string, opts Generate
 				cache.Build(&ir)
 				files := cache.SourceFiles()
 				spin := ui.Start("Rendering shards…")
-				written, err := renderShards(repoDir, cache, files, opts.DryRun, opts.ThreeFile)
+				written, err := renderShards(repoDir, cache, files, opts.DryRun, opts.ThreeFile, opts.Narrate)
 				spin.Stop()
 				if err != nil {
 					return err
 				}
 				ui.Success("Wrote %d shards for %d source files", written, len(files))
+				maybeWriteTour(repoDir, cache, opts)
 				return updateGitignore(repoDir)
 			}
 		}
@@ -159,11 +211,12 @@ func Generate(ctx context.Context, cfg *config.Config, dir string, opts Generate
 				staleCache := NewCache()
 				staleCache.Build(&staleIR)
 				files := staleCache.SourceFiles()
-				written, renderErr := renderShards(repoDir, staleCache, files, opts.DryRun, opts.ThreeFile)
+				written, renderErr := renderShards(repoDir, staleCache, files, opts.DryRun, opts.ThreeFile, opts.Narrate)
 				if renderErr != nil {
 					return fmt.Errorf("API error: %w; stale render also failed: %v", err, renderErr)
 				}
 				ui.Success("Wrote %d shards from stale cache (%d nodes)", written, len(staleIR.Graph.Nodes))
+				maybeWriteTour(repoDir, staleCache, opts)
 				return nil
 			}
 		}
@@ -192,7 +245,7 @@ func Generate(ctx context.Context, cfg *config.Config, dir string, opts Generate
 	files := cache.SourceFiles()
 
 	spin = ui.Start("Rendering shards…")
-	written, err := renderShards(repoDir, cache, files, opts.DryRun, opts.ThreeFile)
+	written, err := renderShards(repoDir, cache, files, opts.DryRun, opts.ThreeFile, opts.Narrate)
 	spin.Stop()
 	if err != nil {
 		return err
@@ -201,6 +254,7 @@ func Generate(ctx context.Context, cfg *config.Config, dir string, opts Generate
 	ui.Success("Wrote %d shards for %d source files (%d nodes, %d relationships)",
 		written, len(files), len(ir.Graph.Nodes), len(ir.Graph.Relationships))
 
+	maybeWriteTour(repoDir, cache, opts)
 	return updateGitignore(repoDir)
 }
 
@@ -425,7 +479,7 @@ func Render(dir string, opts RenderOptions) error {
 	cache.Build(&ir)
 	files := cache.SourceFiles()
 
-	written, err := renderShards(repoDir, cache, files, opts.DryRun, opts.ThreeFile)
+	written, err := renderShards(repoDir, cache, files, opts.DryRun, opts.ThreeFile, opts.Narrate)
 	if err != nil {
 		return err
 	}
