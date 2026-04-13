@@ -26,6 +26,13 @@ func ShardFilename(sourcePath string) string {
 	return stem + ".graph" + ext
 }
 
+// ThreeFileShardNames generates the .calls, .deps, .impact shard paths.
+func ThreeFileShardNames(sourcePath string) (calls, deps, impact string) {
+	ext := filepath.Ext(sourcePath)
+	stem := strings.TrimSuffix(sourcePath, ext)
+	return stem + ".calls" + ext, stem + ".deps" + ext, stem + ".impact" + ext
+}
+
 // Header returns the @generated header line.
 func Header(prefix string) string {
 	return prefix + " @generated supermodel-shard — do not edit\n"
@@ -236,6 +243,35 @@ func WriteShard(repoDir, shardPath, content string, dryRun bool) error {
 	return nil
 }
 
+// safeRemove removes a file only if it resolves inside repoDir (traversal guard).
+func safeRemove(repoDir, relPath string) {
+	full, err := filepath.Abs(filepath.Join(repoDir, relPath))
+	if err != nil {
+		return
+	}
+	repoAbs, err := filepath.Abs(repoDir)
+	if err != nil {
+		return
+	}
+	if !strings.HasPrefix(full, repoAbs+string(filepath.Separator)) && full != repoAbs {
+		return
+	}
+	_ = os.Remove(full)
+}
+
+// removeStaleThreeFile removes .calls/.deps/.impact files for a source file.
+func removeStaleThreeFile(repoDir, srcFile string) {
+	c, d, i := ThreeFileShardNames(srcFile)
+	for _, p := range []string{c, d, i} {
+		safeRemove(repoDir, p)
+	}
+}
+
+// removeStaleGraph removes the single .graph file for a source file.
+func removeStaleGraph(repoDir, srcFile string) {
+	safeRemove(repoDir, ShardFilename(srcFile))
+}
+
 // RenderAll generates and writes .graph shards for the given source files.
 // Returns the count of shards written.
 func RenderAll(repoDir string, cache *Cache, files []string, dryRun bool) (int, error) {
@@ -243,13 +279,15 @@ func RenderAll(repoDir string, cache *Cache, files []string, dryRun bool) (int, 
 	written := 0
 
 	for _, srcFile := range files {
+		// Clean up stale three-file shards from a previous --three-file run.
+		removeStaleThreeFile(repoDir, srcFile)
+
 		ext := filepath.Ext(srcFile)
 		prefix := CommentPrefix(ext)
 		header := Header(prefix)
 
 		content := RenderGraph(srcFile, cache, prefix)
 		if content == "" {
-			// Remove any stale shard left from a previous run.
 			full := filepath.Join(repoDir, ShardFilename(srcFile))
 			_ = os.Remove(full)
 			continue
@@ -268,6 +306,55 @@ func RenderAll(repoDir string, cache *Cache, files []string, dryRun bool) (int, 
 			return written, err
 		}
 		written++
+	}
+
+	return written, nil
+}
+
+// RenderAllThreeFile generates .calls, .deps, and .impact files per source file.
+func RenderAllThreeFile(repoDir string, cache *Cache, files []string, dryRun bool) (int, error) {
+	sort.Strings(files)
+	written := 0
+
+	for _, srcFile := range files {
+		// Clean up stale single .graph file from a previous non-three-file run.
+		removeStaleGraph(repoDir, srcFile)
+
+		ext := filepath.Ext(srcFile)
+		prefix := CommentPrefix(ext)
+		header := Header(prefix)
+		goPrefix := ""
+		if ext == ".go" {
+			goPrefix = "//go:build ignore\n\npackage ignore\n"
+		}
+
+		callsPath, depsPath, impactPath := ThreeFileShardNames(srcFile)
+
+		deps := renderDepsSection(srcFile, cache, prefix)
+		calls := renderCallsSection(srcFile, cache, prefix)
+		impact := renderImpactSection(srcFile, cache, prefix)
+
+		for _, item := range []struct {
+			path    string
+			content string
+		}{
+			{depsPath, deps},
+			{callsPath, calls},
+			{impactPath, impact},
+		} {
+			if item.content == "" {
+				safeRemove(repoDir, item.path)
+				continue
+			}
+			fullContent := goPrefix + header + item.content + "\n"
+			if err := WriteShard(repoDir, item.path, fullContent, dryRun); err != nil {
+				if strings.Contains(err.Error(), "path traversal") {
+					continue
+				}
+				return written, err
+			}
+			written++
+		}
 	}
 
 	return written, nil

@@ -289,7 +289,7 @@ func isShardPath(name string) bool {
 		return false
 	}
 	tag := strings.TrimPrefix(stemExt, ".")
-	return tag == ShardExt
+	return shardTags[tag]
 }
 
 // firstString returns the first non-empty string value from props found under

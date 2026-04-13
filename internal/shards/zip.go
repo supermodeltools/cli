@@ -346,7 +346,15 @@ func PrintLanguageBarChart(stats []LangStat, totalFiles int) {
 	fmt.Fprintln(os.Stderr)
 }
 
-// isShardFile checks if a filename is a generated shard (e.g. foo.graph.ts).
+// shardTags are the extension tags used by all shard formats.
+var shardTags = map[string]bool{
+	"graph":  true, // single-file format
+	"calls":  true, // three-file format
+	"deps":   true,
+	"impact": true,
+}
+
+// isShardFile checks if a filename is a generated shard (e.g. foo.graph.ts, foo.calls.ts).
 func isShardFile(filename string) bool {
 	ext := filepath.Ext(filename)
 	if ext == "" {
@@ -358,7 +366,7 @@ func isShardFile(filename string) bool {
 		return false
 	}
 	tag = strings.TrimPrefix(tag, ".")
-	return tag == ShardExt
+	return shardTags[tag]
 }
 
 func addFileToZip(w *zip.Writer, fullPath, relPath string) error {

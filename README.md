@@ -102,10 +102,45 @@ Manages `.graph.*` sidecar files written next to each source file. Agents read t
 
 | Command | Description |
 |---|---|
-| `analyze [path]` | Upload repo, run full analysis, write `.graph.*` files (use `--no-files` to skip) |
+| `analyze [path]` | Upload repo, run full analysis, write graph files (use `--three-file` for best results, `--no-shards` to skip) |
+| `skill` | Print agent awareness prompt — pipe to `CLAUDE.md` or `AGENTS.md` |
 | `watch [path]` | Generate graph files on startup, then keep them updated incrementally |
 | `clean [path]` | Remove all `.graph.*` files from the repository |
 | `hook` | Claude Code `PostToolUse` hook — forward file-change events to the `watch` daemon |
+
+### Three-file shard format (recommended)
+
+For best results, use the `--three-file` flag to generate separate `.calls`, `.deps`, and `.impact` files instead of a single `.graph` file:
+
+```bash
+supermodel analyze --three-file
+```
+
+This produces three files per source file:
+
+```
+src/cache.go          → src/cache.calls.go    # who calls what, with file:line
+                      → src/cache.deps.go     # imports and imported-by
+                      → src/cache.impact.go   # risk level, domains, blast radius
+```
+
+The three-file format is **68% faster** in benchmarks because grep hits are more targeted — searching for a function name hits only the `.calls` file with caller/callee data, not a combined blob.
+
+**Tell your agent about the files** by adding this to `CLAUDE.md` or `AGENTS.md`:
+
+```bash
+supermodel skill >> CLAUDE.md
+```
+
+Or manually add:
+
+```
+This repository has Supermodel graph shard files next to source files.
+Files ending in .calls.* contain function call relationships.
+Files ending in .deps.* contain dependency relationships.
+Files ending in .impact.* contain blast radius data.
+Read these files to understand relationships between modules before making changes.
+```
 
 ### On-demand analysis
 
