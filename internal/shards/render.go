@@ -243,17 +243,33 @@ func WriteShard(repoDir, shardPath, content string, dryRun bool) error {
 	return nil
 }
 
+// safeRemove removes a file only if it resolves inside repoDir (traversal guard).
+func safeRemove(repoDir, relPath string) {
+	full, err := filepath.Abs(filepath.Join(repoDir, relPath))
+	if err != nil {
+		return
+	}
+	repoAbs, err := filepath.Abs(repoDir)
+	if err != nil {
+		return
+	}
+	if !strings.HasPrefix(full, repoAbs+string(filepath.Separator)) && full != repoAbs {
+		return
+	}
+	_ = os.Remove(full)
+}
+
 // removeStaleThreeFile removes .calls/.deps/.impact files for a source file.
 func removeStaleThreeFile(repoDir, srcFile string) {
 	c, d, i := ThreeFileShardNames(srcFile)
 	for _, p := range []string{c, d, i} {
-		_ = os.Remove(filepath.Join(repoDir, p))
+		safeRemove(repoDir, p)
 	}
 }
 
 // removeStaleGraph removes the single .graph file for a source file.
 func removeStaleGraph(repoDir, srcFile string) {
-	_ = os.Remove(filepath.Join(repoDir, ShardFilename(srcFile)))
+	safeRemove(repoDir, ShardFilename(srcFile))
 }
 
 // RenderAll generates and writes .graph shards for the given source files.
@@ -327,8 +343,7 @@ func RenderAllThreeFile(repoDir string, cache *Cache, files []string, dryRun boo
 			{impactPath, impact},
 		} {
 			if item.content == "" {
-				full := filepath.Join(repoDir, item.path)
-				_ = os.Remove(full)
+				safeRemove(repoDir, item.path)
 				continue
 			}
 			fullContent := goPrefix + header + item.content + "\n"
