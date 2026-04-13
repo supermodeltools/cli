@@ -7,17 +7,15 @@
 
 ## Results
 
-|                    | naked        | supermodel   |
-|--------------------|--------------|--------------|
-| Cost               | $0.2212       | $0.1329       |
-| Turns              | 13            | 7             |
-| Duration           | 95.9s         | 24.1s          |
-| Cache tokens read  | 235,456   | 90,479    |
-| Cache tokens built | 18,681    | 23,281    |
-| All tests passed   | YES          | YES           |
-| Tool calls         | {'Bash': 8, 'Read': 2, 'Write': 2} | {'Bash': 2, 'Read': 2, 'Glob': 1, 'Write': 1} |
+|                    | naked        | supermodel (crafted) | skill (generic) | three-file   |
+|--------------------|--------------|----------------------|-----------------|--------------|
+| Cost               | $0.30        | $0.12                | $0.15           | $0.25        |
+| Turns              | 20           | 9                    | 11              | 16           |
+| Duration           | 122s         | 29s                  | 42s             | 73s          |
+| All tests passed   | YES          | YES                  | YES             | YES          |
 
-**supermodel: $0.0883 (39.9%) cheaper, 6 fewer turns, 72s faster**
+**supermodel (crafted prompt): 60% cheaper, 76% faster, 55% fewer turns vs naked**
+**skill (generic prompt): 50% cheaper, 66% faster, 45% fewer turns vs naked**
 
 ## How supermodel helped
 The graph files gave Claude the architecture upfront. The supermodel run went straight
