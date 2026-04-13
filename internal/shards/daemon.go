@@ -451,6 +451,7 @@ func (d *Daemon) mergeGraph(incremental *api.ShardIR, changedFiles []string) { /
 
 	incFileByPath := make(map[string]string)
 	incFnByKey := make(map[string]string)
+	incTypeByKey := make(map[string]string) // Type and Class nodes keyed by filePath:name
 	for _, n := range incremental.Graph.Nodes {
 		fp := n.Prop("filePath")
 		if n.HasLabel("File") && fp != "" {
@@ -459,6 +460,11 @@ func (d *Daemon) mergeGraph(incremental *api.ShardIR, changedFiles []string) { /
 			name := n.Prop("name")
 			if name != "" {
 				incFnByKey[fp+":"+name] = n.ID
+			}
+		} else if (n.HasLabel("Type") || n.HasLabel("Class")) && fp != "" {
+			name := n.Prop("name")
+			if name != "" {
+				incTypeByKey[fp+":"+name] = n.ID
 			}
 		}
 	}
@@ -477,6 +483,12 @@ func (d *Daemon) mergeGraph(incremental *api.ShardIR, changedFiles []string) { /
 			name := n.Prop("name")
 			key := fp + ":" + name
 			if newID, ok := incFnByKey[key]; ok && newID != n.ID {
+				oldToNew[n.ID] = newID
+			}
+		} else if n.HasLabel("Type") || n.HasLabel("Class") {
+			name := n.Prop("name")
+			key := fp + ":" + name
+			if newID, ok := incTypeByKey[key]; ok && newID != n.ID {
 				oldToNew[n.ID] = newID
 			}
 		}
