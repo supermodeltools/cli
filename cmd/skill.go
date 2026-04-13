@@ -8,14 +8,20 @@ import (
 
 const skillPrompt = `This repository has Supermodel graph shard files next to source files.
 
-Files ending in .calls.* contain function call relationships (who calls what, with file and line number).
-Files ending in .deps.* contain dependency relationships (imports and imported-by).
-Files ending in .impact.* contain blast radius data (risk level, affected domains, direct/transitive dependents).
+There are two formats — use whichever is present:
+
+Single-file format:
+  Files ending in .graph.* contain all graph data (deps, calls, impact) in one file with [deps], [calls], and [impact] sections.
+
+Three-file format (recommended):
+  Files ending in .calls.* contain function call relationships (who calls what, with file and line number).
+  Files ending in .deps.* contain dependency relationships (imports and imported-by).
+  Files ending in .impact.* contain blast radius data (risk level, affected domains, direct/transitive dependents).
 
 When navigating the codebase:
-- Read .deps files to understand what a module depends on and what depends on it
-- Read .calls files to trace call chains across files
-- Read .impact files to assess the blast radius before making changes
+- Read .deps or .graph files to understand what a module depends on and what depends on it
+- Read .calls or .graph files to trace call chains across files
+- Read .impact or .graph files to assess the blast radius before making changes
 - These files appear in grep/rg results alongside source code — use the data to navigate faster`
 
 func init() {
