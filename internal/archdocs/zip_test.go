@@ -1,4 +1,4 @@
-package deadcode
+package archdocs
 
 import (
 	"archive/zip"
@@ -9,35 +9,34 @@ import (
 	"testing"
 )
 
-func TestIsGitRepo_NonGitDir(t *testing.T) {
+func TestArchdocsIsGitRepo_NonGitDir(t *testing.T) {
 	if isGitRepo(t.TempDir()) {
 		t.Error("empty temp dir should not be a git repo")
 	}
 }
 
-func TestIsWorktreeClean_NonGitDir(t *testing.T) {
+func TestArchdocsIsWorktreeClean_NonGitDir(t *testing.T) {
 	if isWorktreeClean(t.TempDir()) {
 		t.Error("non-git dir should not be considered clean")
 	}
 }
 
-func TestWalkZip_IncludesFiles(t *testing.T) {
+func TestArchdocsWalkZip_IncludesFiles(t *testing.T) {
 	src := t.TempDir()
 	if err := os.WriteFile(filepath.Join(src, "main.go"), []byte("package main"), 0600); err != nil {
 		t.Fatal(err)
 	}
-
 	dest := filepath.Join(t.TempDir(), "out.zip")
 	if err := walkZip(src, dest); err != nil {
 		t.Fatalf("walkZip: %v", err)
 	}
-	entries := readDeadcodeZipEntries(t, dest)
-	if _, ok := entries["main.go"]; !ok {
+	entries := readArchdocsZipEntries(t, dest)
+	if !entries["main.go"] {
 		t.Error("zip should contain main.go")
 	}
 }
 
-func TestWalkZip_SkipsHiddenFiles(t *testing.T) {
+func TestArchdocsWalkZip_SkipsHiddenFiles(t *testing.T) {
 	src := t.TempDir()
 	if err := os.WriteFile(filepath.Join(src, ".env"), []byte("SECRET=x"), 0600); err != nil {
 		t.Fatal(err)
@@ -45,21 +44,20 @@ func TestWalkZip_SkipsHiddenFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(src, "main.go"), []byte("package main"), 0600); err != nil {
 		t.Fatal(err)
 	}
-
 	dest := filepath.Join(t.TempDir(), "out.zip")
 	if err := walkZip(src, dest); err != nil {
 		t.Fatal(err)
 	}
-	entries := readDeadcodeZipEntries(t, dest)
-	if _, ok := entries[".env"]; ok {
+	entries := readArchdocsZipEntries(t, dest)
+	if entries[".env"] {
 		t.Error("zip should not contain .env")
 	}
-	if _, ok := entries["main.go"]; !ok {
+	if !entries["main.go"] {
 		t.Error("zip should contain main.go")
 	}
 }
 
-func TestWalkZip_SkipsSkipDirs(t *testing.T) {
+func TestArchdocsWalkZip_SkipsSkipDirs(t *testing.T) {
 	src := t.TempDir()
 	nmDir := filepath.Join(src, "node_modules")
 	if err := os.Mkdir(nmDir, 0750); err != nil {
@@ -71,12 +69,11 @@ func TestWalkZip_SkipsSkipDirs(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(src, "index.js"), []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}
-
 	dest := filepath.Join(t.TempDir(), "out.zip")
 	if err := walkZip(src, dest); err != nil {
 		t.Fatal(err)
 	}
-	entries := readDeadcodeZipEntries(t, dest)
+	entries := readArchdocsZipEntries(t, dest)
 	for name := range entries {
 		if strings.HasPrefix(name, "node_modules/") || name == "node_modules" {
 			t.Errorf("should not contain node_modules entry: %s", name)
@@ -84,7 +81,7 @@ func TestWalkZip_SkipsSkipDirs(t *testing.T) {
 	}
 }
 
-func TestWalkZip_SkipsLargeFiles(t *testing.T) {
+func TestArchdocsWalkZip_SkipsLargeFiles(t *testing.T) {
 	src := t.TempDir()
 	if err := os.WriteFile(filepath.Join(src, "huge.dat"), make([]byte, 10<<20+1), 0600); err != nil {
 		t.Fatal(err)
@@ -96,7 +93,7 @@ func TestWalkZip_SkipsLargeFiles(t *testing.T) {
 	if err := walkZip(src, dest); err != nil {
 		t.Fatal(err)
 	}
-	entries := readDeadcodeZipEntries(t, dest)
+	entries := readArchdocsZipEntries(t, dest)
 	if entries["huge.dat"] {
 		t.Error("file over 10 MB should be excluded from zip")
 	}
@@ -105,27 +102,22 @@ func TestWalkZip_SkipsLargeFiles(t *testing.T) {
 	}
 }
 
-func TestWalkZip_CreateDestError(t *testing.T) {
+func TestArchdocsWalkZip_CreateDestError(t *testing.T) {
 	src := t.TempDir()
-	// Destination in a non-existent subdirectory → os.Create will fail.
 	dest := filepath.Join(t.TempDir(), "nonexistent-subdir", "out.zip")
 	if err := walkZip(src, dest); err == nil {
 		t.Error("walkZip should fail when dest directory does not exist")
 	}
 }
 
-// TestWalkZip_WalkError covers L101-103: Walk calls the callback with a non-nil
-// error when the source directory does not exist.
-func TestWalkZip_WalkError(t *testing.T) {
+func TestArchdocsWalkZip_WalkError(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "out.zip")
-	if err := walkZip("/nonexistent-dir-xyzzy-deadcode", dest); err == nil {
+	if err := walkZip("/nonexistent-dir-xyzzy-archdocs", dest); err == nil {
 		t.Error("walkZip should fail when source directory does not exist")
 	}
 }
 
-// TestWalkZip_OpenFileError covers L122-124: os.Open fails when the file is
-// not readable.
-func TestWalkZip_OpenFileError(t *testing.T) {
+func TestArchdocsWalkZip_OpenFileError(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.Skip("skipping chmod-based test in CI")
 	}
@@ -144,7 +136,7 @@ func TestWalkZip_OpenFileError(t *testing.T) {
 	}
 }
 
-func TestCreateZip_NonGitDir(t *testing.T) {
+func TestArchdocsCreateZip_NonGitDir(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main"), 0600); err != nil {
 		t.Fatal(err)
@@ -159,9 +151,7 @@ func TestCreateZip_NonGitDir(t *testing.T) {
 	}
 }
 
-// TestCreateZip_CreateTempError covers L48-50: createZip returns an error when
-// os.CreateTemp fails due to an invalid TMPDIR.
-func TestCreateZip_CreateTempError(t *testing.T) {
+func TestArchdocsCreateZip_CreateTempError(t *testing.T) {
 	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "nonexistent-tmp"))
 	_, err := createZip(t.TempDir())
 	if err == nil {
@@ -169,18 +159,14 @@ func TestCreateZip_CreateTempError(t *testing.T) {
 	}
 }
 
-// TestCreateZip_NonExistentDir covers L60-63: createZip removes the temp file
-// and returns an error when walkZip fails because the source dir does not exist.
-func TestCreateZip_NonExistentDir(t *testing.T) {
-	_, err := createZip("/nonexistent-dir-deadcode-createzip-xyz")
+func TestArchdocsCreateZip_NonExistentDir(t *testing.T) {
+	_, err := createZip("/nonexistent-dir-archdocs-createzip-xyz")
 	if err == nil {
 		t.Error("createZip should fail when directory does not exist")
 	}
 }
 
-// initCleanGitRepo creates a temp directory, initialises a git repo, adds a
-// file, and commits it so that isGitRepo and isWorktreeClean both return true.
-func initCleanGitRepo(t *testing.T) string {
+func initCleanArchdocsGitRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	run := func(args ...string) {
@@ -202,39 +188,39 @@ func initCleanGitRepo(t *testing.T) string {
 	return dir
 }
 
-func TestGitArchive_CleanRepo(t *testing.T) {
-	dir := initCleanGitRepo(t)
+func TestArchdocsGitArchive_CleanRepo(t *testing.T) {
+	dir := initCleanArchdocsGitRepo(t)
 	dest := filepath.Join(t.TempDir(), "out.zip")
 	if err := gitArchive(dir, dest); err != nil {
 		t.Fatalf("gitArchive: %v", err)
 	}
-	entries := readDeadcodeZipEntries(t, dest)
+	entries := readArchdocsZipEntries(t, dest)
 	if !entries["main.go"] {
 		t.Error("git archive should contain main.go")
 	}
 }
 
-func TestIsWorktreeClean_CleanRepo(t *testing.T) {
-	dir := initCleanGitRepo(t)
+func TestArchdocsIsWorktreeClean_CleanRepo(t *testing.T) {
+	dir := initCleanArchdocsGitRepo(t)
 	if !isWorktreeClean(dir) {
 		t.Error("freshly committed repo should be considered clean")
 	}
 }
 
-func TestCreateZip_CleanGitRepo(t *testing.T) {
-	dir := initCleanGitRepo(t)
+func TestArchdocsCreateZip_CleanGitRepo(t *testing.T) {
+	dir := initCleanArchdocsGitRepo(t)
 	path, err := createZip(dir)
 	if err != nil {
 		t.Fatalf("createZip on clean git repo: %v", err)
 	}
 	defer os.Remove(path)
-	entries := readDeadcodeZipEntries(t, path)
+	entries := readArchdocsZipEntries(t, path)
 	if !entries["main.go"] {
 		t.Error("zip should contain main.go from git archive")
 	}
 }
 
-func readDeadcodeZipEntries(t *testing.T, path string) map[string]bool {
+func readArchdocsZipEntries(t *testing.T, path string) map[string]bool {
 	t.Helper()
 	r, err := zip.OpenReader(path)
 	if err != nil {

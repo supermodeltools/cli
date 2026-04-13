@@ -1,7 +1,9 @@
 package shards
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -354,6 +356,60 @@ func TestRenderImpactSection_EmptyWhenNoImporters(t *testing.T) {
 	}
 }
 
+func TestRenderImpactSection_MediumRisk(t *testing.T) {
+	// 6–20 transitive dependents triggers MEDIUM risk.
+	nodes := []api.Node{
+		{ID: "target", Labels: []string{"File"}, Properties: map[string]any{"filePath": "lib/db.go"}},
+	}
+	rels := []api.Relationship{}
+	for i := 0; i < 8; i++ {
+		id := fmt.Sprintf("f%d", i)
+		path := fmt.Sprintf("src/file%d.go", i)
+		nodes = append(nodes, api.Node{
+			ID:     id,
+			Labels: []string{"File"},
+			Properties: map[string]any{"filePath": path},
+		})
+		rels = append(rels, api.Relationship{
+			ID:        "r" + id,
+			Type:      "imports",
+			StartNode: id,
+			EndNode:   "target",
+		})
+	}
+	c := makeRenderCache(shardIR(nodes, rels))
+	out := renderImpactSection("lib/db.go", c, "//")
+	if !strings.Contains(out, "MEDIUM") {
+		t.Errorf("6-20 importers should trigger MEDIUM risk: %s", out)
+	}
+}
+
+func TestRenderImpactSection_WithDomain(t *testing.T) {
+	// File is assigned to a domain; domain name should appear in impact output.
+	nodes := []api.Node{
+		{ID: "fa", Labels: []string{"File"}, Properties: map[string]any{"filePath": "core/auth.go"}},
+		{ID: "fb", Labels: []string{"File"}, Properties: map[string]any{"filePath": "web/handler.go"}},
+	}
+	rels := []api.Relationship{
+		{ID: "r1", Type: "imports", StartNode: "fb", EndNode: "fa"},
+	}
+	ir := &api.ShardIR{
+		Graph: api.ShardGraph{Nodes: nodes, Relationships: rels},
+		Domains: []api.ShardDomain{
+			{Name: "Auth", KeyFiles: []string{"core/auth.go", "web/handler.go"}},
+		},
+	}
+	c := NewCache()
+	c.Build(ir)
+	out := renderImpactSection("core/auth.go", c, "//")
+	if !strings.Contains(out, "Auth") {
+		t.Errorf("domain name should appear in impact output: %s", out)
+	}
+	if !strings.Contains(out, "domains") {
+		t.Errorf("should contain domains line: %s", out)
+	}
+}
+
 // ── RenderGraph ───────────────────────────────────────────────────────────────
 
 func TestRenderGraph_CombinesSections(t *testing.T) {
@@ -419,6 +475,38 @@ func TestWriteShard_DryRunDoesNotWrite(t *testing.T) {
 	}
 }
 
+func TestWriteShard_MkdirAllError(t *testing.T) {
+	dir := t.TempDir()
+	// Create a regular file at "subdir" so that MkdirAll("subdir/...") fails.
+	if err := os.WriteFile(dir+"/subdir", []byte("not a dir"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := WriteShard(dir, "subdir/handler.graph.go", "content", false)
+	if err == nil {
+		t.Error("expected MkdirAll error when parent path is a file")
+	}
+}
+
+func TestWriteShard_WriteFileError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("skipping chmod-based test in CI")
+	}
+	dir := t.TempDir()
+	// Create the target subdirectory then make it read-only so WriteFile fails.
+	subDir := dir + "/ro"
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(subDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(subDir, 0o755) }) //nolint:errcheck
+	err := WriteShard(dir, "ro/handler.graph.go", "content", false)
+	if err == nil {
+		t.Error("expected WriteFile error on read-only directory")
+	}
+}
+
 // ── updateGitignore ───────────────────────────────────────────────────────────
 
 func TestUpdateGitignore_AddsEntry(t *testing.T) {
@@ -457,6 +545,35 @@ func TestUpdateGitignore_ExistingEntrySkipped(t *testing.T) {
 	data, _ := os.ReadFile(dir + "/.gitignore")
 	if strings.Count(string(data), ".supermodel/") != 1 {
 		t.Errorf("should not add duplicate: %s", data)
+	}
+}
+
+func TestUpdateGitignore_ReadErrorSkipped(t *testing.T) {
+	// Create a directory at .gitignore path → ReadFile returns EISDIR (not IsNotExist)
+	// → updateGitignore returns nil (skips silently).
+	dir := t.TempDir()
+	if err := os.MkdirAll(dir+"/.gitignore", 0700); err != nil {
+		t.Fatal(err)
+	}
+	// Should not error out.
+	if err := updateGitignore(dir); err != nil {
+		t.Errorf("updateGitignore with unreadable .gitignore should return nil, got %v", err)
+	}
+}
+
+func TestUpdateGitignore_OpenFileErrorSkipped(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("skipping chmod-based test in CI")
+	}
+	dir := t.TempDir()
+	// Make the directory read-only so OpenFile (O_CREATE|O_APPEND|O_WRONLY) fails.
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o755) }) //nolint:errcheck
+	// Should return nil (silent skip on write failure).
+	if err := updateGitignore(dir); err != nil {
+		t.Errorf("updateGitignore with read-only dir should return nil, got %v", err)
 	}
 }
 
@@ -543,6 +660,155 @@ func TestRenderAll_SkipsEmptyContent(t *testing.T) {
 	}
 	if n != 0 {
 		t.Errorf("unknown file should produce 0 written, got %d", n)
+	}
+}
+
+func TestRenderAll_PathTraversalSkipped(t *testing.T) {
+	// A srcFile whose ShardFilename would escape the repo dir is silently skipped.
+	// Build a cache that produces non-empty content for the path-traversal file,
+	// so the WriteShard call is actually reached.
+	ir := shardIR(
+		[]api.Node{
+			{ID: "fa", Labels: []string{"File"}, Properties: map[string]any{"filePath": "../../evil.go"}},
+			{ID: "fb", Labels: []string{"File"}, Properties: map[string]any{"filePath": "src/good.go"}},
+		},
+		[]api.Relationship{
+			{ID: "r1", Type: "imports", StartNode: "fa", EndNode: "fb"},
+		},
+	)
+	dir := t.TempDir()
+	c := makeRenderCache(ir)
+	n, err := RenderAll(dir, c, []string{"../../evil.go"}, false)
+	if err != nil {
+		t.Fatalf("RenderAll path-traversal: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("path-traversal file should be skipped (n=0), got %d", n)
+	}
+}
+
+func TestRenderAll_WriteshardError(t *testing.T) {
+	// Create a file at the shard subdirectory so MkdirAll fails → WriteShard
+	// returns a non-path-traversal error → RenderAll returns that error.
+	dir := t.TempDir()
+
+	// File node that imports another → non-empty RenderGraph output.
+	ir := shardIR(
+		[]api.Node{
+			{ID: "fa", Labels: []string{"File"}, Properties: map[string]any{"filePath": "sub/a.go"}},
+			{ID: "fb", Labels: []string{"File"}, Properties: map[string]any{"filePath": "src/b.go"}},
+		},
+		[]api.Relationship{
+			{ID: "r1", Type: "imports", StartNode: "fa", EndNode: "fb"},
+		},
+	)
+	c := makeRenderCache(ir)
+
+	// ShardFilename("sub/a.go") = "sub/a.graph.go"; make "sub" a regular file so
+	// MkdirAll("sub") fails with ENOTDIR.
+	if err := os.WriteFile(dir+"/sub", []byte("not a dir"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := RenderAll(dir, c, []string{"sub/a.go"}, false)
+	if err == nil {
+		t.Error("expected error when shard directory cannot be created")
+	}
+}
+
+// TestRenderCallsSection_SortsByDifferentNames verifies the sort.Slice comparator
+// takes the fns[i].name != fns[j].name == true branch for functions with distinct names.
+func TestRenderCallsSection_SortsByDifferentNames(t *testing.T) {
+	ir := shardIR(
+		[]api.Node{
+			// Two functions with different names in the same file, both with callers.
+			{ID: "fn_b", Labels: []string{"Function"}, Properties: map[string]any{"name": "Beta", "filePath": "src/a.go"}},
+			{ID: "fn_a", Labels: []string{"Function"}, Properties: map[string]any{"name": "Alpha", "filePath": "src/a.go"}},
+			{ID: "caller", Labels: []string{"Function"}, Properties: map[string]any{"name": "main", "filePath": "src/main.go"}},
+		},
+		[]api.Relationship{
+			{ID: "r1", Type: "calls", StartNode: "caller", EndNode: "fn_a"},
+			{ID: "r2", Type: "calls", StartNode: "caller", EndNode: "fn_b"},
+		},
+	)
+	c := makeRenderCache(ir)
+	out := renderCallsSection("src/a.go", c, "//")
+	// Alpha should appear before Beta in the sorted output.
+	alphaIdx := strings.Index(out, "Alpha")
+	betaIdx := strings.Index(out, "Beta")
+	if alphaIdx == -1 || betaIdx == -1 {
+		t.Fatalf("expected both Alpha and Beta in output:\n%s", out)
+	}
+	if alphaIdx > betaIdx {
+		t.Errorf("Alpha should appear before Beta in sorted output:\n%s", out)
+	}
+}
+
+// TestRenderImpactSection_CallerFromAnotherFile covers the directCallerFiles loop
+// in renderImpactSection (lines 136-147): a function in the target file is called
+// by a function in a different file.
+func TestRenderImpactSection_CallerFromAnotherFile(t *testing.T) {
+	ir := shardIR(
+		[]api.Node{
+			{ID: "fn_target", Labels: []string{"Function"}, Properties: map[string]any{"name": "doWork", "filePath": "src/a.go"}},
+			{ID: "fn_caller", Labels: []string{"Function"}, Properties: map[string]any{"name": "main", "filePath": "src/main.go"}},
+		},
+		[]api.Relationship{
+			{ID: "r1", Type: "calls", StartNode: "fn_caller", EndNode: "fn_target"},
+		},
+	)
+	c := makeRenderCache(ir)
+	out := renderImpactSection("src/a.go", c, "//")
+	if out == "" {
+		t.Fatal("expected non-empty impact section when function has cross-file callers")
+	}
+	if !strings.Contains(out, "[impact]") {
+		t.Errorf("expected [impact] header:\n%s", out)
+	}
+	if !strings.Contains(out, "src/main.go") {
+		t.Errorf("expected caller file in affects line:\n%s", out)
+	}
+}
+
+// TestRenderGraph_IncludesImpactSection exercises the `if impact != ""` branch in
+// RenderGraph (L47) by using a file whose function is called by a function in another file.
+func TestRenderGraph_IncludesImpactSection(t *testing.T) {
+	ir := shardIR(
+		[]api.Node{
+			{ID: "fn_lib", Labels: []string{"Function"}, Properties: map[string]any{"name": "LibFunc", "filePath": "lib/util.go"}},
+			{ID: "fn_app", Labels: []string{"Function"}, Properties: map[string]any{"name": "AppFunc", "filePath": "app/main.go"}},
+		},
+		[]api.Relationship{
+			{ID: "r1", Type: "calls", StartNode: "fn_app", EndNode: "fn_lib"},
+		},
+	)
+	c := makeRenderCache(ir)
+	out := RenderGraph("lib/util.go", c, "//")
+	if !strings.Contains(out, "[impact]") {
+		t.Errorf("expected [impact] section in RenderGraph output:\n%s", out)
+	}
+	if !strings.Contains(out, "[calls]") {
+		t.Errorf("expected [calls] section in RenderGraph output:\n%s", out)
+	}
+}
+
+// TestWriteShard_RenameError covers L232-235: os.Rename fails when the
+// destination path already exists as a directory.
+func TestWriteShard_RenameError(t *testing.T) {
+	dir := t.TempDir()
+	// Create the target subdirectory normally so MkdirAll succeeds.
+	subdir := filepath.Join(dir, "src")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Place a directory at the exact destination path so Rename(tmp→full) fails.
+	fullAsDir := filepath.Join(subdir, "handler.graph.go")
+	if err := os.Mkdir(fullAsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	err := WriteShard(dir, "src/handler.graph.go", "content", false)
+	if err == nil {
+		t.Error("expected Rename error when destination is a directory")
 	}
 }
 

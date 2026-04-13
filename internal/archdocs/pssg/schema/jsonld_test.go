@@ -208,6 +208,23 @@ func TestMarshalSchemas_Multiple(t *testing.T) {
 	}
 }
 
+func TestGenerateItemListSchema_WithImage(t *testing.T) {
+	g := NewGenerator(config.SiteConfig{}, config.SchemaConfig{})
+	schema := g.GenerateItemListSchema("Best Recipes", "Top picks", nil, "https://example.com/img.jpg")
+	if schema["image"] != "https://example.com/img.jpg" {
+		t.Errorf("expected image in schema, got %v", schema["image"])
+	}
+}
+
+func TestMarshalSchemas_MarshalError(t *testing.T) {
+	// A map containing a channel is not JSON-marshallable → error path → skipped
+	bad := map[string]interface{}{"ch": make(chan int)}
+	out := MarshalSchemas(bad)
+	if out != "" {
+		t.Errorf("expected empty output for unmarshalable schema, got %q", out)
+	}
+}
+
 func TestMarshalSchemas_Empty(t *testing.T) {
 	if got := MarshalSchemas(); got != "" {
 		t.Errorf("no schemas: want empty string, got %q", got)
@@ -320,6 +337,50 @@ func TestGenerateRecipeSchema_WithAuthorAndTimes(t *testing.T) {
 	}
 	if schema["recipeCuisine"] != "Italian" {
 		t.Errorf("recipeCuisine: got %v", schema["recipeCuisine"])
+	}
+}
+
+func TestGenerateRecipeSchema_WithIngredientsAndInstructions(t *testing.T) {
+	g := NewGenerator(config.SiteConfig{BaseURL: "https://example.com"}, config.SchemaConfig{})
+	e := &entity.Entity{
+		Slug:   "soup",
+		Fields: map[string]interface{}{"title": "Soup", "image": "https://example.com/soup.jpg"},
+		Sections: map[string]interface{}{
+			"ingredients":  []string{"1 cup broth", "1 onion"},
+			"instructions": []string{"Boil the broth", "Add onion"},
+		},
+	}
+	schema := g.GenerateRecipeSchema(e, "https://example.com/soup.html")
+	if _, ok := schema["recipeIngredient"]; !ok {
+		t.Error("expected recipeIngredient in schema")
+	}
+	if _, ok := schema["recipeInstructions"]; !ok {
+		t.Error("expected recipeInstructions in schema")
+	}
+	if _, ok := schema["image"]; !ok {
+		t.Error("expected image in schema")
+	}
+}
+
+func TestGenerateRecipeSchema_WithKeywordsAndPairings(t *testing.T) {
+	g := NewGenerator(
+		config.SiteConfig{BaseURL: "https://example.com"},
+		config.SchemaConfig{ExtraKeywords: []string{"easy", "quick"}},
+	)
+	e := &entity.Entity{
+		Slug: "pasta",
+		Fields: map[string]interface{}{
+			"title":    "Pasta",
+			"keywords": []interface{}{"italian", "dinner"},
+			"pairings": []interface{}{"salad", "wine"},
+		},
+	}
+	schema := g.GenerateRecipeSchema(e, "https://example.com/pasta.html")
+	if _, ok := schema["keywords"]; !ok {
+		t.Error("expected keywords in schema")
+	}
+	if _, ok := schema["isRelatedTo"]; !ok {
+		t.Error("expected isRelatedTo in schema for pairings")
 	}
 }
 

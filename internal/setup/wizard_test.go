@@ -187,3 +187,109 @@ func TestDetectClaude_WithDotClaudeDir(t *testing.T) {
 		t.Error("detectClaude should return true when ~/.claude exists")
 	}
 }
+
+func TestDetectClaude_NoClaude(t *testing.T) {
+	// Empty PATH so LookPath("claude") always fails, then empty HOME so Stat fails.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", "")
+	// With empty PATH and no ~/.claude dir, detectClaude must return false.
+	if detectClaude() {
+		t.Error("detectClaude should return false when claude not in PATH and no ~/.claude dir")
+	}
+}
+
+func TestDetectClaude_ViaHomeDotClaude(t *testing.T) {
+	// Empty PATH (so LookPath fails) but ~/.claude exists → covers the stat success path.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", "")
+	if err := os.Mkdir(filepath.Join(home, ".claude"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if !detectClaude() {
+		t.Error("detectClaude should return true when ~/.claude exists")
+	}
+}
+
+// ── detectCursor extra paths ──────────────────────────────────────────────────
+
+func TestDetectCursor_GlobalDotCursorDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.Mkdir(filepath.Join(home, ".cursor"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if !detectCursor(t.TempDir()) {
+		t.Error("detectCursor should return true when ~/.cursor exists")
+	}
+}
+
+func TestDetectCursor_MacOSLibraryPath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	macPath := filepath.Join(home, "Library", "Application Support", "Cursor")
+	if err := os.MkdirAll(macPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if !detectCursor(t.TempDir()) {
+		t.Error("detectCursor should return true when Library/Application Support/Cursor exists")
+	}
+}
+
+// ── installHook error paths ───────────────────────────────────────────────────
+
+func TestInstallHook_MkdirAllError(t *testing.T) {
+	// Place a regular file where .claude dir should be → MkdirAll fails.
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".claude"), []byte("not a dir"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := installHook(dir)
+	if err == nil {
+		t.Error("installHook should fail when .claude path is a regular file")
+	}
+}
+
+func TestInstallHook_WriteFileError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("skipping chmod-based test in CI")
+	}
+	dir := t.TempDir()
+	claudeDir := filepath.Join(dir, ".claude")
+	if err := os.MkdirAll(claudeDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(claudeDir, 0555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(claudeDir, 0755) }) //nolint:errcheck
+	_, err := installHook(dir)
+	if err == nil {
+		t.Error("installHook should fail when settings.json cannot be written")
+	}
+}
+
+func TestInstallHook_SupermodelNotInPath(t *testing.T) {
+	// With supermodel not on PATH, installHook falls back to os.Executable() for hookCmd.
+	t.Setenv("PATH", "")
+	dir := t.TempDir()
+	installed, err := installHook(dir)
+	if err != nil {
+		t.Fatalf("installHook with empty PATH: %v", err)
+	}
+	if !installed {
+		t.Error("installHook should still install even when supermodel not in PATH")
+	}
+}
+
+// ── findGitRoot ───────────────────────────────────────────────────────────────
+
+func TestFindGitRoot_ReturnsPath(t *testing.T) {
+	// findGitRoot uses os.Getwd() internally; we can't redirect it easily,
+	// but we can verify it returns a non-empty string without panicking.
+	root := findGitRoot()
+	if root == "" {
+		t.Error("findGitRoot should return a non-empty path")
+	}
+}

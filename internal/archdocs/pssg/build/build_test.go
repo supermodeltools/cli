@@ -273,6 +273,288 @@ func TestMaybeWriteShareSVG_Enabled(t *testing.T) {
 	}
 }
 
+// TestWriteShareSVG_MkdirAllError covers L1310: writeShareSVG returns an error
+// when MkdirAll fails because a file exists at the parent path.
+func TestWriteShareSVG_MkdirAllError(t *testing.T) {
+	outDir := t.TempDir()
+	// Place a regular file at the "images" subdirectory so MkdirAll("images/share") fails.
+	if err := os.WriteFile(filepath.Join(outDir, "images"), []byte("block"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	err := writeShareSVG(outDir, "test.svg", "<svg/>")
+	if err == nil {
+		t.Error("expected MkdirAll error when parent path is a file")
+	}
+}
+
+// TestGenerateSearchIndex_WriteFileError covers L1365: generateSearchIndex returns
+// an error when os.WriteFile fails because the output directory is not writable.
+func TestGenerateSearchIndex_WriteFileError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("skipping chmod-based test in CI")
+	}
+	outDir := t.TempDir()
+	if err := os.Chmod(outDir, 0555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(outDir, 0755) }) //nolint:errcheck
+
+	ent := &entity.Entity{Slug: "test-recipe", Fields: map[string]interface{}{"title": "Test"}}
+	b := NewBuilder(&config.Config{Search: config.SearchConfig{Enabled: true}}, false)
+	err := b.generateSearchIndex([]*entity.Entity{ent}, outDir)
+	if err == nil {
+		t.Error("expected WriteFile error when outDir is not writable")
+	}
+}
+
+// ── copyDir ───────────────────────────────────────────────────────────────────
+
+func TestCopyDir_CopiesFiles(t *testing.T) {
+	src := t.TempDir()
+	dst := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(src, "a.txt"), []byte("hello"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyDir(src, dst); err != nil {
+		t.Fatalf("copyDir: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dst, "a.txt"))
+	if err != nil {
+		t.Fatalf("copied file not found: %v", err)
+	}
+	if string(data) != "hello" {
+		t.Errorf("content mismatch: got %q, want %q", data, "hello")
+	}
+}
+
+func TestCopyDir_CopiesSubdirs(t *testing.T) {
+	src := t.TempDir()
+	dst := t.TempDir()
+
+	sub := filepath.Join(src, "sub")
+	if err := os.Mkdir(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "b.txt"), []byte("world"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyDir(src, dst); err != nil {
+		t.Fatalf("copyDir with subdir: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dst, "sub", "b.txt"))
+	if err != nil {
+		t.Fatalf("copied subdir file not found: %v", err)
+	}
+	if string(data) != "world" {
+		t.Errorf("content mismatch: got %q", data)
+	}
+}
+
+func TestCopyDir_NonExistentSrc(t *testing.T) {
+	dst := t.TempDir()
+	// Non-existent src → IsNotExist → returns nil (no-op)
+	if err := copyDir(filepath.Join(t.TempDir(), "nonexistent"), dst); err != nil {
+		t.Errorf("copyDir on non-existent src should return nil, got: %v", err)
+	}
+}
+
+func TestCopyDir_ReadFileError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("skipping chmod-based test in CI")
+	}
+	src := t.TempDir()
+	dst := t.TempDir()
+
+	f := filepath.Join(src, "locked.txt")
+	if err := os.WriteFile(f, []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(f, 0000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(f, 0600) }) //nolint:errcheck
+
+	if err := copyDir(src, dst); err == nil {
+		t.Error("copyDir should fail when a file cannot be read")
+	}
+}
+
+func TestCopyDir_WriteFileError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("skipping chmod-based test in CI")
+	}
+	src := t.TempDir()
+	dst := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(src, "a.txt"), []byte("hello"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dst, 0555); err != nil { // read-only
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dst, 0755) }) //nolint:errcheck
+
+	if err := copyDir(src, dst); err == nil {
+		t.Error("copyDir should fail when destination is read-only")
+	}
+}
+
+func TestCopyDir_ReadDirError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("skipping chmod-based test in CI")
+	}
+	// Create a dir that exists but is unreadable (non-IsNotExist error).
+	src := t.TempDir()
+	if err := os.Chmod(src, 0000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(src, 0755) }) //nolint:errcheck
+
+	dst := t.TempDir()
+	if err := copyDir(src, dst); err == nil {
+		t.Error("copyDir should fail when src dir is unreadable")
+	}
+}
+
+func TestCopyDir_RecursiveError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("skipping chmod-based test in CI")
+	}
+	src := t.TempDir()
+	dst := t.TempDir()
+
+	sub := filepath.Join(src, "sub")
+	if err := os.Mkdir(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	locked := filepath.Join(sub, "locked.txt")
+	if err := os.WriteFile(locked, []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(locked, 0000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(locked, 0600) }) //nolint:errcheck
+
+	if err := copyDir(src, dst); err == nil {
+		t.Error("copyDir should fail when recursive copy encounters an unreadable file")
+	}
+}
+
+func TestCopyDir_MkdirAllError(t *testing.T) {
+	src := t.TempDir()
+	dst := t.TempDir()
+
+	// Create a subdir in src
+	sub := filepath.Join(src, "sub")
+	if err := os.Mkdir(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "f.txt"), []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Block dst/sub creation by placing a regular file there
+	if err := os.WriteFile(filepath.Join(dst, "sub"), []byte("blocker"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := copyDir(src, dst); err == nil {
+		t.Error("copyDir should fail when MkdirAll cannot create a subdir")
+	}
+}
+
+// ── loadFavorites ─────────────────────────────────────────────────────────────
+
+func TestLoadFavorites_EmptyPath(t *testing.T) {
+	b := NewBuilder(&config.Config{}, false)
+	if got := b.loadFavorites(nil); got != nil {
+		t.Errorf("empty favorites path should return nil, got %v", got)
+	}
+}
+
+func TestLoadFavorites_ValidFile(t *testing.T) {
+	dir := t.TempDir()
+	favFile := filepath.Join(dir, "favorites.json")
+	if err := os.WriteFile(favFile, []byte(`["slug-a","slug-b"]`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	ents := map[string]*entity.Entity{
+		"slug-a": {Slug: "slug-a"},
+		"slug-b": {Slug: "slug-b"},
+	}
+	b := NewBuilder(&config.Config{Extra: config.ExtraConfig{Favorites: favFile}}, false)
+	result := b.loadFavorites(ents)
+	if len(result) != 2 {
+		t.Errorf("expected 2 favorites, got %d", len(result))
+	}
+}
+
+func TestLoadFavorites_MissingFile(t *testing.T) {
+	b := NewBuilder(&config.Config{Extra: config.ExtraConfig{Favorites: "/nonexistent/favorites.json"}}, false)
+	if got := b.loadFavorites(nil); got != nil {
+		t.Errorf("missing file should return nil, got %v", got)
+	}
+}
+
+func TestLoadFavorites_InvalidJSON(t *testing.T) {
+	dir := t.TempDir()
+	favFile := filepath.Join(dir, "favorites.json")
+	if err := os.WriteFile(favFile, []byte(`{not valid`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	b := NewBuilder(&config.Config{Extra: config.ExtraConfig{Favorites: favFile}}, false)
+	if got := b.loadFavorites(nil); got != nil {
+		t.Errorf("invalid JSON should return nil, got %v", got)
+	}
+}
+
+// ── loadContributors ──────────────────────────────────────────────────────────
+
+func TestLoadContributors_EmptyPath(t *testing.T) {
+	b := NewBuilder(&config.Config{}, false)
+	if got := b.loadContributors(); got != nil {
+		t.Errorf("empty contributors path should return nil, got %v", got)
+	}
+}
+
+func TestLoadContributors_ValidFile(t *testing.T) {
+	dir := t.TempDir()
+	cFile := filepath.Join(dir, "contributors.json")
+	if err := os.WriteFile(cFile, []byte(`{"alice":{"role":"editor"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	b := NewBuilder(&config.Config{Extra: config.ExtraConfig{Contributors: cFile}}, false)
+	result := b.loadContributors()
+	if result == nil {
+		t.Error("should return non-nil map for valid JSON")
+	}
+	if _, ok := result["alice"]; !ok {
+		t.Error("result should contain 'alice'")
+	}
+}
+
+func TestLoadContributors_MissingFile(t *testing.T) {
+	b := NewBuilder(&config.Config{Extra: config.ExtraConfig{Contributors: "/nonexistent/contributors.json"}}, false)
+	if got := b.loadContributors(); got != nil {
+		t.Errorf("missing file should return nil, got %v", got)
+	}
+}
+
+func TestLoadContributors_InvalidJSON(t *testing.T) {
+	dir := t.TempDir()
+	cFile := filepath.Join(dir, "contributors.json")
+	if err := os.WriteFile(cFile, []byte(`not json`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	b := NewBuilder(&config.Config{Extra: config.ExtraConfig{Contributors: cFile}}, false)
+	if got := b.loadContributors(); got != nil {
+		t.Errorf("invalid JSON should return nil, got %v", got)
+	}
+}
+
 // readSearchIndex reads and unmarshals the search-index.json from outDir.
 func readSearchIndex(t *testing.T, outDir string) []map[string]string {
 	t.Helper()

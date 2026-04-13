@@ -7,6 +7,23 @@ import (
 	"github.com/supermodeltools/cli/internal/archdocs/pssg/entity"
 )
 
+func TestGenerateFeed_WithCategory(t *testing.T) {
+	entities := []*entity.Entity{
+		{
+			Slug: "pasta",
+			Fields: map[string]interface{}{
+				"title":           "Pasta",
+				"description":     "Simple pasta",
+				"recipe_category": "Italian",
+			},
+		},
+	}
+	out := generateFeed("Site", "https://example.com", "desc", "en", "Mon, 01 Jan 2024 00:00:00 +0000", entities, "https://example.com")
+	if !strings.Contains(out, "Italian") {
+		t.Errorf("expected category in output:\n%s", out)
+	}
+}
+
 func TestGenerateFeedNoDoubleEscape(t *testing.T) {
 	entities := []*entity.Entity{
 		{

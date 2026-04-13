@@ -1,6 +1,7 @@
 package shards
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/supermodeltools/cli/internal/api"
@@ -360,6 +361,221 @@ func TestMergeGraph_DomainsPreservedEvenWhenIncrementalHasMore(t *testing.T) {
 	}
 }
 
+// TestMergeGraph_NoDependencyPath covers L407: a LocalDependency with no filePath,
+// name, or importPath is skipped (fp stays "").
+func TestMergeGraph_NoDependencyPath(t *testing.T) {
+	existing := buildIR(
+		[]api.Node{newNode("file-a", []string{"File"}, "filePath", "/repo/a.go")},
+		nil,
+	)
+	incremental := buildIR(
+		[]api.Node{
+			newNode("file-a-new", []string{"File"}, "filePath", "/repo/a.go"),
+			// LocalDependency with no path properties → fp == "" → skip
+			newNode("dep-nopath", []string{"LocalDependency"}),
+		},
+		[]api.Relationship{newRel("r1", "IMPORTS", "file-a-new", "dep-nopath")},
+	)
+	d := NewTestDaemon(existing)
+	d.MergeGraph(incremental, []string{"/repo/a.go"})
+
+	result := d.GetIR()
+	// dep-nopath should remain (not resolved) since it has no path to match
+	ids := nodeIDSet(result)
+	if !ids["dep-nopath"] {
+		t.Error("dep-nopath with no path should remain in the merged graph (unresolved)")
+	}
+}
+
+// TestMergeGraph_ExactFilepathMatch covers L411: a LocalDependency whose fp
+// exactly matches an existing file's filePath gets resolved to that node.
+func TestMergeGraph_ExactFilepathMatch(t *testing.T) {
+	existing := buildIR(
+		[]api.Node{
+			newNode("file-util", []string{"File"}, "filePath", "/repo/util.go"),
+			newNode("file-main", []string{"File"}, "filePath", "/repo/main.go"),
+		},
+		nil,
+	)
+	incremental := buildIR(
+		[]api.Node{
+			newNode("file-main-new", []string{"File"}, "filePath", "/repo/main.go"),
+			// importPath exactly matches existing file's filePath → L411 is taken
+			newNode("dep-util", []string{"LocalDependency"}, "importPath", "/repo/util.go"),
+		},
+		[]api.Relationship{newRel("r1", "IMPORTS", "file-main-new", "dep-util")},
+	)
+	d := NewTestDaemon(existing)
+	d.MergeGraph(incremental, []string{"/repo/main.go"})
+
+	result := d.GetIR()
+	// dep-util should be resolved to file-util; rel should point to file-util
+	if hasRelEdge(result, "file-main-new", "file-util") {
+		// resolved successfully
+	} else {
+		t.Error("dep-util should be resolved to existing file-util via exact path match")
+	}
+}
+
+// TestMergeGraph_TildeImportPath covers L420: importPath with "~/" prefix is
+// stripped before suffix matching.
+func TestMergeGraph_TildeImportPath(t *testing.T) {
+	existing := buildIR(
+		[]api.Node{
+			newNode("file-utils", []string{"File"}, "filePath", "/repo/src/utils.ts"),
+			newNode("file-main", []string{"File"}, "filePath", "/repo/main.ts"),
+		},
+		nil,
+	)
+	incremental := buildIR(
+		[]api.Node{
+			newNode("file-main-new", []string{"File"}, "filePath", "/repo/main.ts"),
+			// "~/" prefix → stripped → "src/utils" → suffix-matched to /repo/src/utils.ts
+			newNode("dep-tilde", []string{"LocalDependency"}, "importPath", "~/src/utils"),
+		},
+		[]api.Relationship{newRel("r1", "IMPORTS", "file-main-new", "dep-tilde")},
+	)
+	d := NewTestDaemon(existing)
+	d.MergeGraph(incremental, []string{"/repo/main.ts"})
+
+	result := d.GetIR()
+	ids := nodeIDSet(result)
+	if ids["dep-tilde"] {
+		t.Error("dep-tilde should be resolved (remapped to file-utils)")
+	}
+}
+
+// TestMergeGraph_ExtRemapStartNode covers L546: a relationship whose StartNode
+// is in extRemap gets its StartNode remapped.
+func TestMergeGraph_ExtRemapStartNode(t *testing.T) {
+	existing := buildIR(
+		[]api.Node{
+			newNode("file-db", []string{"File"}, "filePath", "/repo/db.go"),
+			newNode("file-handler", []string{"File"}, "filePath", "/repo/handler.go"),
+		},
+		nil,
+	)
+	incremental := buildIR(
+		[]api.Node{
+			newNode("file-handler-new", []string{"File"}, "filePath", "/repo/handler.go"),
+			// importPath exactly matches existing db.go → resolved to file-db
+			newNode("dep-db", []string{"LocalDependency"}, "importPath", "/repo/db.go"),
+			// A node that dep-db "calls" — so StartNode of the rel is dep-db
+			newNode("fn-connect", []string{"Function"}, "filePath", "/repo/db.go", "name", "Connect"),
+		},
+		[]api.Relationship{
+			// dep-db is the StartNode → extRemap[dep-db] = file-db → L546 triggered
+			newRel("r1", "IMPORTS", "dep-db", "fn-connect"),
+		},
+	)
+	d := NewTestDaemon(existing)
+	d.MergeGraph(incremental, []string{"/repo/handler.go"})
+
+	result := d.GetIR()
+	// rel StartNode should have been remapped from dep-db to file-db
+	if !hasRelEdge(result, "file-db", "fn-connect") {
+		t.Error("relationship StartNode should be remapped from dep-db to file-db via extRemap")
+	}
+}
+
+// TestMergeGraph_ExistingNodeIDCollision covers L494: an existing node whose ID
+// also appears in the incremental graph is dropped from keptNodes.
+func TestMergeGraph_ExistingNodeIDCollision(t *testing.T) {
+	existing := buildIR(
+		[]api.Node{
+			newNode("file-a", []string{"File"}, "filePath", "/repo/a.go"),
+			// fn-shared is in existing AND in incremental with the same ID
+			newNode("fn-shared", []string{"Function"}, "filePath", "/repo/a.go", "name", "SharedFn"),
+		},
+		nil,
+	)
+	incremental := buildIR(
+		[]api.Node{
+			newNode("file-a-new", []string{"File"}, "filePath", "/repo/a.go"),
+			// Same ID as the existing function → newNodeIDs["fn-shared"] = true
+			newNode("fn-shared", []string{"Function"}, "filePath", "/repo/a.go", "name", "SharedFn"),
+		},
+		nil,
+	)
+	d := NewTestDaemon(existing)
+	d.MergeGraph(incremental, []string{"/repo/a.go"})
+	// Should not panic or duplicate fn-shared
+	result := d.GetIR()
+	count := 0
+	for _, n := range result.Graph.Nodes {
+		if n.ID == "fn-shared" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("fn-shared should appear exactly once; got %d times", count)
+	}
+}
+
+// TestMergeGraph_NodeWithPathProperty covers L469: existing nodes with "path"
+// property (not "filePath") are still recognized when matching against changedSet.
+func TestMergeGraph_NodeWithPathProperty(t *testing.T) {
+	existing := buildIR(
+		[]api.Node{
+			// Uses "path" instead of "filePath" — covers the `fp = n.Prop("path")` fallback
+			newNode("file-old", []string{"File"}, "path", "/repo/a.go"),
+		},
+		nil,
+	)
+	incremental := buildIR(
+		[]api.Node{
+			newNode("file-new", []string{"File"}, "filePath", "/repo/a.go"),
+		},
+		nil,
+	)
+	d := NewTestDaemon(existing)
+	d.MergeGraph(incremental, []string{"/repo/a.go"})
+	// Should not panic; node with "path" property in existing gets recognized
+	result := d.GetIR()
+	if result == nil {
+		t.Fatal("MergeGraph with path-property node returned nil")
+	}
+}
+
+// TestMergeGraph_ExistingNodeIDInUnchangedFile covers L494-495: when an
+// existing node's ID appears in the incremental update but its file is NOT in
+// changedFiles, the old copy is discarded so the incremental version wins.
+func TestMergeGraph_ExistingNodeIDInUnchangedFile(t *testing.T) {
+	existing := buildIR(
+		[]api.Node{
+			newNode("file-lib", []string{"File"}, "filePath", "/repo/lib.go"),
+			// fn-lib exists in unchanged lib.go; same ID appears in incremental
+			newNode("fn-lib", []string{"Function"}, "filePath", "/repo/lib.go", "name", "LibFn"),
+			newNode("file-a", []string{"File"}, "filePath", "/repo/a.go"),
+			newNode("fn-a", []string{"Function"}, "filePath", "/repo/a.go", "name", "AFn"),
+		},
+		nil,
+	)
+	// Incremental contains fn-lib (same ID) despite lib.go not being changed.
+	incremental := buildIR(
+		[]api.Node{
+			newNode("file-a-new", []string{"File"}, "filePath", "/repo/a.go"),
+			newNode("fn-a-new", []string{"Function"}, "filePath", "/repo/a.go", "name", "AFn"),
+			newNode("fn-lib", []string{"Function"}, "filePath", "/repo/lib.go", "name", "LibFn"),
+		},
+		nil,
+	)
+	d := NewTestDaemon(existing)
+	// Only a.go changed; lib.go is unchanged.
+	d.MergeGraph(incremental, []string{"/repo/a.go"})
+	result := d.GetIR()
+	// fn-lib should appear exactly once (the incremental version).
+	count := 0
+	for _, n := range result.Graph.Nodes {
+		if n.ID == "fn-lib" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("fn-lib should appear exactly once; got %d", count)
+	}
+}
+
 // ── computeAffectedFiles tests ───────────────────────────────────────────────
 
 // TestComputeAffectedFiles_OldCalleeIncluded verifies that when a function in a
@@ -411,6 +627,86 @@ func TestComputeAffectedFiles_OldCalleeIncluded(t *testing.T) {
 
 // TestComputeAffectedFiles_CurrentCallersIncluded verifies that files currently
 // calling a function in the changed file are marked affected (existing behaviour).
+// ── assignNewFilesToDomains tests ────────────────────────────────────────────
+
+func TestAssignNewFilesToDomains_EmptyDomains(t *testing.T) {
+	// d.ir.Domains is nil → early return, no panic
+	d := &Daemon{
+		ir:   buildIR(nil, nil),
+		logf: func(string, ...interface{}) {},
+	}
+	nodes := []api.Node{newNode("f1", []string{"File"}, "filePath", "/repo/new.go")}
+	d.assignNewFilesToDomains(nodes) // must not panic
+}
+
+func TestAssignNewFilesToDomains_NonFileNodeSkipped(t *testing.T) {
+	d := &Daemon{
+		ir: &api.ShardIR{
+			Domains: []api.ShardDomain{{Name: "Auth", KeyFiles: []string{"/repo/auth/login.go"}}},
+		},
+		logf: func(string, ...interface{}) {},
+	}
+	nodes := []api.Node{newNode("fn1", []string{"Function"}, "filePath", "/repo/auth/handler.go")}
+	d.assignNewFilesToDomains(nodes)
+	// Non-File node → domain KeyFiles unchanged
+	if len(d.ir.Domains[0].KeyFiles) != 1 {
+		t.Errorf("non-File node should not be added to domain; got %v", d.ir.Domains[0].KeyFiles)
+	}
+}
+
+func TestAssignNewFilesToDomains_EmptyFilePathSkipped(t *testing.T) {
+	d := &Daemon{
+		ir: &api.ShardIR{
+			Domains: []api.ShardDomain{{Name: "Core", KeyFiles: []string{"/repo/core/db.go"}}},
+		},
+		logf: func(string, ...interface{}) {},
+	}
+	// File node with no filePath property
+	nodes := []api.Node{{ID: "f1", Labels: []string{"File"}, Properties: map[string]any{}}}
+	d.assignNewFilesToDomains(nodes)
+	if len(d.ir.Domains[0].KeyFiles) != 1 {
+		t.Errorf("File node without filePath should not be added; got %v", d.ir.Domains[0].KeyFiles)
+	}
+}
+
+func TestAssignNewFilesToDomains_MatchesBestDomain(t *testing.T) {
+	d := &Daemon{
+		ir: &api.ShardIR{
+			Domains: []api.ShardDomain{
+				{Name: "Auth", KeyFiles: []string{"/repo/auth/login.go"}},
+				{Name: "Web", KeyFiles: []string{"/repo/web/handler.go"}},
+			},
+		},
+		logf: func(string, ...interface{}) {},
+	}
+	nodes := []api.Node{newNode("f1", []string{"File"}, "filePath", "/repo/auth/session.go")}
+	d.assignNewFilesToDomains(nodes)
+	// /repo/auth/session.go → prefix "/repo/auth" matches Auth domain
+	if len(d.ir.Domains[0].KeyFiles) != 2 {
+		t.Errorf("expected Auth domain to gain one file, got %v", d.ir.Domains[0].KeyFiles)
+	}
+	if len(d.ir.Domains[1].KeyFiles) != 1 {
+		t.Errorf("Web domain should be unchanged, got %v", d.ir.Domains[1].KeyFiles)
+	}
+}
+
+func TestAssignNewFilesToDomains_NoMatchingDomain(t *testing.T) {
+	d := &Daemon{
+		ir: &api.ShardIR{
+			Domains: []api.ShardDomain{
+				{Name: "Auth", KeyFiles: []string{"/repo/auth/login.go"}},
+			},
+		},
+		logf: func(string, ...interface{}) {},
+	}
+	nodes := []api.Node{newNode("f1", []string{"File"}, "filePath", "/repo/other/service.go")}
+	d.assignNewFilesToDomains(nodes)
+	// /repo/other/ does not match /repo/auth/ prefix → no file added
+	if len(d.ir.Domains[0].KeyFiles) != 1 {
+		t.Errorf("unmatched file should not be added to domain, got %v", d.ir.Domains[0].KeyFiles)
+	}
+}
+
 func TestComputeAffectedFiles_CurrentCallersIncluded(t *testing.T) {
 	ir := buildIR(
 		[]api.Node{
@@ -437,5 +733,132 @@ func TestComputeAffectedFiles_CurrentCallersIncluded(t *testing.T) {
 
 	if !affectedSet["c.go"] {
 		t.Error("expected c.go (current caller) in affected set")
+	}
+}
+
+func TestComputeAffectedFiles_ImporterAndImportLoopBodies(t *testing.T) {
+	// a.go imports b.go; c.go imports a.go.
+	// Changing a.go should pull in both b.go (via Imports) and c.go (via Importers).
+	ir := buildIR(
+		[]api.Node{
+			newNode("file-a", []string{"File"}, "filePath", "a.go"),
+			newNode("file-b", []string{"File"}, "filePath", "b.go"),
+			newNode("file-c", []string{"File"}, "filePath", "c.go"),
+		},
+		[]api.Relationship{
+			// a.go imports b.go
+			newRel("imp-ab", "imports", "file-a", "file-b"),
+			// c.go imports a.go
+			newRel("imp-ca", "imports", "file-c", "file-a"),
+		},
+	)
+	d := NewTestDaemon(ir)
+	d.cache = NewCache()
+	d.cache.Build(ir)
+
+	affected := d.computeAffectedFiles([]string{"a.go"}, nil, nil)
+
+	affectedSet := make(map[string]bool, len(affected))
+	for _, f := range affected {
+		affectedSet[f] = true
+	}
+	if !affectedSet["b.go"] {
+		t.Error("expected b.go (imported by a.go) in affected set")
+	}
+	if !affectedSet["c.go"] {
+		t.Error("expected c.go (importer of a.go) in affected set")
+	}
+}
+
+func TestComputeAffectedFiles_OldImportsIncluded(t *testing.T) {
+	// a.go used to import b.go but no longer does; b.go must still be re-rendered.
+	ir := buildIR(
+		[]api.Node{
+			newNode("file-a", []string{"File"}, "filePath", "a.go"),
+		},
+		nil,
+	)
+	d := NewTestDaemon(ir)
+	d.cache = NewCache()
+	d.cache.Build(ir)
+
+	oldImports := map[string][]string{
+		"a.go": {"b.go"},
+	}
+	affected := d.computeAffectedFiles([]string{"a.go"}, oldImports, nil)
+
+	affectedSet := make(map[string]bool, len(affected))
+	for _, f := range affected {
+		affectedSet[f] = true
+	}
+	if !affectedSet["b.go"] {
+		t.Error("expected b.go (old import) in affected set")
+	}
+}
+
+func TestComputeAffectedFiles_OldCalleeFilesIncluded(t *testing.T) {
+	// fn-a is in a.go; it used to call fn-d in d.go (captured in oldCalleeFiles).
+	// Changing a.go should mark d.go as affected so stale back-references are
+	// re-rendered.
+	ir := buildIR(
+		[]api.Node{
+			newNode("file-a", []string{"File"}, "filePath", "a.go"),
+			newNode("fn-a", []string{"Function"}, "filePath", "a.go", "name", "FuncA"),
+		},
+		nil,
+	)
+	d := NewTestDaemon(ir)
+	d.cache = NewCache()
+	d.cache.Build(ir)
+
+	oldCalleeFiles := map[string][]string{
+		"fn-a": {"d.go"},
+	}
+	affected := d.computeAffectedFiles([]string{"a.go"}, nil, oldCalleeFiles)
+
+	affectedSet := make(map[string]bool, len(affected))
+	for _, f := range affected {
+		affectedSet[f] = true
+	}
+
+	if !affectedSet["d.go"] {
+		t.Error("expected d.go (old callee file) in affected set")
+	}
+}
+
+// ── newUUID ───────────────────────────────────────────────────────────────────
+
+func TestNewUUID_Format(t *testing.T) {
+	id := newUUID()
+	// UUID v4 format: 8-4-4-4-12 hex chars separated by hyphens.
+	parts := strings.Split(id, "-")
+	if len(parts) != 5 {
+		t.Fatalf("expected 5 hyphen-separated parts, got %d: %q", len(parts), id)
+	}
+	want := []int{8, 4, 4, 4, 12}
+	for i, p := range parts {
+		if len(p) != want[i] {
+			t.Errorf("part %d: expected %d hex chars, got %d: %q", i, want[i], len(p), p)
+		}
+	}
+}
+
+func TestNewUUID_Unique(t *testing.T) {
+	ids := make(map[string]bool, 10)
+	for i := 0; i < 10; i++ {
+		id := newUUID()
+		if ids[id] {
+			t.Errorf("duplicate UUID produced: %q", id)
+		}
+		ids[id] = true
+	}
+}
+
+func TestNewUUID_Version4Bits(t *testing.T) {
+	id := newUUID()
+	// UUID v4: bits 12-15 of time_hi_and_version = 0100 (i.e., 4th hex char of 3rd group is '4')
+	parts := strings.Split(id, "-")
+	if parts[2][0] != '4' {
+		t.Errorf("expected version nibble '4' at start of 3rd group, got %q", parts[2][0])
 	}
 }

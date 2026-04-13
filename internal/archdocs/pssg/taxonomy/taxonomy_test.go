@@ -361,6 +361,48 @@ func TestComputePagination_Empty(t *testing.T) {
 	}
 }
 
+// TestBuildAll_InvertMode covers L73-76: when tc.Invert is true the entity loop
+// hits the continue and no entries are added.
+func TestBuildAll_InvertMode(t *testing.T) {
+	entities := []*entity.Entity{
+		{Slug: "pasta", Fields: map[string]interface{}{"cuisine": "Italian"}},
+	}
+	tc := config.TaxonomyConfig{Name: "cuisine", Field: "cuisine", Invert: true, MinEntities: 1}
+	taxes := BuildAll(entities, []config.TaxonomyConfig{tc}, nil)
+	if len(taxes) != 1 {
+		t.Fatalf("expected 1 taxonomy, got %d", len(taxes))
+	}
+	if len(taxes[0].Entries) != 0 {
+		t.Errorf("Invert mode should produce 0 entries, got %d", len(taxes[0].Entries))
+	}
+}
+
+// TestBuildAll_EmptySlugSkipped covers L81-82: a field value that slugifies to
+// "" (e.g. all punctuation) is skipped without adding an entry.
+func TestBuildAll_EmptySlugSkipped(t *testing.T) {
+	entities := []*entity.Entity{
+		{Slug: "pasta", Fields: map[string]interface{}{"cuisine": "@@@"}},
+	}
+	tc := config.TaxonomyConfig{Name: "cuisine", Field: "cuisine", MinEntities: 1}
+	taxes := BuildAll(entities, []config.TaxonomyConfig{tc}, nil)
+	if len(taxes) != 1 {
+		t.Fatalf("expected 1 taxonomy, got %d", len(taxes))
+	}
+	if len(taxes[0].Entries) != 0 {
+		t.Errorf("all-punctuation value should produce 0 entries, got %d", len(taxes[0].Entries))
+	}
+}
+
+// TestExtractValues_NonStringValue covers L140: when MultiValue is false and the
+// field value is not a string, extractValues returns nil.
+func TestExtractValues_NonStringValue(t *testing.T) {
+	e := &entity.Entity{Fields: map[string]interface{}{"count": 42}}
+	tc := config.TaxonomyConfig{Field: "count", MultiValue: false}
+	if got := extractValues(e, tc, nil); got != nil {
+		t.Errorf("non-string non-multivalue: want nil, got %v", got)
+	}
+}
+
 // TestTopEntries verifies that TopEntries returns entries sorted by entity count.
 func TestTopEntries(t *testing.T) {
 	e := func(n int) []*entity.Entity {
@@ -385,5 +427,18 @@ func TestTopEntries(t *testing.T) {
 	// original slice must not be modified
 	if entries[0].Name != "A" {
 		t.Errorf("original slice was modified")
+	}
+}
+
+// TestTopEntries_NExceedsLength covers L311-313: when n is larger than the
+// number of entries, TopEntries returns all of them.
+func TestTopEntries_NExceedsLength(t *testing.T) {
+	entries := []Entry{
+		{Name: "A", Slug: "a"},
+		{Name: "B", Slug: "b"},
+	}
+	top := TopEntries(entries, 100)
+	if len(top) != 2 {
+		t.Errorf("n > len: want 2 entries, got %d", len(top))
 	}
 }

@@ -254,6 +254,216 @@ func TestPutGetJSON_Overwrite(t *testing.T) {
 	}
 }
 
+func TestGet_CorruptJSON(t *testing.T) {
+	withTempCacheDir(t)
+
+	// Write malformed JSON directly into the cache file.
+	cacheFile := filepath.Join(dir(), "badhash.json")
+	if err := os.MkdirAll(filepath.Dir(cacheFile), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cacheFile, []byte("{not valid json}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Get("badhash")
+	if err == nil {
+		t.Error("Get with corrupt JSON should return error")
+	}
+}
+
+func TestGetJSON_CorruptJSON(t *testing.T) {
+	withTempCacheDir(t)
+
+	cacheFile := filepath.Join(dir(), "corruptkey.json")
+	if err := os.MkdirAll(filepath.Dir(cacheFile), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cacheFile, []byte("{not valid}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var v any
+	_, err := GetJSON("corruptkey", &v)
+	if err == nil {
+		t.Error("GetJSON with corrupt JSON should return error")
+	}
+}
+
+func TestGet_NonNotExistError(t *testing.T) {
+	withTempCacheDir(t)
+
+	// Create a directory where the cache file would be, so ReadFile returns
+	// a non-IsNotExist error (it's a directory, not a file).
+	cacheFile := filepath.Join(dir(), "dirkey.json")
+	if err := os.MkdirAll(cacheFile, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Get("dirkey")
+	if err == nil {
+		t.Error("Get with directory-as-file should return error")
+	}
+}
+
+func TestGetJSON_NonNotExistError(t *testing.T) {
+	withTempCacheDir(t)
+
+	cacheFile := filepath.Join(dir(), "dirkey2.json")
+	if err := os.MkdirAll(cacheFile, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	var v any
+	_, err := GetJSON("dirkey2", &v)
+	if err == nil {
+		t.Error("GetJSON with directory-as-file should return error")
+	}
+}
+
+func TestPut_MkdirAllError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	// Create a regular file where ~/.supermodel would be → MkdirAll fails.
+	smFile := home + "/.supermodel"
+	if err := os.WriteFile(smFile, []byte("not a dir"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	g := &api.Graph{}
+	if err := Put("any-hash", g); err == nil {
+		t.Error("Put should fail when cache dir cannot be created")
+	}
+}
+
+func TestPutJSON_MarshalError(t *testing.T) {
+	withTempCacheDir(t)
+	// Channels cannot be JSON-marshaled; json.Marshal returns an error.
+	if err := PutJSON("marshal-fail", make(chan int)); err == nil {
+		t.Error("PutJSON should fail when value cannot be JSON-marshaled")
+	}
+}
+
+func TestPutJSON_MkdirAllError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	smFile := home + "/.supermodel"
+	if err := os.WriteFile(smFile, []byte("not a dir"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := PutJSON("any-hash", map[string]string{"k": "v"}); err == nil {
+		t.Error("PutJSON should fail when cache dir cannot be created")
+	}
+}
+
+func TestPutJSON_WriteFileError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("skipping chmod-based test in CI")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cacheDir := home + "/.supermodel/cache"
+	if err := os.MkdirAll(cacheDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(cacheDir, 0555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(cacheDir, 0755) }) //nolint:errcheck
+	if err := PutJSON("any-hash", map[string]string{"k": "v"}); err == nil {
+		t.Error("PutJSON should fail when temp file cannot be written")
+	}
+}
+
+func TestPut_RenameError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cacheDir := filepath.Join(home, ".supermodel", "cache")
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Create the destination path as a directory so Rename from .tmp → dest fails.
+	hash := "rename-error-hash"
+	destDir := filepath.Join(cacheDir, hash+".json")
+	if err := os.Mkdir(destDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	g := &api.Graph{}
+	if err := Put(hash, g); err == nil {
+		t.Error("Put should fail when rename destination is a directory")
+	}
+}
+
+func TestPutJSON_RenameError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cacheDir := filepath.Join(home, ".supermodel", "cache")
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Block Rename by placing a directory at the destination path.
+	hash := "rename-error-json-hash"
+	destDir := filepath.Join(cacheDir, hash+".json")
+	if err := os.Mkdir(destDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := PutJSON(hash, map[string]string{"k": "v"}); err == nil {
+		t.Error("PutJSON should fail when rename destination is a directory")
+	}
+}
+
+func TestPut_WriteFileError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("skipping chmod-based test in CI")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	// Create the cache dir but make it read-only so WriteFile fails.
+	cacheDir := home + "/.supermodel/cache"
+	if err := os.MkdirAll(cacheDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(cacheDir, 0555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(cacheDir, 0755) }) //nolint:errcheck
+	g := &api.Graph{}
+	if err := Put("any-hash", g); err == nil {
+		t.Error("Put should fail when temp file cannot be written")
+	}
+}
+
+func TestHashFile_ReadError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("skipping chmod-based test in CI")
+	}
+	dir := t.TempDir()
+	path := dir + "/secret.dat"
+	if err := os.WriteFile(path, []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(path, 0600) }) //nolint:errcheck
+	_, err := HashFile(path)
+	if err == nil {
+		t.Error("HashFile should fail when file is not readable")
+	}
+}
+
+func TestPut_MarshalError(t *testing.T) {
+	withTempCacheDir(t)
+	// A graph with a channel property cannot be JSON-marshaled.
+	g := &api.Graph{
+		Nodes: []api.Node{
+			{ID: "n1", Labels: []string{"File"}, Properties: map[string]any{"bad": make(chan int)}},
+		},
+	}
+	if err := Put("marshal-error-put", g); err == nil {
+		t.Error("Put should fail when graph has non-JSON-serializable properties")
+	}
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func writeTempFile(t *testing.T, content []byte) string {
