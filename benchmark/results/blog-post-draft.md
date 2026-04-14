@@ -1,6 +1,6 @@
 # 50% cheaper. 4× faster. Same correct answer.
 
-We ran a test: give Claude Code the same task four ways — naked, with a hand-crafted prompt, with our auto-generated prompt, and with a different shard format. All had to make 8 failing tests pass in a 270k-line codebase. Same model. Same starting point.
+We ran a test: give Claude Code the same task three ways — naked, with a hand-crafted prompt, and with our auto-generated prompt. All had to make 8 failing tests pass in a 270k-line codebase. Same model. Same starting point.
 
 Here's what happened.
 
@@ -13,8 +13,6 @@ Imagine a big library with thousands of books. When you need to find something, 
 A **shard** is the card catalog entry for a source file. It's a tiny file that lives right next to the code and says: "this file exports X, it calls Y, and Z calls it." Instead of reading thousands of lines of code to figure out how things connect, an AI reads the shard and gets the answer in a few lines.
 
 `supermodel analyze` builds all the shards at once by scanning your repo and mapping out every function call and dependency. After that, every AI session starts with the map already drawn.
-
-The "Three-file shards" column in the results below tested an older format that split each shard across three files instead of one. It did worse — more files to open, more turns spent loading context.
 
 ---
 
@@ -43,16 +41,16 @@ No plugins. No special AI tools. Just better context up front.
 
 ## Results
 
-|                     | Naked Claude | + Supermodel (crafted) | + Supermodel (auto) | Three-file shards |
-|---------------------|-------------|------------------------|---------------------|-------------------|
-| **Cost**            | $0.22       | $0.13                  | $0.11               | $0.25             |
-| **Turns**           | 13          | 7                      | 7                   | 16                |
-| **Duration**        | 95s         | 24s                    | 30s                 | 72s               |
-| **Tests passed**    | ✓ YES       | ✓ YES                  | ✓ YES               | ✓ YES             |
+|                     | Naked Claude | + Supermodel (crafted) | + Supermodel (auto) |
+|---------------------|-------------|------------------------|---------------------|
+| **Cost**            | $0.22       | $0.13                  | $0.11               |
+| **Turns**           | 13          | 7                      | 7                   |
+| **Duration**        | 95s         | 24s                    | 30s                 |
+| **Tests passed**    | ✓ YES       | ✓ YES                  | ✓ YES               |
 
 **40–50% cheaper. 3–4× faster. 46% fewer turns.**
 
-All four got the right answer. The only difference was how much digging each one had to do first.
+All three got the right answer. The only difference was how much digging each one had to do first.
 
 "Crafted" is a hand-written CLAUDE.md with Django-specific hints. "Auto" is what `supermodel skill` generates — a generic prompt that works on any repo. The auto prompt was actually *cheaper* than the hand-crafted one in this run, at $0.11 vs $0.13.
 
@@ -157,7 +155,7 @@ Run the analysis once. Save on every task after.
 ## Resources
 
 - **CLI:** [github.com/supermodeltools/cli](https://github.com/supermodeltools/cli)
-- **Raw benchmark logs:** [benchmark_results.zip](https://github.com/supermodeltools/cli/raw/main/benchmark/results/benchmark_results.zip) — full transcript for all four runs (naked, crafted, auto, three-file)
+- **Raw benchmark logs:** [benchmark_results.zip](https://github.com/supermodeltools/cli/raw/main/benchmark/results/benchmark_results.zip) — full transcript for all three runs (naked, crafted, auto)
 
 ---
 
