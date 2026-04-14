@@ -6,6 +6,18 @@ Here's what happened.
 
 ---
 
+## What's a shard?
+
+Imagine a big library with thousands of books. When you need to find something, you could read every book — or you could check the card catalog first.
+
+A **shard** is the card catalog entry for a source file. It's a tiny file that lives right next to the code and says: "this file exports X, it calls Y, and Z calls it." Instead of reading thousands of lines of code to figure out how things connect, an AI reads the shard and gets the answer in a few lines.
+
+`supermodel analyze` builds all the shards at once by scanning your repo and mapping out every function call and dependency. After that, every AI session starts with the map already drawn.
+
+The "Three-file shards" column in the results below tested an older format that split each shard across three files instead of one. It did worse — more files to open, more turns spent loading context.
+
+---
+
 ## The setup
 
 **Codebase:** Django 5.0.6 — about 270,000 lines of Python across 6,600 files.
