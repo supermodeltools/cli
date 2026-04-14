@@ -4,10 +4,17 @@ Save up to 40% on agent token costs with code graphs.
 
 Supermodel maps every file, function, and call relationship in your repo and writes a `.graph` file next to each source file. Your agent reads them automatically via grep and cat. No prompt changes. No extra context windows. No new tools to learn.
 
+### Linux / Mac
+
 ```bash
 curl -fsSL https://supermodeltools.com/install.sh | sh
 ```
 
+### npm (cross-platform)
+
+```bash
+npm install -g @supermodeltools/cli
+```
 ---
 
 ## How it works
@@ -88,7 +95,7 @@ go build -o supermodel .
 
 ```bash
 supermodel setup          # authenticate + configure (runs automatically after install)
-cd /path/to/your/repo
+cd your/repo
 supermodel watch          # generate graph files and keep them updated
 ```
 
