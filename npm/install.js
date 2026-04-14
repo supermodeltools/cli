@@ -65,9 +65,16 @@ download(url, tmpArchive, () => {
   if (ext === "tar.gz") {
     execSync(`tar -xzf "${tmpArchive}" -C "${BIN_DIR}" supermodel`);
   } else {
-    execSync(`unzip -o "${tmpArchive}" supermodel.exe -d "${BIN_DIR}"`);
+    // Windows (peasants): Expand-Archive extracts everything, so extract to a temp dir
+    // and copy only the binary.
+    const tmpDir = path.join(os.tmpdir(), "supermodel-extract");
+    execSync(
+      `powershell -NoProfile -Command "Expand-Archive -Force -Path '${tmpArchive}' -DestinationPath '${tmpDir}'"`,
+    );
+    fs.copyFileSync(path.join(tmpDir, "supermodel.exe"), BIN_PATH);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
-  fs.chmodSync(BIN_PATH, 0o755);
+  if (process.platform !== "win32") fs.chmodSync(BIN_PATH, 0o755);
   fs.unlinkSync(tmpArchive);
   console.log(`[supermodel] Installed to ${BIN_PATH}`);
 });
