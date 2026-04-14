@@ -76,7 +76,7 @@ echo "Installed: $INSTALL_DIR/$BINARY"
 # Run the setup wizard when a controlling terminal is available.
 # Use /dev/tty as stdin so interactive prompts work even in piped installs
 # (e.g. curl … | sh), where stdin is the pipe rather than the terminal.
-if [ -r /dev/tty ]; then
+if { </dev/tty; } 2>/dev/null; then
   echo ""
   "$INSTALL_DIR/$BINARY" setup </dev/tty
 fi

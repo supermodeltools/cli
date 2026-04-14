@@ -88,19 +88,16 @@ jobs:
           brew tap supermodeltools/cli https://github.com/supermodeltools/cli
           brew install supermodeltools/cli/supermodel
 
-      - name: Install Scoop
+      - name: Install via Scoop
         if: matrix.name == 'scoop'
         shell: pwsh
         run: |
           Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
           Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
-
-      - name: Install via Scoop
-        if: matrix.name == 'scoop'
-        shell: pwsh
-        run: |
+          $env:PATH = "$HOME\scoop\shims;$env:PATH"
           scoop bucket add supermodeltools https://github.com/supermodeltools/cli
           scoop install supermodel
+          echo "$HOME\scoop\shims" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Smoke test
         shell: bash
