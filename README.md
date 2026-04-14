@@ -98,7 +98,7 @@ supermodel watch          # generate graph files and keep them updated
 
 ### File mode
 
-Manages `.graph.*` sidecar files written next to each source file. Agents read these without making API calls.
+Manages `.graph.*` shards written next to each source file. Agents read these without making API calls.
 
 | Command | Description |
 |---|---|
