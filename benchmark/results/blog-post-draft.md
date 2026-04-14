@@ -10,6 +10,8 @@ Here's what happened.
 
 **Codebase:** Django 5.0.6 — about 270,000 lines of Python across 6,600 files.
 
+**Model:** claude-sonnet-4-6 across all runs.
+
 **Task:** Eight tests were failing. They expected a model called `EmailChangeRecord` that didn't exist yet. The tests showed *what* the model should do, but gave no hints about *how* to build it.
 
 ```python
@@ -126,4 +128,13 @@ Run the analysis once. Save on every task after.
 
 ---
 
-*Benchmark: identical Docker containers, same model, same task, isolated runs. Full logs in `benchmark/results/`.*
+---
+
+## Resources
+
+- **CLI:** [github.com/supermodeltools/cli](https://github.com/supermodeltools/cli)
+- **Raw benchmark logs:** [benchmark_results.zip](https://github.com/supermodeltools/cli/raw/main/benchmark/results/benchmark_results.zip) — full transcript for all four runs (naked, crafted, auto, three-file)
+
+---
+
+*Benchmark: identical Docker containers, claude-sonnet-4-6, same task, isolated runs.*
