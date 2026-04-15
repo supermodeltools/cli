@@ -65,9 +65,9 @@ download(url, tmpArchive, () => {
   if (ext === "tar.gz") {
     execSync(`tar -xzf "${tmpArchive}" -C "${BIN_DIR}" supermodel`);
   } else {
-    // Windows (peasants): Expand-Archive extracts everything, so extract to a temp dir
-    // and copy only the binary.
-    const tmpDir = path.join(os.tmpdir(), "supermodel-extract");
+    // Windows: Expand-Archive extracts all files, so extract to a temporary
+    // directory and copy only the binary.
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "supermodel-extract-"));
     execSync(
       `powershell -NoProfile -Command "Expand-Archive -Force -Path '${tmpArchive}' -DestinationPath '${tmpDir}'"`,
     );
