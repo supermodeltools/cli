@@ -18,6 +18,55 @@ import (
 	"strings"
 )
 
+// sensitivePatterns are glob patterns (matched against the file's base name)
+// that are ALWAYS excluded from the ZIP regardless of git tracking or .gitignore.
+// This protects against accidentally uploading secrets that were committed.
+var sensitivePatterns = []string{
+	// Environment / secrets
+	".env",
+	".env.*",
+	"*.env",
+	"secrets.json",
+	"secrets.yml",
+	"secrets.yaml",
+	// ASP.NET / Azure
+	"appsettings.json",
+	"appsettings.*.json",
+	"local.settings.json",
+	// Certificates and private keys
+	"*.pem",
+	"*.key",
+	"*.p12",
+	"*.pfx",
+	"*.cer",
+	"*.crt",
+	"*.ppk",
+	// SSH private keys
+	"id_rsa",
+	"id_dsa",
+	"id_ecdsa",
+	"id_ed25519",
+	// Package manager auth
+	".npmrc",
+	".pypirc",
+	// Terraform
+	"terraform.tfvars",
+	"*.tfvars",
+	// Web server
+	".htpasswd",
+}
+
+// isSensitiveFile reports whether the file at relPath should always be excluded.
+func isSensitiveFile(relPath string) bool {
+	name := filepath.Base(relPath)
+	for _, pat := range sensitivePatterns {
+		if matched, _ := filepath.Match(pat, name); matched {
+			return true
+		}
+	}
+	return false
+}
+
 // SkipDirs are directory names excluded from the fallback walk (strategy 3).
 // Strategies 1 and 2 rely on git for exclusion and ignore this list.
 var skipDirs = map[string]bool{
@@ -92,7 +141,60 @@ func isWorktreeClean(dir string) bool {
 func gitArchive(dir, dest string) error {
 	cmd := exec.Command("git", "-C", dir, "archive", "--format=zip", "-o", dest, "HEAD") //nolint:gosec // dir is user-supplied cwd; dest is temp file
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	return sanitizeZip(dest)
+}
+
+// sanitizeZip rewrites the ZIP at path, omitting any sensitive files.
+func sanitizeZip(path string) error {
+	r, err := zip.OpenReader(path)
+	if err != nil {
+		return err
+	}
+
+	tmp, err := os.CreateTemp("", "sanitized-*.zip")
+	if err != nil {
+		r.Close()
+		return err
+	}
+	tmpPath := tmp.Name()
+
+	zw := zip.NewWriter(tmp)
+	var writeErr error
+	for _, f := range r.File {
+		if isSensitiveFile(f.Name) {
+			continue
+		}
+		// Create a fresh entry so the zip writer recomputes CRC/size,
+		// avoiding checksum errors from git archive data descriptors.
+		w, err := zw.Create(f.Name)
+		if err != nil {
+			writeErr = err
+			break
+		}
+		rc, err := f.Open()
+		if err != nil {
+			writeErr = err
+			break
+		}
+		_, copyErr := io.Copy(w, rc)
+		rc.Close()
+		if copyErr != nil {
+			writeErr = copyErr
+			break
+		}
+	}
+	zw.Close()
+	tmp.Close()
+	r.Close()
+
+	if writeErr != nil {
+		os.Remove(tmpPath)
+		return writeErr
+	}
+	return os.Rename(tmpPath, path)
 }
 
 // gitLsFilesZip builds a ZIP from the output of `git ls-files -co
@@ -116,7 +218,7 @@ func gitLsFilesZip(dir, dest string) error {
 	scanner := bufio.NewScanner(bytes.NewReader(out))
 	for scanner.Scan() {
 		rel := scanner.Text()
-		if rel == "" {
+		if rel == "" || isSensitiveFile(rel) {
 			continue
 		}
 		absPath := filepath.Join(dir, filepath.FromSlash(rel))
@@ -164,7 +266,7 @@ func walkZip(dir, dest string) error {
 			}
 			return nil
 		}
-		if strings.HasPrefix(info.Name(), ".") || info.Size() > 10<<20 {
+		if strings.HasPrefix(info.Name(), ".") || isSensitiveFile(rel) || info.Size() > 10<<20 {
 			return nil
 		}
 		w, err := zw.Create(filepath.ToSlash(rel))

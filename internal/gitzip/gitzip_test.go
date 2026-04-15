@@ -349,6 +349,180 @@ func TestGitLsFilesZip_FallsBackToWalkOnGitFailure(t *testing.T) {
 	}
 }
 
+// ── Sensitive file exclusion tests ──────────────────────────────────────────
+
+func TestIsSensitiveFile(t *testing.T) {
+	cases := []struct {
+		path      string
+		sensitive bool
+	}{
+		{".env", true},
+		{".env.local", true},
+		{".env.production", true},
+		{"prod.env", true},
+		{"appsettings.json", true},
+		{"appsettings.Development.json", true},
+		{"local.settings.json", true},
+		{"secrets.json", true},
+		{"secrets.yml", true},
+		{"secrets.yaml", true},
+		{"server.pem", true},
+		{"private.key", true},
+		{"cert.p12", true},
+		{"cert.pfx", true},
+		{"cert.cer", true},
+		{"cert.crt", true},
+		{"key.ppk", true},
+		{"id_rsa", true},
+		{"id_dsa", true},
+		{"id_ecdsa", true},
+		{"id_ed25519", true},
+		{".npmrc", true},
+		{".pypirc", true},
+		{"terraform.tfvars", true},
+		{"prod.tfvars", true},
+		{".htpasswd", true},
+		// should not match
+		{"main.go", false},
+		{"config.go", false},
+		{"appsettings.go", false},
+		{"README.md", false},
+		{"settings.json", false},
+		{"myenv.go", false},
+	}
+	for _, tc := range cases {
+		got := isSensitiveFile(tc.path)
+		if got != tc.sensitive {
+			t.Errorf("isSensitiveFile(%q) = %v, want %v", tc.path, got, tc.sensitive)
+		}
+	}
+}
+
+// TestWalkZip_ExcludesSensitiveFiles verifies the walkZip (non-git) path.
+func TestWalkZip_ExcludesSensitiveFiles(t *testing.T) {
+	src := t.TempDir()
+	files := map[string]string{
+		"main.go":                    "package main",
+		"appsettings.json":           `{"password":"secret"}`,
+		"appsettings.Production.json": `{"password":"prod"}`,
+		"local.settings.json":        `{"key":"val"}`,
+		"secrets.yml":                "key: val",
+		"server.pem":                 "-----BEGIN CERTIFICATE-----",
+		"terraform.tfvars":           "db_pass = \"secret\"",
+		"prod.tfvars":                "db_pass = \"secret\"",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(src, name), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dest := filepath.Join(t.TempDir(), "out.zip")
+	if err := walkZip(src, dest); err != nil {
+		t.Fatalf("walkZip: %v", err)
+	}
+	entries := readZipEntries(t, dest)
+	if !entries["main.go"] {
+		t.Error("main.go should be included")
+	}
+	for name := range files {
+		if name == "main.go" {
+			continue
+		}
+		if entries[name] {
+			t.Errorf("%s should be excluded from walkZip", name)
+		}
+	}
+}
+
+// TestGitLsFilesZip_ExcludesSensitiveFiles verifies the dirty-git path.
+func TestGitLsFilesZip_ExcludesSensitiveFiles(t *testing.T) {
+	dir := initCleanGitRepo(t)
+
+	sensitiveFiles := []string{
+		"appsettings.json",
+		"local.settings.json",
+		"secrets.yml",
+		"server.pem",
+		"id_rsa",
+		"terraform.tfvars",
+	}
+	for _, name := range sensitiveFiles {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("sensitive"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Make the worktree dirty so gitLsFilesZip path is taken.
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main // dirty"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	path, err := CreateZip(dir, "supermodel-*.zip")
+	if err != nil {
+		t.Fatalf("CreateZip: %v", err)
+	}
+	defer os.Remove(path)
+
+	entries := readZipEntries(t, path)
+	if !entries["main.go"] {
+		t.Error("main.go should be included")
+	}
+	for _, name := range sensitiveFiles {
+		if entries[name] {
+			t.Errorf("%s should be excluded from gitLsFilesZip", name)
+		}
+	}
+}
+
+// TestGitArchive_ExcludesSensitiveFiles verifies the clean-git (git archive) path.
+func TestGitArchive_ExcludesSensitiveFiles(t *testing.T) {
+	dir := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("git", "init")
+	run("git", "config", "user.email", "ci@test.local")
+	run("git", "config", "user.name", "CI")
+
+	// Commit a sensitive file alongside normal source.
+	files := map[string]string{
+		"main.go":          "package main",
+		"appsettings.json": `{"password":"secret"}`,
+		"secrets.yml":      "key: val",
+		"id_rsa":           "-----BEGIN RSA PRIVATE KEY-----",
+		"terraform.tfvars": "db_pass = \"secret\"",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run("git", "add", ".")
+	run("git", "commit", "-m", "init with secrets")
+
+	dest := filepath.Join(t.TempDir(), "out.zip")
+	if err := gitArchive(dir, dest); err != nil {
+		t.Fatalf("gitArchive: %v", err)
+	}
+
+	entries := readZipEntries(t, dest)
+	if !entries["main.go"] {
+		t.Error("main.go should be in archive")
+	}
+	for name := range files {
+		if name == "main.go" {
+			continue
+		}
+		if entries[name] {
+			t.Errorf("%s should be excluded from git archive", name)
+		}
+	}
+}
+
 func readZipEntries(t *testing.T, path string) map[string]bool {
 	t.Helper()
 	r, err := zip.OpenReader(path)
