@@ -1,18 +1,17 @@
 #!/usr/bin/env node
 // postinstall: downloads the correct platform binary from GitHub Releases.
 
+"use strict";
+
 const { execSync } = require("child_process");
 const fs = require("fs");
 const https = require("https");
 const os = require("os");
 const path = require("path");
-const { createGunzip } = require("zlib");
 
 const REPO = "supermodeltools/cli";
 const BIN_DIR = path.join(__dirname, "bin");
 const BIN_PATH = path.join(BIN_DIR, process.platform === "win32" ? "supermodel.exe" : "supermodel");
-
-const VERSION = require("./package.json").version;
 
 const PLATFORM_MAP = {
   darwin: "Darwin",
@@ -30,21 +29,6 @@ function fail(msg) {
   process.exit(1);
 }
 
-const platform = PLATFORM_MAP[process.platform];
-const arch = ARCH_MAP[os.arch()];
-
-if (!platform) fail(`Unsupported platform: ${process.platform}`);
-if (!arch) fail(`Unsupported architecture: ${os.arch()}`);
-
-const ext = process.platform === "win32" ? "zip" : "tar.gz";
-const archive = `supermodel_${platform}_${arch}.${ext}`;
-const tag = `v${VERSION}`;
-const url = `https://github.com/${REPO}/releases/download/${tag}/${archive}`;
-
-console.log(`[supermodel] Downloading ${archive} from GitHub Releases...`);
-
-fs.mkdirSync(BIN_DIR, { recursive: true });
-
 function download(url, dest, cb) {
   const file = fs.createWriteStream(dest);
   https.get(url, (res) => {
@@ -59,27 +43,55 @@ function download(url, dest, cb) {
   }).on("error", (err) => fail(err.message));
 }
 
-const tmpArchive = path.join(os.tmpdir(), archive);
-
-download(url, tmpArchive, () => {
-  if (ext === "tar.gz") {
-    execSync(`tar -xzf "${tmpArchive}" -C "${BIN_DIR}" supermodel`);
-  } else {
-    // Windows 10+ natively supports tar. Using tar avoids Antivirus file lock
-    // crashes commonly seen with PowerShell's Expand-Archive cmdlet.
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "supermodel-extract-"));
-    try {
-      execSync(`tar -xf "${tmpArchive}" -C "${tmpDir}"`);
-    } catch {
-      const psCommand = `$RetryCount = 0; while ($RetryCount -lt 10) { try { Expand-Archive -Force -Path '${tmpArchive}' -DestinationPath '${tmpDir}'; break } catch { Start-Sleep -Seconds 1; $RetryCount++ } }`;
-      execSync(
-        `powershell -NoProfile -Command "${psCommand}"`,
-      );
-    }
-    fs.copyFileSync(path.join(tmpDir, "supermodel.exe"), BIN_PATH);
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+// extractZip extracts a .zip archive into tmpDir.
+// Tries native tar first (Windows 10+); falls back to PowerShell Expand-Archive
+// with a retry loop to handle transient Antivirus file locks.
+// Accepts an optional execFn for testing (defaults to execSync).
+function extractZip(archive, tmpDir, execFn) {
+  const exec = execFn || execSync;
+  try {
+    exec(`tar -xf "${archive}" -C "${tmpDir}"`);
+  } catch {
+    const psCommand =
+      `$RetryCount = 0; while ($RetryCount -lt 10) { try { Expand-Archive` +
+      ` -Force -Path '${archive}' -DestinationPath '${tmpDir}'; break }` +
+      ` catch { Start-Sleep -Seconds 1; $RetryCount++ } }`;
+    exec(`powershell -NoProfile -Command "${psCommand}"`);
   }
-  if (process.platform !== "win32") fs.chmodSync(BIN_PATH, 0o755);
-  fs.unlinkSync(tmpArchive);
-  console.log(`[supermodel] Installed to ${BIN_PATH}`);
-});
+}
+
+if (require.main === module) {
+  const platform = PLATFORM_MAP[process.platform];
+  const arch = ARCH_MAP[os.arch()];
+
+  if (!platform) fail(`Unsupported platform: ${process.platform}`);
+  if (!arch) fail(`Unsupported architecture: ${os.arch()}`);
+
+  const ext = process.platform === "win32" ? "zip" : "tar.gz";
+  const archive = `supermodel_${platform}_${arch}.${ext}`;
+  const tag = `v${require("./package.json").version}`;
+  const url = `https://github.com/${REPO}/releases/download/${tag}/${archive}`;
+  const tmpArchive = path.join(os.tmpdir(), archive);
+
+  console.log(`[supermodel] Downloading ${archive} from GitHub Releases...`);
+  fs.mkdirSync(BIN_DIR, { recursive: true });
+
+  download(url, tmpArchive, () => {
+    if (ext === "tar.gz") {
+      execSync(`tar -xzf "${tmpArchive}" -C "${BIN_DIR}" supermodel`);
+    } else {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "supermodel-extract-"));
+      try {
+        extractZip(tmpArchive, tmpDir);
+        fs.copyFileSync(path.join(tmpDir, "supermodel.exe"), BIN_PATH);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    }
+    if (process.platform !== "win32") fs.chmodSync(BIN_PATH, 0o755);
+    fs.unlinkSync(tmpArchive);
+    console.log(`[supermodel] Installed to ${BIN_PATH}`);
+  });
+}
+
+module.exports = { extractZip };
