@@ -65,12 +65,17 @@ download(url, tmpArchive, () => {
   if (ext === "tar.gz") {
     execSync(`tar -xzf "${tmpArchive}" -C "${BIN_DIR}" supermodel`);
   } else {
-    // Windows: Expand-Archive extracts all files, so extract to a temporary
-    // directory and copy only the binary.
+    // Windows 10+ natively supports tar. Using tar avoids Antivirus file lock
+    // crashes commonly seen with PowerShell's Expand-Archive cmdlet.
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "supermodel-extract-"));
-    execSync(
-      `powershell -NoProfile -Command "Expand-Archive -Force -Path '${tmpArchive}' -DestinationPath '${tmpDir}'"`,
-    );
+    try {
+      execSync(`tar -xf "${tmpArchive}" -C "${tmpDir}"`);
+    } catch {
+      const psCommand = `$RetryCount = 0; while ($RetryCount -lt 10) { try { Expand-Archive -Force -Path '${tmpArchive}' -DestinationPath '${tmpDir}'; break } catch { Start-Sleep -Seconds 1; $RetryCount++ } }`;
+      execSync(
+        `powershell -NoProfile -Command "${psCommand}"`,
+      );
+    }
     fs.copyFileSync(path.join(tmpDir, "supermodel.exe"), BIN_PATH);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
