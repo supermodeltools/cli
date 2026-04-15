@@ -518,33 +518,55 @@ func TestUpdateGitignore_AddsEntry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), ".supermodel/") {
-		t.Errorf("expected .supermodel/ in gitignore: %s", data)
+	content := string(data)
+	if !strings.Contains(content, ".supermodel/") {
+		t.Errorf("expected .supermodel/ in gitignore: %s", content)
+	}
+	if !strings.Contains(content, "*.graph.*") {
+		t.Errorf("expected *.graph.* in gitignore: %s", content)
 	}
 }
 
 func TestUpdateGitignore_DoesNotDuplicate(t *testing.T) {
 	dir := t.TempDir()
-	// Call twice; the entry should appear exactly once.
+	// Call twice; each entry should appear exactly once.
 	updateGitignore(dir) //nolint:errcheck
 	updateGitignore(dir) //nolint:errcheck
 	data, _ := os.ReadFile(dir + "/.gitignore")
 	content := string(data)
-	first := strings.Index(content, ".supermodel/")
-	last := strings.LastIndex(content, ".supermodel/")
-	if first != last {
-		t.Errorf(".supermodel/ appears more than once in gitignore:\n%s", content)
+	for _, entry := range []string{".supermodel/", "*.graph.*"} {
+		if strings.Count(content, entry) != 1 {
+			t.Errorf("%q appears more than once in gitignore:\n%s", entry, content)
+		}
 	}
 }
 
 func TestUpdateGitignore_ExistingEntrySkipped(t *testing.T) {
 	dir := t.TempDir()
-	// Pre-populate with the entry
+	// Pre-populate with both entries.
+	os.WriteFile(dir+"/.gitignore", []byte(".supermodel/\n*.graph.*\n"), 0o600) //nolint:errcheck
+	updateGitignore(dir)                                                        //nolint:errcheck
+	data, _ := os.ReadFile(dir + "/.gitignore")
+	content := string(data)
+	for _, entry := range []string{".supermodel/", "*.graph.*"} {
+		if strings.Count(content, entry) != 1 {
+			t.Errorf("%q should not be duplicated: %s", entry, content)
+		}
+	}
+}
+
+func TestUpdateGitignore_AddsOnlyMissingEntries(t *testing.T) {
+	dir := t.TempDir()
+	// Pre-populate with only .supermodel/ — *.graph.* should be added.
 	os.WriteFile(dir+"/.gitignore", []byte(".supermodel/\n"), 0o600) //nolint:errcheck
 	updateGitignore(dir)                                             //nolint:errcheck
 	data, _ := os.ReadFile(dir + "/.gitignore")
-	if strings.Count(string(data), ".supermodel/") != 1 {
-		t.Errorf("should not add duplicate: %s", data)
+	content := string(data)
+	if strings.Count(content, ".supermodel/") != 1 {
+		t.Errorf(".supermodel/ should appear exactly once: %s", content)
+	}
+	if !strings.Contains(content, "*.graph.*") {
+		t.Errorf("*.graph.* should have been added: %s", content)
 	}
 }
 

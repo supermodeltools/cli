@@ -147,6 +147,9 @@ func Generate(ctx context.Context, cfg *config.Config, dir string, opts Generate
 	client := api.New(cfg)
 	idemKey := newUUID()
 
+	fmt.Fprintf(os.Stderr, "  %s🔒 Your code is analyzed server-side and immediately deleted — zero data retained.%s\n", ansiDim, ansiReset)
+	fmt.Fprintf(os.Stderr, "     %ssupermodeltools.com/privacy%s\n\n", ansiDim, ansiReset)
+
 	spin = ui.Start("Uploading and analyzing repository…")
 	ir, err := client.AnalyzeShards(ctx, zipPath, "shards-"+idemKey[:8], prevDomains)
 	spin.Stop()
@@ -448,10 +451,13 @@ func Render(dir string, opts RenderOptions) error {
 	return nil
 }
 
-// updateGitignore ensures .supermodel/ is in the repo's .gitignore.
+// updateGitignore ensures .supermodel/ and *.graph.* are in the repo's .gitignore.
+// Both entries are added silently the first time Generate runs — the shard files
+// are generated output and should not be committed.
 func updateGitignore(repoDir string) error {
 	gitignorePath := filepath.Join(repoDir, ".gitignore")
-	const entry = ".supermodel/"
+
+	entries := []string{".supermodel/", "*.graph.*"}
 
 	data, err := os.ReadFile(gitignorePath)
 	if err != nil && !os.IsNotExist(err) {
@@ -459,10 +465,24 @@ func updateGitignore(repoDir string) error {
 	}
 
 	content := string(data)
+	existing := make(map[string]bool)
 	for _, line := range strings.Split(content, "\n") {
-		if strings.TrimSpace(line) == entry || strings.TrimSpace(line) == ".supermodel" {
-			return nil // already present
+		t := strings.TrimSpace(line)
+		existing[t] = true
+	}
+	// Treat bare ".supermodel" as equivalent to ".supermodel/"
+	if existing[".supermodel"] {
+		existing[".supermodel/"] = true
+	}
+
+	var missing []string
+	for _, e := range entries {
+		if !existing[e] {
+			missing = append(missing, e)
 		}
+	}
+	if len(missing) == 0 {
+		return nil // all entries already present
 	}
 
 	f, err := os.OpenFile(gitignorePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // .gitignore is a standard repo file; 0o600 satisfies gosec while remaining functional
@@ -474,6 +494,8 @@ func updateGitignore(repoDir string) error {
 	if content != "" && !strings.HasSuffix(content, "\n") {
 		fmt.Fprintln(f)
 	}
-	fmt.Fprintln(f, entry)
+	for _, e := range missing {
+		fmt.Fprintln(f, e)
+	}
 	return nil
 }

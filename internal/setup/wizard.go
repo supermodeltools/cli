@@ -141,6 +141,13 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	fmt.Printf("  %sAgents read them automatically via grep and cat — no extra%s\n", dWhite, reset)
 	fmt.Printf("  %sprompt changes, no new tools to learn.%s\n", dWhite, reset)
 	fmt.Println()
+	fmt.Printf("  %s🔒 Privacy: your code is uploaded for analysis and immediately%s\n", dWhite, reset)
+	fmt.Printf("  %sdeleted from our servers. Zero data retained. No training.%s\n", dWhite, reset)
+	fmt.Printf("  %s   supermodeltools.com/privacy%s\n", dWhite, reset)
+	fmt.Println()
+	fmt.Printf("  %s.graph files are generated output — they will be added to%s\n", dWhite, reset)
+	fmt.Printf("  %s.gitignore automatically so they don't clutter your repo.%s\n", dWhite, reset)
+	fmt.Println()
 	fmt.Printf("  %sDisable at any time with:%s %ssupermodel clean%s\n", dWhite, reset, bWhite, reset)
 	fmt.Println()
 
