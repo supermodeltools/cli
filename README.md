@@ -235,9 +235,9 @@ Exposed MCP tools: `analyze`, `dead_code`, `blast_radius`, `get_graph`.
 
 ## Links
 
-| | |
+| Resource | URL |
 |---|---|
-| **Website** | [supermodeltools.com](http://supermodeltools.com) |
+| **Website** | [supermodeltools.com](https://supermodeltools.com) |
 | **API Docs** | [api.supermodeltools.com](https://api.supermodeltools.com) |
 | **Dashboard** | [dashboard.supermodeltools.com](https://dashboard.supermodeltools.com) |
 | **Twitter / X** | [@supermodeltools](https://x.com/supermodeltools) |
