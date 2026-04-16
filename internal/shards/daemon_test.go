@@ -880,8 +880,8 @@ func (m *mockAnalyzeClient) AnalyzeShards(_ context.Context, _, _ string, _ []ap
 
 // orderClient records the call order of OnSyncing vs AnalyzeShards.
 type orderClient struct {
-	inner   analyzeClient
-	onCall  func()
+	inner  analyzeClient
+	onCall func()
 }
 
 func (o *orderClient) AnalyzeShards(ctx context.Context, zipPath, key string, prev []api.PreviousDomain) (*api.ShardIR, error) {

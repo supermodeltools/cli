@@ -402,14 +402,14 @@ func TestIsSensitiveFile(t *testing.T) {
 func TestWalkZip_ExcludesSensitiveFiles(t *testing.T) {
 	src := t.TempDir()
 	files := map[string]string{
-		"main.go":                    "package main",
-		"appsettings.json":           `{"password":"secret"}`,
+		"main.go":                     "package main",
+		"appsettings.json":            `{"password":"secret"}`,
 		"appsettings.Production.json": `{"password":"prod"}`,
-		"local.settings.json":        `{"key":"val"}`,
-		"secrets.yml":                "key: val",
-		"server.pem":                 "-----BEGIN CERTIFICATE-----",
-		"terraform.tfvars":           "db_pass = \"secret\"",
-		"prod.tfvars":                "db_pass = \"secret\"",
+		"local.settings.json":         `{"key":"val"}`,
+		"secrets.yml":                 "key: val",
+		"server.pem":                  "-----BEGIN CERTIFICATE-----",
+		"terraform.tfvars":            "db_pass = \"secret\"",
+		"prod.tfvars":                 "db_pass = \"secret\"",
 	}
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(src, name), []byte(content), 0600); err != nil {
