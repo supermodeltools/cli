@@ -336,9 +336,17 @@ func PruneStaleLinks(rootDir string, threshold float64) (PruneResult, error) {
 < truncated lines 316-378 >
 }
 
+    // ... rest of the function unchanged
 // SearchGraph finds nodes whose label or content matches query, then expands
 // one hop to collect linked neighbors. Results are scored by relevance.
 func SearchGraph(rootDir, query string, maxDepth, topK int, edgeFilter []RelationType) (*SearchResult, error) {
+	if strings.TrimSpace(query) == "" {
+        g, err := load(rootDir)
+        if err != nil {
+            return nil, err
+        }
+        return &SearchResult{TotalNodes: len(g.Nodes), TotalEdges: len(g.Edges)}, nil
+    }
 	if maxDepth <= 0 {
 		maxDepth = 2
 	}
