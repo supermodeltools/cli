@@ -649,7 +649,10 @@ func intArg(args map[string]any, key string) int {
  // parseInterlinkedItems re-encodes the raw args["items"] array and decodes it
  // into the strongly-typed slice expected by ToolAddInterlinkedContext.
  func parseInterlinkedItems(args map[string]any) ([]memorygraph.InterlinkedItem, error) {
- 	raw, _ := args["items"]
+ 	raw, ok := args["items"]
+ 	if !ok || raw == nil {
+ 		return nil, fmt.Errorf("missing required field \"items\"")
+ 	}
  	b, err := json.Marshal(raw)
  	if err != nil {
  		return nil, err
@@ -657,6 +660,9 @@ func intArg(args map[string]any, key string) int {
  	var items []memorygraph.InterlinkedItem
  	if err := json.Unmarshal(b, &items); err != nil {
  		return nil, err
+ 	}
+ 	if len(items) == 0 {
+ 		return nil, fmt.Errorf("\"items\" must be a non-empty array")
  	}
  	return items, nil
  }
