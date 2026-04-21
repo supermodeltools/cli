@@ -312,6 +312,7 @@ func TestDispatch_UnknownMethod(t *testing.T) {
 	_, rpcErr := s.dispatch(context.Background(), "unknown/method", nil)
 	if rpcErr == nil {
 		t.Fatal("expected rpcError for unknown method")
+		return
 	}
 	if rpcErr.Code != codeMethodNotFound {
 		t.Errorf("expected codeMethodNotFound (%d), got %d", codeMethodNotFound, rpcErr.Code)
@@ -325,6 +326,7 @@ func TestDispatch_ToolsCall_UnknownTool(t *testing.T) {
 	_, rpcErr := s.dispatch(context.Background(), "tools/call", params)
 	if rpcErr == nil {
 		t.Fatal("expected rpcError for unknown tool name in tools/call")
+		return
 	}
 	if rpcErr.Code != codeInternalError {
 		t.Errorf("expected codeInternalError (%d), got %d", codeInternalError, rpcErr.Code)
@@ -566,6 +568,7 @@ func TestHandleToolCall_ParseError(t *testing.T) {
 	_, rpcErr := s.handleToolCall(context.Background(), badParams)
 	if rpcErr == nil {
 		t.Fatal("expected rpcError for invalid params JSON")
+		return
 	}
 	if rpcErr.Code != codeParseError {
 		t.Errorf("expected codeParseError (%d), got %d", codeParseError, rpcErr.Code)
