@@ -14,6 +14,7 @@ import (
 	"github.com/supermodeltools/cli/internal/build"
 	"github.com/supermodeltools/cli/internal/cache"
 	"github.com/supermodeltools/cli/internal/config"
+	"github.com/supermodeltools/cli/internal/memorygraph"
 )
 
 // Serve starts the MCP stdio server. It reads JSON-RPC 2.0 messages from stdin
@@ -111,6 +112,80 @@ var tools = []tool{
 				"rel_type": {Type: "string", Description: "Filter relationships by type: imports, calls, defines_function, etc."},
 				"force":    {Type: "boolean", Description: "Re-analyze even if a cached result exists."},
 			},
+		},
+	},
+	{
+		Name:        "upsert_memory_node",
+		Description: "Upsert a typed knowledge node into the persistent memory graph.",
+		InputSchema: toolSchema{
+			Type: "object",
+			Properties: map[string]schemaProp{
+				"type":    {Type: "string", Description: "Node type: fact, concept, entity, event, procedure, context."},
+				"label":   {Type: "string", Description: "Short unique label for the node."},
+				"content": {Type: "string", Description: "Full content body of the node."},
+			},
+			Required: []string{"type", "label", "content"},
+		},
+	},
+	{
+		Name:        "create_relation",
+		Description: "Create a directed weighted edge between two memory graph nodes.",
+		InputSchema: toolSchema{
+			Type: "object",
+			Properties: map[string]schemaProp{
+				"source_id": {Type: "string", Description: "ID of the source node."},
+				"target_id": {Type: "string", Description: "ID of the target node."},
+				"relation":  {Type: "string", Description: "Relation type, e.g. related_to, depends_on, part_of."},
+				"weight":    {Type: "number", Description: "Edge weight between 0 and 1 (default 1.0)."},
+			},
+			Required: []string{"source_id", "target_id", "relation"},
+		},
+	},
+	{
+		Name:        "search_memory_graph",
+		Description: "Score and retrieve nodes from the memory graph matching a query, with optional one-hop neighbor expansion.",
+		InputSchema: toolSchema{
+			Type: "object",
+			Properties: map[string]schemaProp{
+				"query":     {Type: "string", Description: "Search query string."},
+				"max_depth": {Type: "integer", Description: "Max BFS depth for neighbor expansion (default 1)."},
+				"top_k":     {Type: "integer", Description: "Maximum number of direct results to return (default 5)."},
+			},
+			Required: []string{"query"},
+		},
+	},
+	{
+		Name:        "retrieve_with_traversal",
+		Description: "BFS traversal from a start node up to maxDepth, returning visited nodes with decayed relevance scores.",
+		InputSchema: toolSchema{
+			Type: "object",
+			Properties: map[string]schemaProp{
+				"start_node_id": {Type: "string", Description: "ID of the node to start traversal from."},
+				"max_depth":     {Type: "integer", Description: "Maximum BFS depth (default 3)."},
+			},
+			Required: []string{"start_node_id"},
+		},
+	},
+	{
+		Name:        "prune_stale_links",
+		Description: "Remove edges below a weight threshold and orphaned nodes from the memory graph.",
+		InputSchema: toolSchema{
+			Type: "object",
+			Properties: map[string]schemaProp{
+				"threshold": {Type: "number", Description: "Minimum edge weight to retain (default 0.1)."},
+			},
+		},
+	},
+	{
+		Name:        "add_interlinked_context",
+		Description: "Bulk-insert nodes and optionally auto-create similarity edges (Jaccard ≥ 0.72) between them.",
+		InputSchema: toolSchema{
+			Type: "object",
+			Properties: map[string]schemaProp{
+				"items":     {Type: "array", Description: "Array of {type, label, content, metadata} node objects to insert."},
+				"auto_link": {Type: "boolean", Description: "If true, auto-create similarity edges between inserted nodes."},
+			},
+			Required: []string{"items"},
 		},
 	},
 }
@@ -224,6 +299,57 @@ func (s *server) callTool(ctx context.Context, name string, args map[string]any)
 		return s.toolBlastRadius(ctx, args)
 	case "get_graph":
 		return s.toolGetGraph(ctx, args)
+	case "upsert_memory_node":
+		return memorygraph.ToolUpsertMemoryNode(memorygraph.UpsertMemoryNodeOptions{
+			RootDir: s.dir,
+			Type:    memorygraph.NodeType(strArg(args, "type")),
+			Label:   strArg(args, "label"),
+			Content: strArg(args, "content"),
+		})
+	case "create_relation":
+		w := floatArg(args, "weight")
+		if w == 0 {
+			w = 1.0
+		}
+		return memorygraph.ToolCreateRelation(&memorygraph.CreateRelationOptions{
+			RootDir:  s.dir,
+			SourceID: strArg(args, "source_id"),
+			TargetID: strArg(args, "target_id"),
+			Relation: memorygraph.RelationType(strArg(args, "relation")),
+			Weight:   w,
+		})
+	case "search_memory_graph":
+		topK := intArg(args, "top_k")
+		if topK == 0 {
+			topK = 5
+		}
+		return memorygraph.ToolSearchMemoryGraph(memorygraph.SearchMemoryGraphOptions{
+			RootDir:  s.dir,
+			Query:    strArg(args, "query"),
+			MaxDepth: intArg(args, "max_depth"),
+			TopK:     topK,
+		})
+	case "retrieve_with_traversal":
+		return memorygraph.ToolRetrieveWithTraversal(memorygraph.RetrieveWithTraversalOptions{
+			RootDir:     s.dir,
+			StartNodeID: strArg(args, "start_node_id"),
+			MaxDepth:    intArg(args, "max_depth"),
+		})
+	case "prune_stale_links":
+		return memorygraph.ToolPruneStaleLinks(memorygraph.PruneStaleLinksOptions{
+			RootDir:   s.dir,
+			Threshold: floatArg(args, "threshold"),
+		})
+	case "add_interlinked_context":
+		items, err := parseInterlinkedItems(args)
+		if err != nil {
+			return "", fmt.Errorf("add_interlinked_context: invalid items: %w", err)
+		}
+		return memorygraph.ToolAddInterlinkedContext(memorygraph.AddInterlinkedContextOptions{
+			RootDir:  s.dir,
+			Items:    items,
+			AutoLink: boolArg(args, "auto_link"),
+		})
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
@@ -496,4 +622,34 @@ func boolArg(args map[string]any, key string) bool {
 func intArg(args map[string]any, key string) int {
 	v, _ := args[key].(float64)
 	return int(v)
+}
+func strArg(args map[string]any, key string) string {
+	v, _ := args[key].(string)
+	return v
+}
+
+func floatArg(args map[string]any, key string) float64 {
+	v, _ := args[key].(float64)
+	return v
+}
+
+// parseInterlinkedItems re-encodes the raw args["items"] array and decodes it
+// into the strongly-typed slice expected by ToolAddInterlinkedContext.
+func parseInterlinkedItems(args map[string]any) ([]memorygraph.InterlinkedItem, error) {
+	raw, ok := args["items"]
+	if !ok || raw == nil {
+		return nil, fmt.Errorf("missing required field \"items\"")
+	}
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return nil, err
+	}
+	var items []memorygraph.InterlinkedItem
+	if err := json.Unmarshal(b, &items); err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return nil, fmt.Errorf("\"items\" must be a non-empty array")
+	}
+	return items, nil
 }
