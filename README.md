@@ -1,6 +1,6 @@
 # Supermodel CLI
 
-Save up to 40% on agent token costs with code graphs.
+Save 40%+ on agent token costs with code graphs.
 
 Supermodel maps every file, function, and call relationship in your repo and writes a `.graph` file next to each source file. Your agent reads them automatically via grep and cat. No prompt changes. No extra context windows. No new tools to learn.
 
@@ -27,7 +27,7 @@ Uploads your repo to the Supermodel API, builds a full call graph, and writes `.
 
 **2. Your agent reads the graph automatically**
 
-`.graph` files are plain text. Any agent that can read files — Claude Code, Cursor, Copilot, Windsurf — picks them up automatically through its normal file-reading tools. No configuration needed on the agent side.
+`.graph` files are plain text. Any agent that can read files — Claude Code, Cursor, Copilot, Windsurf — picks them up automatically through its native search & file reading tools. No configuration needed on the agent side.
 
 **3. Ask anything**
 
