@@ -1,6 +1,6 @@
 # Supermodel CLI
 
-Save up to 40% on agent token costs with code graphs.
+Save 40%+ on agent token costs with code graphs.
 
 Supermodel maps every file, function, and call relationship in your repo and writes a `.graph` file next to each source file. Your agent reads them automatically via grep and cat. No prompt changes. No extra context windows. No new tools to learn.
 
@@ -23,11 +23,11 @@ npm install -g @supermodeltools/cli
 ```bash
 supermodel watch
 ```
-Uploads your repo to the Supermodel API, builds a full call graph, and writes `.graph` files next to every source file. Stays running to keep files updated as you code.
+Uploads your repo to the Supermodel API, builds a full call graph, and writes `.graph` shard files next to every source file. Stays running to keep files updated as you code.
 
 **2. Your agent reads the graph automatically**
 
-`.graph` files are plain text. Any agent that can read files — Claude Code, Cursor, Copilot, Windsurf — picks them up automatically through its normal file-reading tools. No configuration needed on the agent side.
+`.graph` files are plain text. Any agent that can read files, including Claude Code, Cursor, Copilot, and Windsurf, picks them up automatically through their normal file-reading and search tools. No configuration needed on the agent side.
 
 **3. Ask anything**
 
@@ -142,11 +142,10 @@ supermodel skill >> CLAUDE.md
 Or manually add:
 
 ```
-This repository has Supermodel graph shard files next to source files.
-Files ending in .calls.* contain function call relationships.
-Files ending in .deps.* contain dependency relationships.
-Files ending in .impact.* contain blast radius data.
-Read these files to understand relationships between modules before making changes.
+This repository has .graph.* files next to source files containing code relationship data from Supermodel.
+For src/Foo.py, the graph file is src/Foo.graph.py.
+Each .graph file can include [deps], [calls], and [impact] sections.
+Read the .graph file before the source file to understand dependencies, call relationships, and blast radius before making changes.
 ```
 
 ### On-demand analysis
