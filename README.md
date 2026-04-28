@@ -196,6 +196,8 @@ Read the .graph file before the source file to understand dependencies, call rel
 
 ## Configuration
 
+**Save 40%+ on agent token costs — start free → [supermodeltools.com/trial](https://supermodeltools.com/trial)**
+
 Settings are stored at `~/.supermodel/config.yaml`. Environment variables override file values.
 
 ```yaml
@@ -236,6 +238,7 @@ Exposed MCP tools: `analyze`, `dead_code`, `blast_radius`, `get_graph`.
 
 | | |
 |---|---|
+| **Save 40%+ on tokens — start free** | [supermodeltools.com/trial](https://supermodeltools.com/trial) |
 | **Website** | [supermodeltools.com](https://supermodeltools.com) |
 | **API Docs** | [api.supermodeltools.com](https://api.supermodeltools.com) |
 | **Dashboard** | [dashboard.supermodeltools.com](https://dashboard.supermodeltools.com) |
