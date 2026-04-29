@@ -4,6 +4,8 @@ Save 40%+ on agent token costs with code graphs.
 
 Supermodel maps every file, function, and call relationship in your repo and writes a `.graph` file next to each source file. Your agent reads them automatically via grep and cat. No prompt changes. No extra context windows. No new tools to learn.
 
+📖 **Full CLI docs:** [docs.supermodeltools.com/cli/overview](https://docs.supermodeltools.com/cli/overview)
+
 ## Linux / Mac
 
 ```bash
@@ -240,6 +242,7 @@ Exposed MCP tools: `analyze`, `dead_code`, `blast_radius`, `get_graph`.
 |---|---|
 | **Save 40%+ on tokens — start free** | [supermodeltools.com/trial](https://supermodeltools.com/trial) |
 | **Website** | [supermodeltools.com](https://supermodeltools.com) |
+| **CLI Docs** | [docs.supermodeltools.com/cli/overview](https://docs.supermodeltools.com/cli/overview) |
 | **API Docs** | [api.supermodeltools.com](https://api.supermodeltools.com) |
 | **Dashboard** | [dashboard.supermodeltools.com](https://dashboard.supermodeltools.com) |
 | **Twitter / X** | [@supermodeltools](https://x.com/supermodeltools) |
