@@ -23,7 +23,7 @@ npm install -g @supermodeltools/cli
 
 **1. Map your codebase**
 ```bash
-supermodel watch
+supermodel
 ```
 Uploads your repo to the Supermodel API, builds a full call graph, and writes `.graph` shard files next to every source file. Stays running to keep files updated as you code.
 
@@ -43,12 +43,12 @@ Your agent now has full visibility into your call graph, imports, domains, and b
 
 | Agent | Setup |
 |---|---|
-| **Claude Code** | Run `supermodel watch`; install the hook for live updates (setup wizard handles this) |
-| **Cursor** | Run `supermodel watch`; `.graph` files appear in context when you open any source file |
-| **GitHub Copilot** | Run `supermodel watch`; open `.graph` files in the editor to include them in context |
+| **Claude Code** | Run `supermodel`; install the hook for live updates (setup wizard handles this) |
+| **Cursor** | Run `supermodel`; `.graph` files appear in context when you open any source file |
+| **GitHub Copilot** | Run `supermodel`; open `.graph` files in the editor to include them in context |
 | **Windsurf** | Same as Cursor |
-| **Aider** | Run `supermodel watch`, then pass `--read '**/*.graph.*'` to include all graph files |
-| **Any other agent** | Run `supermodel watch` — if it can read files, it can read `.graph` files |
+| **Aider** | Run `supermodel`, then pass `--read '**/*.graph.*'` to include all graph files |
+| **Any other agent** | Run `supermodel` — if it can read files, it can read `.graph` files |
 
 For live updates in Claude Code, add this hook to `.claude/settings.json`:
 
@@ -98,7 +98,7 @@ go build -o supermodel .
 ```bash
 supermodel setup          # authenticate + configure (runs automatically after install)
 cd your/repo
-supermodel watch          # generate graph files and keep them updated
+supermodel                # generate graph files and keep them updated
 ```
 
 ---

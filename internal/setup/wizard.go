@@ -130,7 +130,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		fmt.Printf("  %s}%s\n", dim, reset)
 		fmt.Println()
 		fmt.Printf("  %sOther agents (Cursor, Copilot, Windsurf, Aider) read .graph%s\n", dWhite, reset)
-		fmt.Printf("  %sfiles directly — no hook needed, just run `supermodel watch`.%s\n", dWhite, reset)
+		fmt.Printf("  %sfiles directly — no hook needed, just run `supermodel`.%s\n", dWhite, reset)
 	}
 	fmt.Println()
 
@@ -191,7 +191,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	fmt.Printf("  %sgrep and cat — no extra steps needed.%s\n", dWhite, reset)
 	fmt.Println()
 	fmt.Printf("  %sPress %sCtrl+C%s%s to stop.%s\n", dWhite, bWhite, reset, dWhite, reset)
-	fmt.Printf("  %sRun %ssupermodel watch%s%s to restart at any time.%s\n", dWhite, bWhite, reset, dWhite, reset)
+	fmt.Printf("  %sRun %ssupermodel%s%s to restart at any time.%s\n", dWhite, bWhite, reset, dWhite, reset)
 	fmt.Println()
 
 	return shards.Watch(ctx, cfg, repoDir, shards.WatchOptions{})
