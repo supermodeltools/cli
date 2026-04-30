@@ -29,7 +29,7 @@ Uploads your repo to the Supermodel API, builds a full call graph, and writes `.
 
 **2. Your agent reads the graph automatically**
 
-`.graph` files are plain text. Any agent that can read files, including Claude Code, Cursor, Copilot, and Windsurf, picks them up automatically through their normal file-reading and search tools. No configuration needed on the agent side.
+`.graph` files are plain text. Any agent that can read files — Claude Code, Cursor, Copilot, Windsurf — picks them up automatically through its native search & file reading tools. No configuration needed on the agent side.
 
 **3. Ask anything**
 
