@@ -2,7 +2,7 @@
 
 Save 40%+ on agent token costs with code graphs.
 
-Supermodel maps every file, function, and call relationship in your repo and writes a `.graph` file next to each source file. Your agent reads them automatically via grep and cat. No prompt changes. No extra context windows. No new tools to learn.
+Supermodel maps every file, function, and call relationship in your repo and writes `.graph.*` sidecar files next to your source files. Your agent reads them automatically via grep and cat. No prompt changes. No extra context windows. No new tools to learn.
 
 ## Install
 
@@ -19,11 +19,11 @@ curl -fsSL https://supermodeltools.com/install | sh
 ## Usage
 
 ```bash
-# Generate .graph files for your repo
-supermodel analyze
-
-# Watch for changes and keep graphs up to date
+# Generate .graph.* files and keep them up to date
 supermodel
+
+# Run one-off analysis without the watcher
+supermodel analyze
 
 # Print the Claude Code skill prompt
 supermodel skill
@@ -34,7 +34,7 @@ supermodel update
 
 ## How it works
 
-`supermodel analyze` uploads your repo to the Supermodel API, which builds a call graph and writes a small `.graph` file next to each source file. Each file contains pre-computed context: what the file exports, what it calls, what calls it, and how it connects to the rest of the codebase.
+`supermodel` uploads your repo to the Supermodel API, builds a call graph, writes `.graph.*` sidecar files next to your source files, and keeps them updated while you work. Each file contains pre-computed context: what the file exports, what it calls, what calls it, and how it connects to the rest of the codebase.
 
 Your agent reads these files automatically when it opens or searches through your project. It spends fewer turns exploring and more turns writing.
 

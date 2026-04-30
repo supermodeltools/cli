@@ -2,9 +2,9 @@
 
 Save 40%+ on agent token costs with code graphs.
 
-Supermodel maps every file, function, and call relationship in your repo and writes a `.graph` file next to each source file. Your agent reads them automatically via grep and cat. No prompt changes. No extra context windows. No new tools to learn.
+Supermodel maps every file, function, and call relationship in your repo and writes `.graph.*` sidecar files next to your source files. Your agent reads them automatically via grep and cat. No prompt changes. No extra context windows. No new tools to learn.
 
-📖 **Full CLI docs:** [docs.supermodeltools.com/cli/install](https://docs.supermodeltools.com/cli/install)
+📖 **Full CLI docs:** [docs.supermodeltools.com/cli/quickstart](https://docs.supermodeltools.com/cli/quickstart)
 
 ## Linux / Mac
 
@@ -25,11 +25,11 @@ npm install -g @supermodeltools/cli
 ```bash
 supermodel
 ```
-Uploads your repo to the Supermodel API, builds a full call graph, and writes `.graph` shard files next to every source file. Stays running to keep files updated as you code.
+Uploads your repo to the Supermodel API, builds a full call graph, and writes `.graph.*` shard files next to every source file. Stays running to keep files updated as you code.
 
 **2. Your agent reads the graph automatically**
 
-`.graph` files are plain text. Any agent that can read files — Claude Code, Cursor, Copilot, Windsurf — picks them up automatically through its native search & file reading tools. No configuration needed on the agent side.
+`.graph.*` files are plain text. Any agent that can read files — Claude Code, Cursor, Copilot, Windsurf — picks them up automatically through its native search & file reading tools. No configuration needed on the agent side.
 
 **3. Ask anything**
 
@@ -39,16 +39,16 @@ Your agent now has full visibility into your call graph, imports, domains, and b
 
 ## Works with any AI agent
 
-`.graph` files are plain text read via grep and cat. There is no agent-specific integration required.
+`.graph.*` files are plain text read via grep and cat. There is no agent-specific integration required.
 
 | Agent | Setup |
 |---|---|
 | **Claude Code** | Run `supermodel`; install the hook for live updates (setup wizard handles this) |
-| **Cursor** | Run `supermodel`; `.graph` files appear in context when you open any source file |
-| **GitHub Copilot** | Run `supermodel`; open `.graph` files in the editor to include them in context |
+| **Cursor** | Run `supermodel`; `.graph.*` files appear in context when you open any source file |
+| **GitHub Copilot** | Run `supermodel`; open `.graph.*` files in the editor to include them in context |
 | **Windsurf** | Same as Cursor |
 | **Aider** | Run `supermodel`, then pass `--read '**/*.graph.*'` to include all graph files |
-| **Any other agent** | Run `supermodel` — if it can read files, it can read `.graph` files |
+| **Any other agent** | Run `supermodel` — if it can read files, it can read `.graph.*` files |
 
 For live updates in Claude Code, add this hook to `.claude/settings.json`:
 
@@ -68,12 +68,6 @@ The `supermodel setup` wizard installs this automatically if Claude Code is dete
 ---
 
 ## Installation
-
-### macOS
-
-```bash
-brew install supermodeltools/tap/supermodel
-```
 
 ### Linux / macOS (curl)
 
@@ -129,8 +123,8 @@ Or manually add:
 ```
 This repository has .graph.* files next to source files containing code relationship data from Supermodel.
 For src/Foo.py, the graph file is src/Foo.graph.py.
-Each .graph file can include [deps], [calls], and [impact] sections.
-Read the .graph file before the source file to understand dependencies, call relationships, and blast radius before making changes.
+Each .graph.* file can include [deps], [calls], and [impact] sections.
+Read the .graph.* file before the source file to understand dependencies, call relationships, and blast radius before making changes.
 ```
 
 ### On-demand analysis
@@ -189,7 +183,7 @@ Settings are stored at `~/.supermodel/config.yaml`. Environment variables overri
 api_key: smsk_...        # or SUPERMODEL_API_KEY
 api_base: https://...    # or SUPERMODEL_API_BASE (default: https://api.supermodeltools.com)
 output: human            # human | json
-files: true              # set false to disable .graph.* writing globally (or SUPERMODEL_FILES=false)
+shards: true             # set false to disable .graph.* writing globally (or SUPERMODEL_SHARDS=false)
 ```
 
 For CI or non-interactive environments:
@@ -225,7 +219,7 @@ Exposed MCP tools: `analyze`, `dead_code`, `blast_radius`, `get_graph`.
 |---|---|
 | **Save 40%+ on tokens — start free** | [supermodeltools.com/trial](https://supermodeltools.com/trial) |
 | **Website** | [supermodeltools.com](https://supermodeltools.com) |
-| **CLI Docs** | [docs.supermodeltools.com/cli/install](https://docs.supermodeltools.com/cli/install) |
+| **CLI Docs** | [docs.supermodeltools.com/cli/quickstart](https://docs.supermodeltools.com/cli/quickstart) |
 | **API Docs** | [api.supermodeltools.com](https://api.supermodeltools.com) |
 | **Dashboard** | [dashboard.supermodeltools.com](https://dashboard.supermodeltools.com) |
 | **Twitter / X** | [@supermodeltools](https://x.com/supermodeltools) |
