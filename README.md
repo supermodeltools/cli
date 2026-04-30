@@ -9,7 +9,7 @@ Supermodel maps every file, function, and call relationship in your repo and wri
 ## Linux / Mac
 
 ```bash
-curl -fsSL https://supermodeltools.com/install.sh | sh
+curl -fsSL https://supermodeltools.com/install | sh
 ```
 
 ## npm (cross-platform)
@@ -78,10 +78,10 @@ brew install supermodeltools/tap/supermodel
 ### Linux / macOS (curl)
 
 ```bash
-curl -fsSL https://supermodeltools.com/install.sh | sh
+curl -fsSL https://supermodeltools.com/install | sh
 ```
 
-Runs the setup wizard automatically on first install when attached to a terminal.
+On first run, `supermodel` launches the setup wizard automatically when attached to a terminal.
 
 ### From source
 
@@ -96,9 +96,8 @@ go build -o supermodel .
 ## Quick start
 
 ```bash
-supermodel setup          # authenticate + configure (runs automatically after install)
 cd your/repo
-supermodel                # generate graph files and keep them updated
+supermodel                # first run: launches setup wizard, then watches for changes
 ```
 
 ---

@@ -51,8 +51,10 @@ func pickRootAction(hasAPIKey, interactive bool) rootAction {
 // for the bare root command (which handles its own dispatch — see issue
 // #151) and noConfigCommands.
 func persistentPreRunE(cmd *cobra.Command, args []string) error {
-	if noConfigCommands[cmd.Name()] {
-		return nil
+	for c := cmd; c != nil; c = c.Parent() {
+		if noConfigCommands[c.Name()] {
+			return nil
+		}
 	}
 	// The root command (bare `supermodel`) has no parent. Skip the
 	// pre-run check and let RunE handle interactive vs CI dispatch.
@@ -61,12 +63,10 @@ func persistentPreRunE(cmd *cobra.Command, args []string) error {
 	}
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error loading config: %w", err)
 	}
 	if cfg.APIKey == "" {
-		fmt.Fprintln(os.Stderr, "Run 'supermodel setup' to get started.")
-		os.Exit(1)
+		return fmt.Errorf("run 'supermodel setup' to get started")
 	}
 	return nil
 }
