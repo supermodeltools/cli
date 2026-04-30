@@ -99,7 +99,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		if err := <-udpReady; err != nil {
 			if !d.cfg.FSWatch {
 				if errors.Is(err, syscall.EADDRINUSE) {
-					return fmt.Errorf("UDP port %d already in use — is `supermodel watch` already running?", d.cfg.NotifyPort)
+					return fmt.Errorf("supermodel is already watching this project in another terminal — your graph is being kept up to date.\nRun 'supermodel status' to check, or press Ctrl+C in the other terminal to stop.")
 				}
 				return fmt.Errorf("failed to start UDP listener on port %d: %w", d.cfg.NotifyPort, err)
 			}
