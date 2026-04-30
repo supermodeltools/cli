@@ -14,6 +14,12 @@ import (
 	"github.com/supermodeltools/cli/internal/shards"
 )
 
+// termIsTerminal wraps term.IsTerminal so tests can stub the syscall check
+// independently of the /dev/tty fallback.
+var termIsTerminal = func() bool {
+	return term.IsTerminal(int(syscall.Stdin)) //nolint:unconvert // syscall.Stdin is uintptr on Windows
+}
+
 // openDevTty opens /dev/tty (the process's controlling terminal). It is a
 // package-level var so tests can replace it with a mock. On Windows,
 // os.Open("/dev/tty") will fail, which is expected — Windows Console API
@@ -30,7 +36,7 @@ var openDevTty = func() (*os.File, error) {
 // POSIX controlling-terminal device. If it opens, stdin is interactive.
 // See issue #154.
 var stdinIsTerminal = func() bool {
-	if term.IsTerminal(int(syscall.Stdin)) { //nolint:unconvert // syscall.Stdin is uintptr on Windows
+	if termIsTerminal() {
 		return true
 	}
 	if f, err := openDevTty(); err == nil {

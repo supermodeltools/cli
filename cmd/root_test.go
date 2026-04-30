@@ -9,6 +9,12 @@ import (
 // back to opening /dev/tty when term.IsTerminal returns false (e.g. in CI or
 // MinTTY/Git Bash on Windows). The fix is tracked in issue #154.
 func TestStdinIsTerminalUsesDevTtyFallback(t *testing.T) {
+	// Force termIsTerminal to return false so the test is deterministic
+	// regardless of whether the test process itself has an interactive stdin.
+	origTermIsTerminal := termIsTerminal
+	t.Cleanup(func() { termIsTerminal = origTermIsTerminal })
+	termIsTerminal = func() bool { return false }
+
 	// Save and restore the real openDevTty hook.
 	orig := openDevTty
 	t.Cleanup(func() { openDevTty = orig })
@@ -20,9 +26,8 @@ func TestStdinIsTerminalUsesDevTtyFallback(t *testing.T) {
 		return os.Open(os.DevNull)
 	}
 
-	// In CI stdin is not a TTY, so term.IsTerminal returns false.
-	// The fixed stdinIsTerminal must call openDevTty as a fallback and
-	// return true because our mock succeeds.
+	// With termIsTerminal stubbed to false, stdinIsTerminal must call
+	// openDevTty as a fallback and return true because our mock succeeds.
 	got := stdinIsTerminal()
 
 	if !called {
