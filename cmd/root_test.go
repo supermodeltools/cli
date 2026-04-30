@@ -1,6 +1,43 @@
 package cmd
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
+
+// TestStdinIsTerminalUsesDevTtyFallback verifies that stdinIsTerminal falls
+// back to opening /dev/tty when term.IsTerminal returns false (e.g. in CI or
+// MinTTY/Git Bash on Windows). The fix is tracked in issue #154.
+func TestStdinIsTerminalUsesDevTtyFallback(t *testing.T) {
+	// Force termIsTerminal to return false so the test is deterministic
+	// regardless of whether the test process itself has an interactive stdin.
+	origTermIsTerminal := termIsTerminal
+	t.Cleanup(func() { termIsTerminal = origTermIsTerminal })
+	termIsTerminal = func() bool { return false }
+
+	// Save and restore the real openDevTty hook.
+	orig := openDevTty
+	t.Cleanup(func() { openDevTty = orig })
+
+	called := false
+	openDevTty = func() (*os.File, error) {
+		called = true
+		// Return a real, harmless file so the caller can call f.Close().
+		return os.Open(os.DevNull)
+	}
+
+	// With termIsTerminal stubbed to false, stdinIsTerminal must call
+	// openDevTty as a fallback and return true because our mock succeeds.
+	got := stdinIsTerminal()
+
+	if !called {
+		t.Error("stdinIsTerminal did not call openDevTty — /dev/tty fallback is missing (fix #154)")
+	}
+	// If openDevTty was called and succeeded, the result must be true.
+	if called && !got {
+		t.Error("openDevTty returned a file but stdinIsTerminal returned false — fix #154")
+	}
+}
 
 func TestPickRootAction(t *testing.T) {
 	cases := []struct {
