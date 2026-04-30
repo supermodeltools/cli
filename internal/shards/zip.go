@@ -25,7 +25,8 @@ var zipSkipDirs = map[string]bool{
 	"venv": true, "__pycache__": true, "dist": true, "build": true,
 	".next": true, ".nuxt": true, ".cache": true, ".turbo": true,
 	"coverage": true, ".nyc_output": true, "__snapshots__": true,
-	".terraform": true,
+	"docs-output": true,
+	".terraform":  true,
 }
 
 var zipSkipFiles = map[string]bool{
@@ -403,7 +404,7 @@ func PrintLanguageBarChart(stats []LangStat, totalFiles int) {
 // shardTags are the extension tags used by all shard formats.
 var shardTags = map[string]bool{
 	"graph":  true, // single-file format
-	"calls":  true, // three-file format
+	"calls":  true, // legacy split-shard format
 	"deps":   true,
 	"impact": true,
 }

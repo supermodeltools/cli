@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -85,6 +86,237 @@ func TestRepoFingerprint_ChangesAfterCommit(t *testing.T) {
 	fp2, _ := RepoFingerprint(dir)
 	if fp1 == fp2 {
 		t.Error("fingerprint should change after commit")
+	}
+}
+
+func TestRepoFingerprint_ChangesForUntrackedFile(t *testing.T) {
+	dir := initGitRepo(t)
+	fp1, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "generated.go"), []byte("package main\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fp2, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fp1 == fp2 {
+		t.Error("fingerprint should change when an untracked uploadable file appears")
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "generated.go"), []byte("package main\nfunc generated() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fp3, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fp2 == fp3 {
+		t.Error("fingerprint should change when untracked file contents change")
+	}
+}
+
+func TestRepoFingerprint_ChangesForUntrackedQuotedFilename(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows filesystems do not allow double quotes in filenames")
+	}
+	dir := initGitRepo(t)
+	fp1, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rel := `quote" file.go`
+	if err := os.WriteFile(filepath.Join(dir, rel), []byte("package main\nfunc one() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fp2, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fp1 == fp2 {
+		t.Fatal("fingerprint should change for an untracked filename requiring git quoting")
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, rel), []byte("package main\nfunc two() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fp3, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fp2 == fp3 {
+		t.Fatal("fingerprint should change when quoted untracked file contents change")
+	}
+}
+
+func TestRepoFingerprint_ChangesForTrackedQuotedFilename(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows filesystems do not allow double quotes in filenames")
+	}
+	dir := initGitRepo(t)
+	rel := `quote" file.go`
+	if err := os.WriteFile(filepath.Join(dir, rel), []byte("package main\nfunc one() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	run(t, dir, "git", "add", rel)
+	run(t, dir, "git", "commit", "-m", "quoted filename")
+
+	fp1, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, rel), []byte("package main\nfunc two() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fp2, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fp1 == fp2 {
+		t.Fatal("fingerprint should change for a dirty tracked filename requiring git quoting")
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, rel), []byte("package main\nfunc three() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fp3, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fp2 == fp3 {
+		t.Fatal("fingerprint should change when quoted tracked file contents change")
+	}
+}
+
+func TestRepoFingerprint_RenameToIgnoredDirInvalidatesSource(t *testing.T) {
+	dir := initGitRepo(t)
+	src := filepath.Join("src", "keep.go")
+	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, src), []byte("package main\nfunc keep() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	run(t, dir, "git", "add", src)
+	run(t, dir, "git", "commit", "-m", "source file")
+
+	fp1, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "docs-output"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run(t, dir, "git", "mv", src, filepath.Join("docs-output", "keep.go"))
+
+	fp2, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fp1 == fp2 {
+		t.Fatal("renaming an uploadable source into an ignored directory should invalidate the source fingerprint")
+	}
+}
+
+func TestRepoFingerprint_IgnoresGeneratedArtifacts(t *testing.T) {
+	dir := initGitRepo(t)
+	fp1, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(dir, ".supermodel"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".supermodel", "shards.json"), []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "main.graph.go"), []byte("// generated graph\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "docs-output"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "docs-output", "index.html"), []byte("<html></html>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	fp2, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fp1 != fp2 {
+		t.Fatalf("fingerprint should ignore generated artifacts: %q != %q", fp1, fp2)
+	}
+}
+
+func TestRepoFingerprint_IgnoresHiddenDirsAndSecrets(t *testing.T) {
+	dir := initGitRepo(t)
+	fp1, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, rel := range []string{
+		filepath.Join(".claude", "settings.json"),
+		filepath.Join(".github", "workflows", "ci.yml"),
+		filepath.Join("frontend", "__snapshots__", "component.snap"),
+		filepath.Join("web", ".cache", "vite.json"),
+		filepath.Join("app", ".venv", "pyvenv.cfg"),
+		".env",
+		"prod.key",
+		"credentials.txt",
+	} {
+		full := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("ignored\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	fp2, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fp1 != fp2 {
+		t.Fatalf("fingerprint should ignore non-uploaded hidden dirs and secrets: %q != %q", fp1, fp2)
+	}
+}
+
+func TestRepoFingerprint_IgnoresGeneratedArtifactsWhenSourceIsDirty(t *testing.T) {
+	dir := initGitRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "main.graph.go"), []byte("// generated graph\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	run(t, dir, "git", "add", "-f", "main.graph.go")
+	run(t, dir, "git", "commit", "-m", "track generated artifact")
+
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n// dirty\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "main.graph.go"), []byte("// regenerated graph\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fpWithGeneratedDirty, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "main.graph.go"), []byte("// generated graph\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fpSourceOnlyDirty, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fpWithGeneratedDirty != fpSourceOnlyDirty {
+		t.Fatalf("generated shard changes should not affect source fingerprint: %q != %q", fpWithGeneratedDirty, fpSourceOnlyDirty)
 	}
 }
 

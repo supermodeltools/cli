@@ -2,12 +2,16 @@ package shards
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/supermodeltools/cli/internal/api"
+	repocache "github.com/supermodeltools/cli/internal/cache"
 )
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -964,6 +968,91 @@ func TestOnSyncing_NilSafe(t *testing.T) {
 		logf:   func(string, ...interface{}) {},
 	}
 	d.incrementalUpdate(context.Background(), []string{"a.go"})
+}
+
+func TestLoadOrGenerate_RegeneratesStaleFingerprintCache(t *testing.T) {
+	repoDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repoDir, "main.go"), []byte("package main\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	shardsRunGit(t, repoDir, "init")
+	shardsRunGit(t, repoDir, "config", "user.email", "test@example.com")
+	shardsRunGit(t, repoDir, "config", "user.name", "Test")
+	shardsRunGit(t, repoDir, "add", "main.go")
+	shardsRunGit(t, repoDir, "commit", "-m", "init")
+
+	cacheFile := filepath.Join(repoDir, ".supermodel", "shards.json")
+	if err := os.MkdirAll(filepath.Dir(cacheFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stale := buildIR(
+		[]api.Node{newNode("old-file", []string{"File"}, "filePath", "old.go")},
+		nil,
+	)
+	stale.Summary = map[string]any{shardCacheFingerprintKey: "stale"}
+	staleJSON, err := json.Marshal(stale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cacheFile, staleJSON, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fresh := buildIR(
+		[]api.Node{newNode("file-main", []string{"File"}, "filePath", "main.go")},
+		nil,
+	)
+	client := &mockAnalyzeClient{result: fresh}
+	d := &Daemon{
+		cfg: DaemonConfig{
+			RepoDir:   repoDir,
+			CacheFile: cacheFile,
+			LogFunc:   func(string, ...interface{}) {},
+		},
+		client:   client,
+		cache:    NewCache(),
+		logf:     func(string, ...interface{}) {},
+		notifyCh: make(chan string, 256),
+	}
+	if err := d.loadOrGenerate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if client.called == 0 {
+		t.Fatal("stale fingerprint cache should trigger API regeneration")
+	}
+	current, err := repocache.RepoFingerprint(repoDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved api.ShardIR
+	data, err := os.ReadFile(cacheFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := saved.Summary[shardCacheFingerprintKey].(string); got != current {
+		t.Fatalf("saved fingerprint = %q, want %q", got, current)
+	}
+}
+
+func TestShardCacheMatchesFingerprint_FailsClosedForMissingFingerprint(t *testing.T) {
+	ir := buildIR([]api.Node{newNode("file-main", []string{"File"}, "filePath", "main.go")}, nil)
+	ir.Summary = map[string]any{shardCacheFingerprintKey: "known"}
+
+	if shardCacheMatchesFingerprint(ir, "") {
+		t.Fatal("missing current fingerprint should not be treated as a cache hit")
+	}
+}
+
+func shardsRunGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
 }
 
 // ── Port-conflict UX ─────────────────────────────────────────────────────────

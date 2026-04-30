@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	"github.com/supermodeltools/cli/internal/analyze"
@@ -13,7 +11,6 @@ import (
 func init() {
 	var opts analyze.Options
 	var noShards bool
-	var threeFile bool
 
 	c := &cobra.Command{
 		Use:   "analyze [path]",
@@ -35,9 +32,6 @@ Use --no-shards to skip writing graph files.`,
 			if err := cfg.RequireAPIKey(); err != nil {
 				return err
 			}
-			if noShards && threeFile {
-				return fmt.Errorf("--three-file cannot be used with --no-shards")
-			}
 			dir := "."
 			if len(args) > 0 {
 				dir = args[0]
@@ -46,7 +40,7 @@ Use --no-shards to skip writing graph files.`,
 				// Shard mode: Generate handles the full pipeline (API call +
 				// cache + shards) in a single upload. Running analyze.Run
 				// first would duplicate the API call.
-				return shards.Generate(cmd.Context(), cfg, dir, shards.GenerateOptions{Force: opts.Force, ThreeFile: threeFile})
+				return shards.Generate(cmd.Context(), cfg, dir, shards.GenerateOptions{Force: opts.Force})
 			}
 			return analyze.Run(cmd.Context(), cfg, dir, opts)
 		},
@@ -55,7 +49,6 @@ Use --no-shards to skip writing graph files.`,
 	c.Flags().BoolVar(&opts.Force, "force", false, "re-analyze even if a cached result exists")
 	c.Flags().StringVarP(&opts.Output, "output", "o", "", "output format: human|json")
 	c.Flags().BoolVar(&noShards, "no-shards", false, "skip writing .graph.* shard files")
-	c.Flags().BoolVar(&threeFile, "three-file", false, "generate .calls/.deps/.impact files instead of single .graph")
 
 	rootCmd.AddCommand(c)
 }

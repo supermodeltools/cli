@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"syscall"
 	"time"
 
@@ -176,8 +178,22 @@ func init() {
 
 // Execute is the entry point called by main.
 func Execute() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			stop()
+		case <-done:
+		}
+	}()
+	rootCmd.SetContext(ctx)
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
+		close(done)
+		stop()
 		os.Exit(1)
 	}
+	close(done)
+	stop()
 }

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/supermodeltools/cli/internal/api"
+	repocache "github.com/supermodeltools/cli/internal/cache"
 )
 
 // DaemonConfig holds watch daemon configuration.
@@ -174,29 +175,41 @@ func (d *Daemon) Run(ctx context.Context) error {
 // loadOrGenerate loads an existing cache if available and re-renders shards.
 // If no cache exists, it does a full API fetch.
 func (d *Daemon) loadOrGenerate(ctx context.Context) error {
+	if err := updateGitignore(d.cfg.RepoDir); err != nil {
+		return err
+	}
+
 	data, err := os.ReadFile(d.cfg.CacheFile)
 	if err == nil {
 		var ir api.ShardIR
 		if unmarshalErr := json.Unmarshal(data, &ir); unmarshalErr != nil {
 			d.logf("Warning: cache file invalid, regenerating: %v", unmarshalErr)
 		} else if len(ir.Graph.Nodes) > 0 {
-			d.logf("Loaded existing cache (%d nodes, %d relationships)",
-				len(ir.Graph.Nodes), len(ir.Graph.Relationships))
+			fingerprint, fingerprintErr := repocache.RepoFingerprint(d.cfg.RepoDir)
+			switch {
+			case fingerprintErr != nil:
+				d.logf("Unable to validate cached graph for current repo contents, regenerating")
+			case !shardCacheMatchesFingerprint(&ir, fingerprint):
+				d.logf("Cache is stale for current repo contents, regenerating")
+			default:
+				d.logf("Loaded existing cache (%d nodes, %d relationships)",
+					len(ir.Graph.Nodes), len(ir.Graph.Relationships))
 
-			d.mu.Lock()
-			d.ir = &ir
-			d.cache = NewCache()
-			d.cache.Build(&ir)
-			d.loadedCache = true
-			d.mu.Unlock()
+				d.mu.Lock()
+				d.ir = &ir
+				d.cache = NewCache()
+				d.cache.Build(&ir)
+				d.loadedCache = true
+				d.mu.Unlock()
 
-			files := d.cache.SourceFiles()
-			written, renderErr := RenderAll(d.cfg.RepoDir, d.cache, files, false)
-			if renderErr != nil {
-				return renderErr
+				files := d.cache.SourceFiles()
+				written, renderErr := RenderAll(d.cfg.RepoDir, d.cache, files, false)
+				if renderErr != nil {
+					return renderErr
+				}
+				d.logf("Rendered %d shards for %d source files", written, len(files))
+				return nil
 			}
-			d.logf("Rendered %d shards for %d source files", written, len(files))
-			return nil
 		}
 	}
 
@@ -209,6 +222,7 @@ func (d *Daemon) loadOrGenerate(ctx context.Context) error {
 func (d *Daemon) fullGenerate(ctx context.Context) error {
 	d.logf("Fetching full graph from Supermodel API...")
 	idemKey := newUUID()
+	fingerprint, _ := repocache.RepoFingerprint(d.cfg.RepoDir)
 
 	if fileList, listErr := DryRunList(d.cfg.RepoDir); listErr == nil {
 		stats := LanguageStats(fileList)
@@ -227,10 +241,11 @@ func (d *Daemon) fullGenerate(ctx context.Context) error {
 	}
 
 	d.mu.Lock()
+	setShardCacheFingerprint(ir, fingerprint)
 	d.ir = ir
 	d.cache = NewCache()
 	d.cache.Build(ir)
-	d.saveCache()
+	d.saveCacheWithFingerprint(fingerprint)
 	d.mu.Unlock()
 
 	files := d.cache.SourceFiles()
@@ -339,9 +354,15 @@ func (d *Daemon) incrementalUpdate(ctx context.Context, changedFiles []string) {
 
 // saveCache writes the current merged ShardIR to the cache file. Must be called with d.mu held.
 func (d *Daemon) saveCache() {
+	fingerprint, _ := repocache.RepoFingerprint(d.cfg.RepoDir)
+	d.saveCacheWithFingerprint(fingerprint)
+}
+
+func (d *Daemon) saveCacheWithFingerprint(fingerprint string) {
 	if d.ir == nil {
 		return
 	}
+	setShardCacheFingerprint(d.ir, fingerprint)
 	// Ensure cache directory exists
 	if err := os.MkdirAll(filepath.Dir(d.cfg.CacheFile), 0o755); err != nil {
 		d.logf("Error creating cache directory: %v", err)

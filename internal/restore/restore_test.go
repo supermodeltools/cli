@@ -195,6 +195,88 @@ func TestDetectLanguages_UnknownExtensionsIgnored(t *testing.T) {
 	}
 }
 
+func TestBuildProjectGraph_LocalModeCountsRootSourceFiles(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("# Smoke\n\nExample project.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	graph, err := BuildProjectGraph(context.Background(), dir, "smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if graph.Stats.TotalFiles != 1 {
+		t.Fatalf("local mode should count recognized source files only: got %d", graph.Stats.TotalFiles)
+	}
+	if graph.Language != "Go" {
+		t.Fatalf("primary language: got %q, want Go", graph.Language)
+	}
+	if len(graph.Domains) != 1 || graph.Domains[0].Name != "Root" {
+		t.Fatalf("root source file should produce Root domain, got %#v", graph.Domains)
+	}
+
+	out, _, err := Render(graph, "smoke", RenderOptions{LocalMode: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "1 source files") {
+		t.Fatalf("rendered output should report source file count, got:\n%s", out)
+	}
+	if strings.Contains(out, "0 functions") {
+		t.Fatalf("local mode should not claim zero functions, got:\n%s", out)
+	}
+	if !strings.Contains(out, "functions not counted locally") {
+		t.Fatalf("local mode should explain function count limitation, got:\n%s", out)
+	}
+}
+
+func TestBuildProjectGraph_LocalModeExcludesDocsOutput(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "docs-output"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "docs-output", "generated.js"), []byte("console.log('generated')\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	graph, err := BuildProjectGraph(context.Background(), dir, "smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if graph.Stats.TotalFiles != 1 {
+		t.Fatalf("docs-output should be ignored by local restore scan: got %d files", graph.Stats.TotalFiles)
+	}
+}
+
+func TestBuildProjectGraph_LocalModeExcludesGeneratedShards(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"main.graph.go", "main.calls.go", "main.deps.go", "main.impact.go"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("// generated\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	graph, err := BuildProjectGraph(context.Background(), dir, "smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if graph.Stats.TotalFiles != 1 {
+		t.Fatalf("generated shard files should be ignored by local restore scan: got %d files", graph.Stats.TotalFiles)
+	}
+	if len(graph.Domains) != 1 || len(graph.Domains[0].KeyFiles) != 1 || graph.Domains[0].KeyFiles[0] != "main.go" {
+		t.Fatalf("generated shard files should not become key files, got %#v", graph.Domains)
+	}
+}
+
 // ── buildDomains ──────────────────────────────────────────────────────────────
 
 func TestBuildDomains_Empty(t *testing.T) {
