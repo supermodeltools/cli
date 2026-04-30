@@ -13,7 +13,7 @@ npm install -g @supermodeltools/cli
 Or via curl:
 
 ```bash
-curl -fsSL https://supermodeltools.com/install.sh | sh
+curl -fsSL https://supermodeltools.com/install | sh
 ```
 
 ## Usage
