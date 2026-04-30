@@ -125,6 +125,7 @@ if (require.main === module) {
     if (process.platform !== "win32") fs.chmodSync(BIN_PATH, 0o755);
     fs.unlinkSync(tmpArchive);
     console.log(`[supermodel] Installed to ${BIN_PATH}`);
+    console.log("\nsupermodel installed. Run 'supermodel' inside your project directory to get started.\n");
   });
 }
 
