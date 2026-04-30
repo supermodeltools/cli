@@ -98,8 +98,8 @@ func (d *Daemon) Run(ctx context.Context) error {
 		go d.listenUDP(ctx, udpReady)
 		if err := <-udpReady; err != nil {
 			if !d.cfg.FSWatch {
-				if errors.Is(err, syscall.EADDRINUSE) {
-					return fmt.Errorf("UDP port %d already in use — is `supermodel watch` already running?", d.cfg.NotifyPort)
+				if isAddrInUse(err) {
+					return fmt.Errorf("supermodel is already watching this project in another terminal — your graph is being kept up to date\nRun 'supermodel status' to check, or press Ctrl+C in the other terminal to stop")
 				}
 				return fmt.Errorf("failed to start UDP listener on port %d: %w", d.cfg.NotifyPort, err)
 			}
@@ -747,6 +747,17 @@ func daemonSortedKeys(m map[string]bool) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// isAddrInUse reports whether err indicates that a network address is already
+// in use. It checks syscall.EADDRINUSE (POSIX) and, for Windows, inspects the
+// error message because Windows uses a different underlying error code.
+func isAddrInUse(err error) bool {
+	if errors.Is(err, syscall.EADDRINUSE) {
+		return true
+	}
+	// Windows returns WSAEADDRINUSE; its message contains this substring.
+	return strings.Contains(err.Error(), "Only one usage of each socket address")
 }
 
 func newUUID() string {
