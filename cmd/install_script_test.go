@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"os"
-	"strings"
+	"regexp"
 	"testing"
 )
 
@@ -14,17 +14,17 @@ func TestInstallScript(t *testing.T) {
 	content := string(data)
 
 	t.Run("does not run setup wizard at install time", func(t *testing.T) {
-		// The script uses $BINARY variable, so match the literal subcommand argument
-		if strings.Contains(content, `" setup`) || strings.Contains(content, "supermodel setup") {
+		// Match command execution shape only — not arbitrary text mentions.
+		setupInvocation := regexp.MustCompile(`(?m)^\s*"\$INSTALL_DIR/\$BINARY"\s+setup\b`)
+		if setupInvocation.MatchString(content) {
 			t.Error("install.sh must not run the setup subcommand at install time — the wizard now auto-launches from bare 'supermodel' in a project directory (PR #152)")
 		}
 	})
 
 	t.Run("includes getting-started message", func(t *testing.T) {
-		lower := strings.ToLower(content)
-		hasRunSupermodel := strings.Contains(lower, "run 'supermodel'") || strings.Contains(lower, "run \"supermodel\"")
-		hasGetStarted := strings.Contains(lower, "get started")
-		if !hasRunSupermodel && !hasGetStarted {
+		hasRunSupermodel := regexp.MustCompile(`(?i)\brun\s+['"]?supermodel['"]?\b`).MatchString(content)
+		hasProjectContext := regexp.MustCompile(`(?i)\b(in|inside)\s+your\s+project\b|\bproject\s+directory\b`).MatchString(content)
+		if !hasRunSupermodel || !hasProjectContext {
 			t.Error("install.sh must include a getting-started message directing users to run 'supermodel' in their project directory")
 		}
 	})
