@@ -33,14 +33,6 @@ type GenerateOptions struct {
 	Force     bool
 	DryRun    bool
 	CacheFile string
-	ThreeFile bool // deprecated: render .calls/.deps/.impact instead of single .graph
-}
-
-func renderShards(repoDir string, cache *Cache, files []string, dryRun, threeFile bool) (int, error) {
-	if threeFile {
-		return RenderAllThreeFile(repoDir, cache, files, dryRun)
-	}
-	return RenderAll(repoDir, cache, files, dryRun)
 }
 
 // WatchOptions configures the watch command.
@@ -56,7 +48,6 @@ type WatchOptions struct {
 type RenderOptions struct {
 	CacheFile string
 	DryRun    bool
-	ThreeFile bool
 }
 
 // guardDir returns an error if dir is the filesystem root or the user's home
@@ -109,7 +100,7 @@ func Generate(ctx context.Context, cfg *config.Config, dir string, opts Generate
 					cache.Build(&ir)
 					files := cache.SourceFiles()
 					spin := ui.Start("Rendering shards…")
-					written, err := renderShards(repoDir, cache, files, opts.DryRun, opts.ThreeFile)
+					written, err := RenderAll(repoDir, cache, files, opts.DryRun)
 					spin.Stop()
 					if err != nil {
 						return err
@@ -173,7 +164,7 @@ func Generate(ctx context.Context, cfg *config.Config, dir string, opts Generate
 				staleCache := NewCache()
 				staleCache.Build(&staleIR)
 				files := staleCache.SourceFiles()
-				written, renderErr := renderShards(repoDir, staleCache, files, opts.DryRun, opts.ThreeFile)
+				written, renderErr := RenderAll(repoDir, staleCache, files, opts.DryRun)
 				if renderErr != nil {
 					return fmt.Errorf("API error: %w; stale render also failed: %v", err, renderErr)
 				}
@@ -208,7 +199,7 @@ func Generate(ctx context.Context, cfg *config.Config, dir string, opts Generate
 	files := cache.SourceFiles()
 
 	spin = ui.Start("Rendering shards…")
-	written, err := renderShards(repoDir, cache, files, opts.DryRun, opts.ThreeFile)
+	written, err := RenderAll(repoDir, cache, files, opts.DryRun)
 	spin.Stop()
 	if err != nil {
 		return err
@@ -472,7 +463,7 @@ func Render(dir string, opts RenderOptions) error {
 	cache.Build(&ir)
 	files := cache.SourceFiles()
 
-	written, err := renderShards(repoDir, cache, files, opts.DryRun, opts.ThreeFile)
+	written, err := RenderAll(repoDir, cache, files, opts.DryRun)
 	if err != nil {
 		return err
 	}

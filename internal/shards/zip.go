@@ -404,7 +404,7 @@ func PrintLanguageBarChart(stats []LangStat, totalFiles int) {
 // shardTags are the extension tags used by all shard formats.
 var shardTags = map[string]bool{
 	"graph":  true, // single-file format
-	"calls":  true, // three-file format
+	"calls":  true, // legacy split-shard format
 	"deps":   true,
 	"impact": true,
 }

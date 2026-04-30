@@ -11,7 +11,6 @@ import (
 func init() {
 	var opts analyze.Options
 	var noShards bool
-	var threeFile bool
 
 	c := &cobra.Command{
 		Use:   "analyze [path]",
@@ -50,9 +49,6 @@ Use --no-shards to skip writing graph files.`,
 	c.Flags().BoolVar(&opts.Force, "force", false, "re-analyze even if a cached result exists")
 	c.Flags().StringVarP(&opts.Output, "output", "o", "", "output format: human|json")
 	c.Flags().BoolVar(&noShards, "no-shards", false, "skip writing .graph.* shard files")
-	c.Flags().BoolVar(&threeFile, "three-file", false, "deprecated: standard .graph.* shards are now the only supported file mode")
-	_ = c.Flags().MarkDeprecated("three-file", "standard .graph.* shards are now the only supported file mode")
-	_ = c.Flags().MarkHidden("three-file")
 
 	rootCmd.AddCommand(c)
 }
