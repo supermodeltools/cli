@@ -1,6 +1,6 @@
 # Supermodel CLI
 
-Save 40%+ on agent token costs with code graphs.
+Cut agent token costs by ~40% in benchmarks — with code graphs.
 
 Supermodel maps every file, function, and call relationship in your repo and writes a `.graph` file next to each source file. Your agent reads them automatically via grep and cat. No prompt changes. No extra context windows. No new tools to learn.
 
