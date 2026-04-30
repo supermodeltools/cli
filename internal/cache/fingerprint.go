@@ -155,11 +155,29 @@ func ignoreFingerprintPath(path string) bool {
 	if len(parts) == 0 {
 		return false
 	}
+	if len(parts) > 1 && strings.HasPrefix(parts[0], ".") {
+		return true
+	}
 	switch parts[0] {
 	case ".supermodel", "docs-output", "node_modules", "vendor", "dist", "build", "coverage":
 		return true
 	}
-	return isGeneratedShardPath(path)
+	return isGeneratedShardPath(path) || isSensitiveFingerprintPath(path)
+}
+
+func isSensitiveFingerprintPath(path string) bool {
+	base := strings.ToLower(filepath.Base(path))
+	if base == ".env" {
+		return true
+	}
+	for _, suffix := range []string{".key", ".pem", ".p12", ".pfx", ".crt", ".cert", ".tfstate", ".tfstate.backup"} {
+		if strings.HasSuffix(base, suffix) {
+			return true
+		}
+	}
+	return strings.Contains(base, "secret") ||
+		strings.Contains(base, "credential") ||
+		strings.Contains(base, "password")
 }
 
 func isGeneratedShardPath(path string) bool {

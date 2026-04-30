@@ -17,7 +17,7 @@ func init() {
 For CI or headless environments, pass the key directly:
   supermodel login --token smsk_live_...`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if token != "" {
+			if cmd.Flags().Changed("token") {
 				return auth.LoginWithToken(token)
 			}
 			return auth.Login(cmd.Context())

@@ -150,6 +150,38 @@ func TestRepoFingerprint_IgnoresGeneratedArtifacts(t *testing.T) {
 	}
 }
 
+func TestRepoFingerprint_IgnoresHiddenDirsAndSecrets(t *testing.T) {
+	dir := initGitRepo(t)
+	fp1, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, rel := range []string{
+		filepath.Join(".claude", "settings.json"),
+		filepath.Join(".github", "workflows", "ci.yml"),
+		".env",
+		"prod.key",
+		"credentials.txt",
+	} {
+		full := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("ignored\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	fp2, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fp1 != fp2 {
+		t.Fatalf("fingerprint should ignore non-uploaded hidden dirs and secrets: %q != %q", fp1, fp2)
+	}
+}
+
 func TestRepoFingerprint_IgnoresGeneratedArtifactsWhenSourceIsDirty(t *testing.T) {
 	dir := initGitRepo(t)
 	if err := os.WriteFile(filepath.Join(dir, "main.graph.go"), []byte("// generated graph\n"), 0o600); err != nil {
