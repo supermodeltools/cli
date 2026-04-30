@@ -28,7 +28,7 @@ func TestNpmPackageHasPostinstallMessage(t *testing.T) {
 		lower := strings.ToLower(content)
 		hasRunSupermodel := strings.Contains(lower, "run 'supermodel'") || strings.Contains(lower, `run "supermodel"`)
 		hasGetStarted := strings.Contains(lower, "get started")
-		if !hasRunSupermodel && !hasGetStarted {
+		if !hasRunSupermodel || !hasGetStarted {
 			t.Error("npm/install.js must print a getting-started message directing users to run 'supermodel' in their project directory")
 		}
 	})
