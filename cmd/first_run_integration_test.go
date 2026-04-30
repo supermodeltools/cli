@@ -1,6 +1,7 @@
 package cmd_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,7 +10,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
+
+// integrationCommandTimeout caps how long a single binary invocation may run.
+// It prevents CI hangs when the watch daemon behaviour changes unexpectedly.
+const integrationCommandTimeout = 20 * time.Second
 
 // binaryOnce ensures the binary is built only once across all tests in this
 // package, even when tests are run in parallel.
@@ -65,6 +71,7 @@ func buildBinary(t *testing.T) string {
 //   - HOME is set to a fresh temp dir (no config file unless the caller writes one).
 //   - SUPERMODEL_API_KEY is absent from the environment.
 //   - Stdin is /dev/null (or NUL on Windows) to guarantee non-interactive mode.
+//   - Each invocation is bounded by integrationCommandTimeout to prevent CI hangs.
 //   - Any additional environment overrides can be supplied via extraEnv
 //     ("KEY=value" strings).
 //
@@ -73,7 +80,9 @@ func runSupermodel(t *testing.T, args []string, homeDir string, extraEnv ...stri
 	t.Helper()
 	bin := buildBinary(t)
 
-	cmd := exec.Command(bin, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), integrationCommandTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, args...)
 
 	// Build a minimal, controlled environment — start from scratch rather
 	// than inheriting the test process's env so that any SUPERMODEL_API_KEY
@@ -96,6 +105,10 @@ func runSupermodel(t *testing.T, args []string, homeDir string, extraEnv ...stri
 	cmd.Stdin = devNull
 
 	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		t.Fatalf("command timed out after %s: %v %v\noutput: %s",
+			integrationCommandTimeout, bin, args, string(out))
+	}
 	code := 0
 	if exitErr, ok := err.(*exec.ExitError); ok {
 		code = exitErr.ExitCode()
@@ -162,7 +175,10 @@ func TestFirstRun_NoTTY_WithKey(t *testing.T) {
 	// Use an env var key. The format must look plausible; any non-empty
 	// value causes the dispatch to pick runWatch.
 	bin := buildBinary(t)
-	cmd := exec.Command(bin, "--dir", projectDir, "--notify-port", "0")
+
+	ctx, cancel := context.WithTimeout(context.Background(), integrationCommandTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, "--dir", projectDir, "--notify-port", "0")
 	cmd.Env = []string{
 		"HOME=" + home,
 		"PATH=" + os.Getenv("PATH"),
@@ -176,6 +192,10 @@ func TestFirstRun_NoTTY_WithKey(t *testing.T) {
 	cmd.Stdin = devNull
 
 	out, execErr := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		t.Fatalf("command timed out after %s in with-key test\noutput: %s",
+			integrationCommandTimeout, string(out))
+	}
 	combined := string(out)
 
 	// The process exits non-zero quickly (API call fails, port conflict, etc.)
