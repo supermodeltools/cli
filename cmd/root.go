@@ -19,13 +19,25 @@ import (
 // os.Open("/dev/tty") will fail, which is expected — Windows Console API
 // (used by term.IsTerminal above) handles Windows Terminal/PowerShell.
 var openDevTty = func() (*os.File, error) {
-	return nil, fmt.Errorf("not implemented")
+	return os.Open("/dev/tty")
 }
 
 // stdinIsTerminal reports whether stdin is connected to an interactive
 // terminal. Pulled into a var so tests can stub it.
+//
+// MinTTY (Windows Git Bash) reports a non-terminal stdin fd even though the
+// user is at an interactive prompt, so we fall back to opening /dev/tty — the
+// POSIX controlling-terminal device. If it opens, stdin is interactive.
+// See issue #154.
 var stdinIsTerminal = func() bool {
-	return term.IsTerminal(int(syscall.Stdin)) //nolint:unconvert // syscall.Stdin is uintptr on Windows
+	if term.IsTerminal(int(syscall.Stdin)) { //nolint:unconvert // syscall.Stdin is uintptr on Windows
+		return true
+	}
+	if f, err := openDevTty(); err == nil {
+		f.Close()
+		return true
+	}
+	return false
 }
 
 // rootAction enumerates the three branches the bare `supermodel` command
