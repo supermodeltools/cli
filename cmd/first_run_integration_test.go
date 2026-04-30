@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -37,7 +38,12 @@ func buildBinary(t *testing.T) string {
 			binaryErr = fmt.Errorf("create temp dir: %w", err)
 			return
 		}
-		bin := filepath.Join(dir, "supermodel")
+		// On Windows the binary must have a .exe suffix to be executable.
+		binName := "supermodel"
+		if runtime.GOOS == "windows" {
+			binName = "supermodel.exe"
+		}
+		bin := filepath.Join(dir, binName)
 		cmd := exec.Command("go", "build", "-o", bin, ".")
 		cmd.Dir = moduleRoot
 		out, err := cmd.CombinedOutput()
@@ -58,7 +64,7 @@ func buildBinary(t *testing.T) string {
 //
 //   - HOME is set to a fresh temp dir (no config file unless the caller writes one).
 //   - SUPERMODEL_API_KEY is absent from the environment.
-//   - Stdin is /dev/null to guarantee non-interactive mode.
+//   - Stdin is /dev/null (or NUL on Windows) to guarantee non-interactive mode.
 //   - Any additional environment overrides can be supplied via extraEnv
 //     ("KEY=value" strings).
 //
@@ -80,10 +86,11 @@ func runSupermodel(t *testing.T, args []string, homeDir string, extraEnv ...stri
 	env = append(env, extraEnv...)
 	cmd.Env = env
 
-	// Ensure non-TTY stdin.
+	// Ensure non-TTY stdin. os.DevNull is "/dev/null" on Unix and "NUL" on
+	// Windows — os.Open handles both.
 	devNull, err := os.Open(os.DevNull)
 	if err != nil {
-		t.Fatalf("open /dev/null: %v", err)
+		t.Fatalf("open %s: %v", os.DevNull, err)
 	}
 	defer devNull.Close()
 	cmd.Stdin = devNull
@@ -163,7 +170,7 @@ func TestFirstRun_NoTTY_WithKey(t *testing.T) {
 	}
 	devNull, err := os.Open(os.DevNull)
 	if err != nil {
-		t.Fatalf("open /dev/null: %v", err)
+		t.Fatalf("open %s: %v", os.DevNull, err)
 	}
 	defer devNull.Close()
 	cmd.Stdin = devNull
@@ -203,6 +210,9 @@ func TestFirstRun_VersionSubcommand_NoKey(t *testing.T) {
 // subcommand (a noConfigCommand) exits 0 and emits a bash completion script
 // without requiring an API key.
 func TestFirstRun_CompletionBash_NoKey(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("bash completion is not meaningful on Windows")
+	}
 	home := freshHome(t)
 	out, code := runSupermodel(t, []string{"completion", "bash"}, home)
 
