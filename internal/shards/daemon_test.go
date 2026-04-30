@@ -2,6 +2,8 @@ package shards
 
 import (
 	"context"
+	"net"
+	"os"
 	"strings"
 	"testing"
 
@@ -962,4 +964,65 @@ func TestOnSyncing_NilSafe(t *testing.T) {
 		logf:   func(string, ...interface{}) {},
 	}
 	d.incrementalUpdate(context.Background(), []string{"a.go"})
+}
+
+// ── Port-conflict UX ─────────────────────────────────────────────────────────
+
+// TestPortConflict_FriendlyMessage verifies that when the daemon cannot bind
+// its UDP notify port (because another supermodel instance is already running),
+// the returned error message is friendly and informative rather than a raw
+// OS error. It should tell the user their graph is already being watched and
+// NOT just say "already in use".
+func TestPortConflict_FriendlyMessage(t *testing.T) {
+	// Bind the notify port first to simulate a running instance.
+	blocker, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("could not bind blocker socket: %v", err)
+	}
+	defer blocker.Close()
+	port := blocker.LocalAddr().(*net.UDPAddr).Port
+
+	// Write a minimal valid cache file so loadOrGenerate succeeds without an API call.
+	repoDir := t.TempDir()
+	cacheDir := repoDir + "/.supermodel"
+	if mkErr := os.MkdirAll(cacheDir, 0o755); mkErr != nil {
+		t.Fatalf("mkdir: %v", mkErr)
+	}
+	cacheFile := cacheDir + "/cache.json"
+	minimalIR := `{"graph":{"nodes":[{"id":"n1","labels":["File"],"properties":{"filePath":"/fake/file.go"}}],"relationships":[]}}`
+	if writeErr := os.WriteFile(cacheFile, []byte(minimalIR), 0o644); writeErr != nil {
+		t.Fatalf("write cache: %v", writeErr)
+	}
+
+	cfg := DaemonConfig{
+		RepoDir:    repoDir,
+		CacheFile:  cacheFile,
+		NotifyPort: port,
+		FSWatch:    false, // FSWatch=false means EADDRINUSE is fatal
+		LogFunc:    func(string, ...interface{}) {},
+	}
+	d := &Daemon{
+		cfg:      cfg,
+		client:   &mockAnalyzeClient{result: buildIR(nil, nil)},
+		cache:    NewCache(),
+		logf:     func(string, ...interface{}) {},
+		notifyCh: make(chan string, 256),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	runErr := d.Run(ctx)
+	if runErr == nil {
+		t.Fatal("expected an error when port is already bound, got nil")
+	}
+
+	msg := runErr.Error()
+
+	// The message must NOT be just a raw "already in use" OS error — it should be
+	// friendly and tell the user what's happening.
+	if !strings.Contains(msg, "already watching") && !strings.Contains(msg, "another terminal") {
+		t.Errorf("error message is not user-friendly; got: %q\n"+
+			"want: message containing \"already watching\" or \"another terminal\"", msg)
+	}
 }
