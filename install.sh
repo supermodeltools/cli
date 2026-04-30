@@ -73,10 +73,5 @@ install -m755 "$TMP/$BINARY" "$INSTALL_DIR/$BINARY"
 echo "Installed: $INSTALL_DIR/$BINARY"
 "$INSTALL_DIR/$BINARY" version
 
-# Run the setup wizard when a controlling terminal is available.
-# Use /dev/tty as stdin so interactive prompts work even in piped installs
-# (e.g. curl … | sh), where stdin is the pipe rather than the terminal.
-if { </dev/tty; } 2>/dev/null; then
-  echo ""
-  "$INSTALL_DIR/$BINARY" setup </dev/tty
-fi
+echo ""
+echo "Run 'supermodel' inside your project directory to get started."
