@@ -14,6 +14,14 @@ import (
 	"github.com/supermodeltools/cli/internal/shards"
 )
 
+// openDevTty opens /dev/tty (the process's controlling terminal). It is a
+// package-level var so tests can replace it with a mock. On Windows,
+// os.Open("/dev/tty") will fail, which is expected — Windows Console API
+// (used by term.IsTerminal above) handles Windows Terminal/PowerShell.
+var openDevTty = func() (*os.File, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 // stdinIsTerminal reports whether stdin is connected to an interactive
 // terminal. Pulled into a var so tests can stub it.
 var stdinIsTerminal = func() bool {
