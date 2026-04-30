@@ -68,6 +68,30 @@ func TestRenderAll_RemovesStaleSplitShards(t *testing.T) {
 	}
 }
 
+func TestRenderAll_DryRunDoesNotRemoveStaleSplitShards(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "src"), 0o755)
+
+	for _, name := range []string{"index.calls.ts", "index.deps.ts", "index.impact.ts"} {
+		touchFile(t, filepath.Join(dir, "src", name))
+	}
+
+	cache := testCache()
+	_, err := RenderAll(dir, cache, []string{"src/index.ts"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "src", "index.graph.ts")); !os.IsNotExist(err) {
+		t.Error("dry-run should not write index.graph.ts")
+	}
+	for _, name := range []string{"index.calls.ts", "index.deps.ts", "index.impact.ts"} {
+		if _, err := os.Stat(filepath.Join(dir, "src", name)); err != nil {
+			t.Errorf("dry-run should not remove %s: %v", name, err)
+		}
+	}
+}
+
 func TestRenderAll_GraphContent(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "src"), 0o755)

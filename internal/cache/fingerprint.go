@@ -18,26 +18,27 @@ import (
 // For dirty git repos (~100ms): returns commitSHA:dirtyHash.
 // For non-git dirs: returns empty string and an error.
 func RepoFingerprint(dir string) (string, error) {
-	commitSHA, err := gitOutput(dir, "rev-parse", "HEAD")
+	commitSHA, err := gitOutputTrim(dir, "rev-parse", "HEAD")
 	if err != nil {
 		return "", fmt.Errorf("not a git repo: %w", err)
 	}
 
-	dirty, err := gitOutput(dir, "status", "--porcelain", "--untracked-files=all")
+	statusOut, err := gitOutputRaw(dir, "status", "--porcelain=v1", "-z", "--untracked-files=all")
 	if err != nil {
 		return commitSHA, nil
 	}
-	dirty = filterFingerprintStatus(dirty)
+	dirtyEntries := filterFingerprintStatus(parseGitStatusZ(statusOut))
 
-	if dirty == "" {
+	if len(dirtyEntries) == 0 {
 		return commitSHA, nil
 	}
 
 	// Dirty: hash tracked changes plus untracked file contents. Generated
 	// files are filtered because they are not uploaded for analysis.
 	h := sha256.New()
-	fmt.Fprintf(h, "status\x00%s\x00", dirty)
-	if err := hashDirtyFiles(h, dir, dirty); err != nil {
+	fmt.Fprint(h, "status\x00")
+	writeStatusEntries(h, dirtyEntries)
+	if err := hashDirtyFiles(h, dir, dirtyEntries); err != nil {
 		return commitSHA + ":dirty", nil
 	}
 	if err := hashUntrackedFiles(h, dir); err != nil {
@@ -47,106 +48,172 @@ func RepoFingerprint(dir string) (string, error) {
 	return commitSHA + ":" + hex.EncodeToString(sum[:8]), nil
 }
 
-func hashDirtyFiles(h io.Writer, dir, status string) error {
-	for _, line := range strings.Split(status, "\n") {
-		if line == "" || strings.HasPrefix(line, "?? ") {
+type gitStatusEntry struct {
+	code  string
+	paths []string
+}
+
+func parseGitStatusZ(status string) []gitStatusEntry {
+	if status == "" {
+		return nil
+	}
+	records := strings.Split(status, "\x00")
+	entries := make([]gitStatusEntry, 0, len(records))
+	for i := 0; i < len(records); i++ {
+		record := records[i]
+		if record == "" || len(record) < 4 {
 			continue
 		}
-		rel := statusPath(line)
+		entry := gitStatusEntry{
+			code:  record[:2],
+			paths: []string{filepath.ToSlash(record[3:])},
+		}
+		if isRenameOrCopyStatus(entry.code) && i+1 < len(records) && records[i+1] != "" {
+			entry.paths = append(entry.paths, filepath.ToSlash(records[i+1]))
+			i++
+		}
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
+func filterFingerprintStatus(entries []gitStatusEntry) []gitStatusEntry {
+	kept := make([]gitStatusEntry, 0, len(entries))
+	for _, entry := range entries {
+		if !statusEntryTouchesUploadablePath(entry) {
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	sort.Slice(kept, func(i, j int) bool {
+		return statusEntryKey(kept[i]) < statusEntryKey(kept[j])
+	})
+	return kept
+}
+
+func statusEntryTouchesUploadablePath(entry gitStatusEntry) bool {
+	for _, path := range entry.paths {
+		if path != "" && !ignoreFingerprintPath(path) {
+			return true
+		}
+	}
+	return false
+}
+
+func statusEntryKey(entry gitStatusEntry) string {
+	return entry.code + "\x00" + strings.Join(entry.paths, "\x00")
+}
+
+func writeStatusEntries(h io.Writer, entries []gitStatusEntry) {
+	for _, entry := range entries {
+		fmt.Fprintf(h, "%s\x00", entry.code)
+		for _, path := range entry.paths {
+			fmt.Fprintf(h, "%s\x00", path)
+		}
+	}
+}
+
+func isRenameOrCopyStatus(code string) bool {
+	return strings.ContainsAny(code, "RC")
+}
+
+func isRenameStatus(code string) bool {
+	return strings.Contains(code, "R")
+}
+
+func hashDirtyFiles(h io.Writer, dir string, entries []gitStatusEntry) error {
+	for _, entry := range entries {
+		if entry.code == "??" || len(entry.paths) == 0 {
+			continue
+		}
+
+		if isRenameOrCopyStatus(entry.code) && len(entry.paths) > 1 {
+			newPath := entry.paths[0]
+			oldPath := entry.paths[1]
+			if isRenameStatus(entry.code) && !ignoreFingerprintPath(oldPath) && oldPath != newPath {
+				fmt.Fprintf(h, "tracked\x00%s\x00deleted\x00", oldPath)
+			}
+			if !ignoreFingerprintPath(newPath) {
+				if err := hashFileState(h, dir, "tracked", newPath, true); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+
+		rel := entry.paths[0]
 		if rel == "" || ignoreFingerprintPath(rel) {
 			continue
 		}
-		full := filepath.Join(dir, rel)
-		info, err := os.Lstat(full)
-		if os.IsNotExist(err) {
-			fmt.Fprintf(h, "tracked\x00%s\x00deleted\x00", rel)
-			continue
-		}
-		if err != nil {
+		if err := hashFileState(h, dir, "tracked", rel, true); err != nil {
 			return err
 		}
-		if info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-			continue
-		}
-		fmt.Fprintf(h, "tracked\x00%s\x00%d\x00", rel, info.Size())
-		f, err := os.Open(full)
-		if err != nil {
-			return err
-		}
-		if _, err := io.Copy(h, f); err != nil {
-			f.Close()
-			return err
-		}
-		if err := f.Close(); err != nil {
-			return err
-		}
-		fmt.Fprint(h, "\x00")
 	}
 	return nil
 }
 
 func hashUntrackedFiles(h io.Writer, dir string) error {
-	out, err := gitOutput(dir, "ls-files", "--others", "--exclude-standard")
+	out, err := gitOutputRaw(dir, "ls-files", "-z", "--others", "--exclude-standard")
 	if err != nil || out == "" {
 		return err
 	}
-	files := strings.Split(out, "\n")
+	files := splitNUL(out)
 	sort.Strings(files)
 	for _, rel := range files {
 		if rel == "" {
 			continue
 		}
+		rel = filepath.ToSlash(rel)
 		if ignoreFingerprintPath(rel) {
 			continue
 		}
-		full := filepath.Join(dir, rel)
-		info, err := os.Lstat(full)
-		if err != nil || info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-			continue
-		}
-		fmt.Fprintf(h, "untracked\x00%s\x00%d\x00", rel, info.Size())
-		f, err := os.Open(full)
-		if err != nil {
+		if err := hashFileState(h, dir, "untracked", rel, false); err != nil {
 			return err
 		}
-		if _, err := io.Copy(h, f); err != nil {
-			f.Close()
-			return err
-		}
-		if err := f.Close(); err != nil {
-			return err
-		}
-		fmt.Fprint(h, "\x00")
 	}
 	return nil
 }
 
-func filterFingerprintStatus(status string) string {
-	var kept []string
-	for _, line := range strings.Split(status, "\n") {
-		line = strings.TrimRight(line, "\r")
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		path := statusPath(line)
-		if path == "" || ignoreFingerprintPath(path) {
-			continue
-		}
-		kept = append(kept, line)
+func splitNUL(out string) []string {
+	if out == "" {
+		return nil
 	}
-	sort.Strings(kept)
-	return strings.Join(kept, "\n")
+	fields := strings.Split(out, "\x00")
+	if len(fields) > 0 && fields[len(fields)-1] == "" {
+		fields = fields[:len(fields)-1]
+	}
+	return fields
 }
 
-func statusPath(line string) string {
-	if len(line) < 4 {
-		return ""
+func hashFileState(h io.Writer, dir, kind, rel string, missingAsDeleted bool) error {
+	full := filepath.Join(dir, filepath.FromSlash(rel))
+	info, err := os.Lstat(full)
+	if os.IsNotExist(err) {
+		if missingAsDeleted {
+			fmt.Fprintf(h, "%s\x00%s\x00deleted\x00", kind, rel)
+		}
+		return nil
 	}
-	path := strings.TrimSpace(line[3:])
-	if _, after, ok := strings.Cut(path, " -> "); ok {
-		path = after
+	if err != nil {
+		return err
 	}
-	return filepath.ToSlash(path)
+	if info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return nil
+	}
+	fmt.Fprintf(h, "%s\x00%s\x00%d\x00", kind, rel, info.Size())
+	f, err := os.Open(full)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(h, f); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	fmt.Fprint(h, "\x00")
+	return nil
 }
 
 func ignoreFingerprintPath(path string) bool {
@@ -155,14 +222,54 @@ func ignoreFingerprintPath(path string) bool {
 	if len(parts) == 0 {
 		return false
 	}
-	if len(parts) > 1 && strings.HasPrefix(parts[0], ".") {
-		return true
+	for _, part := range parts[:len(parts)-1] {
+		if strings.HasPrefix(part, ".") || defaultUploadSkipDir(part) {
+			return true
+		}
 	}
-	switch parts[0] {
-	case ".supermodel", "docs-output", "node_modules", "vendor", "dist", "build", "coverage":
+	filename := parts[len(parts)-1]
+	return isGeneratedShardPath(path) ||
+		isSensitiveFingerprintPath(path) ||
+		defaultUploadSkipFile(filename) ||
+		defaultUploadSkipExtension(filename)
+}
+
+func defaultUploadSkipDir(name string) bool {
+	// Keep this in lockstep with internal/shards/zip.go upload exclusions.
+	// The cache package cannot import shards because shards already imports cache.
+	switch name {
+	case ".git", "node_modules", "vendor", ".venv", "venv", "__pycache__", "dist", "build",
+		".next", ".nuxt", ".cache", ".turbo", "coverage", ".nyc_output", "__snapshots__",
+		"docs-output", ".terraform":
 		return true
+	default:
+		return false
 	}
-	return isGeneratedShardPath(path) || isSensitiveFingerprintPath(path)
+}
+
+func defaultUploadSkipFile(name string) bool {
+	// Keep this in lockstep with internal/shards/zip.go upload exclusions.
+	switch name {
+	case "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb", "Gemfile.lock",
+		"poetry.lock", "go.sum", "Cargo.lock":
+		return true
+	default:
+		return false
+	}
+}
+
+func defaultUploadSkipExtension(name string) bool {
+	// Keep this in lockstep with internal/shards/zip.go upload exclusions.
+	ext := strings.ToLower(filepath.Ext(name))
+	switch ext {
+	case ".map", ".ico", ".woff", ".woff2", ".ttf", ".eot", ".otf", ".mp4", ".mp3",
+		".wav", ".png", ".jpg", ".jpeg", ".gif", ".webp":
+		return true
+	default:
+		return strings.HasSuffix(name, ".min.js") ||
+			strings.HasSuffix(name, ".min.css") ||
+			strings.HasSuffix(name, ".bundle.js")
+	}
 }
 
 func isSensitiveFingerprintPath(path string) bool {
@@ -196,10 +303,18 @@ func isGeneratedShardPath(path string) bool {
 	}
 }
 
-// gitOutput runs a git command in dir and returns its trimmed stdout.
-func gitOutput(dir string, args ...string) (string, error) {
+func gitOutputRaw(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
 	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+// gitOutputTrim runs a git command in dir and returns stdout without trailing whitespace.
+func gitOutputTrim(dir string, args ...string) (string, error) {
+	out, err := gitOutputRaw(dir, args...)
 	if err != nil {
 		return "", err
 	}

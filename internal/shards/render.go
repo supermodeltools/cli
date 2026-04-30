@@ -253,7 +253,10 @@ func safeRemove(repoDir, relPath string) {
 }
 
 // removeStaleSplitShards removes legacy .calls/.deps/.impact files for a source file.
-func removeStaleSplitShards(repoDir, srcFile string) {
+func removeStaleSplitShards(repoDir, srcFile string, dryRun bool) {
+	if dryRun {
+		return
+	}
 	ext := filepath.Ext(srcFile)
 	stem := strings.TrimSuffix(srcFile, ext)
 	for _, p := range []string{
@@ -273,7 +276,7 @@ func RenderAll(repoDir string, cache *Cache, files []string, dryRun bool) (int, 
 
 	for _, srcFile := range files {
 		// Clean up stale legacy split shards when writing the supported .graph file.
-		removeStaleSplitShards(repoDir, srcFile)
+		removeStaleSplitShards(repoDir, srcFile, dryRun)
 
 		ext := filepath.Ext(srcFile)
 		prefix := CommentPrefix(ext)
@@ -281,8 +284,9 @@ func RenderAll(repoDir string, cache *Cache, files []string, dryRun bool) (int, 
 
 		content := RenderGraph(srcFile, cache, prefix)
 		if content == "" {
-			full := filepath.Join(repoDir, ShardFilename(srcFile))
-			_ = os.Remove(full)
+			if !dryRun {
+				safeRemove(repoDir, ShardFilename(srcFile))
+			}
 			continue
 		}
 

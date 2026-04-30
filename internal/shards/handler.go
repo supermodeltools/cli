@@ -85,16 +85,19 @@ func Generate(ctx context.Context, cfg *config.Config, dir string, opts Generate
 	if cacheFile == "" {
 		cacheFile = filepath.Join(repoDir, ".supermodel", "shards.json")
 	}
-	fingerprint, _ := repocache.RepoFingerprint(repoDir)
+	fingerprint, fingerprintErr := repocache.RepoFingerprint(repoDir)
 
 	// Check for existing cache unless --force
 	if !opts.Force {
 		if data, err := os.ReadFile(cacheFile); err == nil {
 			var ir api.ShardIR
 			if err := json.Unmarshal(data, &ir); err == nil && len(ir.Graph.Nodes) > 0 {
-				if !shardCacheMatchesFingerprint(&ir, fingerprint) {
+				switch {
+				case fingerprintErr != nil:
+					ui.Warn("Unable to validate cached graph for current repo contents — re-fetching")
+				case !shardCacheMatchesFingerprint(&ir, fingerprint):
 					ui.Warn("Cached graph is stale for current repo contents — re-fetching")
-				} else {
+				default:
 					ui.Success("Using cached graph (%d nodes) — use --force to re-fetch", len(ir.Graph.Nodes))
 					cache := NewCache()
 					cache.Build(&ir)
@@ -223,7 +226,7 @@ func setShardCacheFingerprint(ir *api.ShardIR, fingerprint string) {
 
 func shardCacheMatchesFingerprint(ir *api.ShardIR, fingerprint string) bool {
 	if fingerprint == "" {
-		return true
+		return false
 	}
 	if ir == nil || ir.Summary == nil {
 		return false

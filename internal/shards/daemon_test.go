@@ -1037,6 +1037,15 @@ func TestLoadOrGenerate_RegeneratesStaleFingerprintCache(t *testing.T) {
 	}
 }
 
+func TestShardCacheMatchesFingerprint_FailsClosedForMissingFingerprint(t *testing.T) {
+	ir := buildIR([]api.Node{newNode("file-main", []string{"File"}, "filePath", "main.go")}, nil)
+	ir.Summary = map[string]any{shardCacheFingerprintKey: "known"}
+
+	if shardCacheMatchesFingerprint(ir, "") {
+		t.Fatal("missing current fingerprint should not be treated as a cache hit")
+	}
+}
+
 func shardsRunGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)

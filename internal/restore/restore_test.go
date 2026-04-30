@@ -254,6 +254,29 @@ func TestBuildProjectGraph_LocalModeExcludesDocsOutput(t *testing.T) {
 	}
 }
 
+func TestBuildProjectGraph_LocalModeExcludesGeneratedShards(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"main.graph.go", "main.calls.go", "main.deps.go", "main.impact.go"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("// generated\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	graph, err := BuildProjectGraph(context.Background(), dir, "smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if graph.Stats.TotalFiles != 1 {
+		t.Fatalf("generated shard files should be ignored by local restore scan: got %d files", graph.Stats.TotalFiles)
+	}
+	if len(graph.Domains) != 1 || len(graph.Domains[0].KeyFiles) != 1 || graph.Domains[0].KeyFiles[0] != "main.go" {
+		t.Fatalf("generated shard files should not become key files, got %#v", graph.Domains)
+	}
+}
+
 // ── buildDomains ──────────────────────────────────────────────────────────────
 
 func TestBuildDomains_Empty(t *testing.T) {

@@ -348,6 +348,9 @@ func collectFiles(ctx context.Context, rootDir string) (extCounts map[string]int
 		if strings.HasPrefix(d.Name(), ".") {
 			return nil
 		}
+		if isGeneratedShardPath(rel) {
+			return nil
+		}
 
 		ext := strings.ToLower(filepath.Ext(path))
 		if _, ok := extToLanguage[ext]; !ok {
@@ -368,6 +371,22 @@ func collectFiles(ctx context.Context, rootDir string) (extCounts map[string]int
 		return nil
 	})
 	return extCounts, dirFiles, total, walkErr
+}
+
+func isGeneratedShardPath(path string) bool {
+	base := filepath.Base(path)
+	ext := filepath.Ext(base)
+	if ext == "" {
+		return false
+	}
+	stem := strings.TrimSuffix(base, ext)
+	tag := strings.TrimPrefix(filepath.Ext(stem), ".")
+	switch tag {
+	case "graph", "calls", "deps", "impact":
+		return true
+	default:
+		return false
+	}
 }
 
 func detectLanguages(extCounts map[string]int) (primary string, languages []string) {

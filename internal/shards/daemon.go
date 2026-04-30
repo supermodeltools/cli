@@ -185,10 +185,13 @@ func (d *Daemon) loadOrGenerate(ctx context.Context) error {
 		if unmarshalErr := json.Unmarshal(data, &ir); unmarshalErr != nil {
 			d.logf("Warning: cache file invalid, regenerating: %v", unmarshalErr)
 		} else if len(ir.Graph.Nodes) > 0 {
-			fingerprint, _ := repocache.RepoFingerprint(d.cfg.RepoDir)
-			if !shardCacheMatchesFingerprint(&ir, fingerprint) {
+			fingerprint, fingerprintErr := repocache.RepoFingerprint(d.cfg.RepoDir)
+			switch {
+			case fingerprintErr != nil:
+				d.logf("Unable to validate cached graph for current repo contents, regenerating")
+			case !shardCacheMatchesFingerprint(&ir, fingerprint):
 				d.logf("Cache is stale for current repo contents, regenerating")
-			} else {
+			default:
 				d.logf("Loaded existing cache (%d nodes, %d relationships)",
 					len(ir.Graph.Nodes), len(ir.Graph.Relationships))
 
