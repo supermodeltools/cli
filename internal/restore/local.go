@@ -29,7 +29,7 @@ var ignoreDirs = map[string]bool{
 	"build": true, "target": true, ".tox": true, "venv": true,
 	".venv": true, "coverage": true, ".nyc_output": true, "out": true,
 	".next": true, ".nuxt": true, ".turbo": true, "Pods": true,
-	"elm-stuff": true, "_build": true, "env": true,
+	"elm-stuff": true, "_build": true, "env": true, "docs-output": true,
 }
 
 // extToLanguage maps common file extensions to language display names.
@@ -332,7 +332,7 @@ func collectFiles(ctx context.Context, rootDir string) (extCounts map[string]int
 		}
 		if d.IsDir() {
 			name := d.Name()
-			if ignoreDirs[name] || strings.HasPrefix(name, ".") {
+			if path != rootDir && (ignoreDirs[name] || strings.HasPrefix(name, ".")) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -350,9 +350,10 @@ func collectFiles(ctx context.Context, rootDir string) (extCounts map[string]int
 		}
 
 		ext := strings.ToLower(filepath.Ext(path))
-		if ext != "" {
-			extCounts[ext]++
+		if _, ok := extToLanguage[ext]; !ok {
+			return nil
 		}
+		extCounts[ext]++
 		total++
 
 		parts := strings.SplitN(rel, string(filepath.Separator), 3)

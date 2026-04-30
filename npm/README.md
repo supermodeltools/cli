@@ -23,7 +23,7 @@ curl -fsSL https://supermodeltools.com/install | sh
 supermodel analyze
 
 # Watch for changes and keep graphs up to date
-supermodel watch
+supermodel
 
 # Print the Claude Code skill prompt
 supermodel skill

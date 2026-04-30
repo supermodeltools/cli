@@ -17,6 +17,9 @@ func TestIsShardFile(t *testing.T) {
 		want bool
 	}{
 		{"handler.graph.go", true},
+		{"handler.calls.go", true},
+		{"handler.deps.go", true},
+		{"handler.impact.go", true},
 		{"handler.graph.ts", true},
 		{"handler.graph.py", true},
 		{"handler.go", false},
@@ -84,6 +87,13 @@ func TestShouldInclude_SkipDir(t *testing.T) {
 	}
 	if shouldInclude("node_modules/pkg/index.js", 100, ex) {
 		t.Error("node_modules file should be excluded")
+	}
+}
+
+func TestShouldInclude_DefaultDocsOutputDir(t *testing.T) {
+	ex := buildExclusions(t.TempDir())
+	if shouldInclude("docs-output/index.html", 100, ex) {
+		t.Error("default docs-output directory should be excluded from analysis uploads")
 	}
 }
 

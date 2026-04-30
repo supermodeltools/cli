@@ -45,7 +45,7 @@ const contextBombTmpl = `# Supermodel Context — {{.ProjectName}}
 **Language:** {{.Graph.Language}}{{if .Graph.Framework}}
 **Framework:** {{.Graph.Framework}}{{end}}{{if .Graph.Description}}
 **Description:** {{.Graph.Description}}{{end}}
-**Codebase:** {{.Graph.Stats.TotalFiles}} files · {{.Graph.Stats.TotalFunctions}} functions
+**Codebase:** {{.Graph.Stats.TotalFiles}} source files{{if and .LocalMode (eq .Graph.Stats.TotalFunctions 0)}} · functions not counted locally{{else}} · {{.Graph.Stats.TotalFunctions}} functions{{end}}
 {{- if .Graph.Stats.Languages}}
 
 **Languages:** {{languageList .Graph.Stats.Languages}}{{end}}{{if .Graph.ExternalDeps}}
@@ -168,9 +168,14 @@ func truncateToTokenBudget(graph *ProjectGraph, projectName string, opts RenderO
 		fmt.Fprintf(&hdr, "> ⚠️ %d circular dependency %s detected\n", graph.Stats.CircularDependencyCycles, label)
 	}
 	fmt.Fprintf(&hdr,
-		"\n**Language:** %s · **Files:** %d · **Functions:** %d",
-		graph.Language, graph.Stats.TotalFiles, graph.Stats.TotalFunctions,
+		"\n**Language:** %s · **Files:** %d",
+		graph.Language, graph.Stats.TotalFiles,
 	)
+	if opts.LocalMode && graph.Stats.TotalFunctions == 0 {
+		hdr.WriteString(" · **Functions:** not counted locally")
+	} else {
+		fmt.Fprintf(&hdr, " · **Functions:** %d", graph.Stats.TotalFunctions)
+	}
 	required := hdr.String()
 
 	reqTokens := CountTokens(required)

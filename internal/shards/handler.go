@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/supermodeltools/cli/internal/api"
+	repocache "github.com/supermodeltools/cli/internal/cache"
 	"github.com/supermodeltools/cli/internal/config"
 	"github.com/supermodeltools/cli/internal/ui"
 )
@@ -25,12 +26,14 @@ const (
 	ansiDim    = "\033[2m"
 )
 
+const shardCacheFingerprintKey = "_supermodelFingerprint"
+
 // GenerateOptions configures the generate command.
 type GenerateOptions struct {
 	Force     bool
 	DryRun    bool
 	CacheFile string
-	ThreeFile bool // generate .calls/.deps/.impact instead of single .graph
+	ThreeFile bool // deprecated: render .calls/.deps/.impact instead of single .graph
 }
 
 func renderShards(repoDir string, cache *Cache, files []string, dryRun, threeFile bool) (int, error) {
@@ -83,29 +86,37 @@ func Generate(ctx context.Context, cfg *config.Config, dir string, opts Generate
 	if err := guardDir(repoDir); err != nil {
 		return err
 	}
+	if err := updateGitignore(repoDir); err != nil {
+		return err
+	}
 
 	cacheFile := opts.CacheFile
 	if cacheFile == "" {
 		cacheFile = filepath.Join(repoDir, ".supermodel", "shards.json")
 	}
+	fingerprint, _ := repocache.RepoFingerprint(repoDir)
 
 	// Check for existing cache unless --force
 	if !opts.Force {
 		if data, err := os.ReadFile(cacheFile); err == nil {
 			var ir api.ShardIR
 			if err := json.Unmarshal(data, &ir); err == nil && len(ir.Graph.Nodes) > 0 {
-				ui.Success("Using cached graph (%d nodes) — use --force to re-fetch", len(ir.Graph.Nodes))
-				cache := NewCache()
-				cache.Build(&ir)
-				files := cache.SourceFiles()
-				spin := ui.Start("Rendering shards…")
-				written, err := renderShards(repoDir, cache, files, opts.DryRun, opts.ThreeFile)
-				spin.Stop()
-				if err != nil {
-					return err
+				if !shardCacheMatchesFingerprint(&ir, fingerprint) {
+					ui.Warn("Cached graph is stale for current repo contents — re-fetching")
+				} else {
+					ui.Success("Using cached graph (%d nodes) — use --force to re-fetch", len(ir.Graph.Nodes))
+					cache := NewCache()
+					cache.Build(&ir)
+					files := cache.SourceFiles()
+					spin := ui.Start("Rendering shards…")
+					written, err := renderShards(repoDir, cache, files, opts.DryRun, opts.ThreeFile)
+					spin.Stop()
+					if err != nil {
+						return err
+					}
+					ui.Success("Wrote %d shards for %d source files", written, len(files))
+					return updateGitignore(repoDir)
 				}
-				ui.Success("Wrote %d shards for %d source files", written, len(files))
-				return updateGitignore(repoDir)
 			}
 		}
 	}
@@ -173,6 +184,8 @@ func Generate(ctx context.Context, cfg *config.Config, dir string, opts Generate
 		return err
 	}
 
+	setShardCacheFingerprint(ir, fingerprint)
+
 	// Persist cache
 	if err := os.MkdirAll(filepath.Dir(cacheFile), 0o755); err != nil {
 		return fmt.Errorf("create cache dir: %w", err)
@@ -205,6 +218,27 @@ func Generate(ctx context.Context, cfg *config.Config, dir string, opts Generate
 		written, len(files), len(ir.Graph.Nodes), len(ir.Graph.Relationships))
 
 	return updateGitignore(repoDir)
+}
+
+func setShardCacheFingerprint(ir *api.ShardIR, fingerprint string) {
+	if ir == nil || fingerprint == "" {
+		return
+	}
+	if ir.Summary == nil {
+		ir.Summary = make(map[string]any)
+	}
+	ir.Summary[shardCacheFingerprintKey] = fingerprint
+}
+
+func shardCacheMatchesFingerprint(ir *api.ShardIR, fingerprint string) bool {
+	if fingerprint == "" {
+		return true
+	}
+	if ir == nil || ir.Summary == nil {
+		return false
+	}
+	got, _ := ir.Summary[shardCacheFingerprintKey].(string)
+	return got == fingerprint
 }
 
 // Watch runs generate on startup, then enters daemon mode.

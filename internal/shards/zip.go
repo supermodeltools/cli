@@ -25,7 +25,8 @@ var zipSkipDirs = map[string]bool{
 	"venv": true, "__pycache__": true, "dist": true, "build": true,
 	".next": true, ".nuxt": true, ".cache": true, ".turbo": true,
 	"coverage": true, ".nyc_output": true, "__snapshots__": true,
-	".terraform": true,
+	"docs-output": true,
+	".terraform":  true,
 }
 
 var zipSkipFiles = map[string]bool{

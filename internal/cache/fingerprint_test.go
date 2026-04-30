@@ -88,6 +88,99 @@ func TestRepoFingerprint_ChangesAfterCommit(t *testing.T) {
 	}
 }
 
+func TestRepoFingerprint_ChangesForUntrackedFile(t *testing.T) {
+	dir := initGitRepo(t)
+	fp1, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "generated.go"), []byte("package main\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fp2, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fp1 == fp2 {
+		t.Error("fingerprint should change when an untracked uploadable file appears")
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "generated.go"), []byte("package main\nfunc generated() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fp3, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fp2 == fp3 {
+		t.Error("fingerprint should change when untracked file contents change")
+	}
+}
+
+func TestRepoFingerprint_IgnoresGeneratedArtifacts(t *testing.T) {
+	dir := initGitRepo(t)
+	fp1, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(dir, ".supermodel"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".supermodel", "shards.json"), []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "main.graph.go"), []byte("// generated graph\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "docs-output"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "docs-output", "index.html"), []byte("<html></html>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	fp2, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fp1 != fp2 {
+		t.Fatalf("fingerprint should ignore generated artifacts: %q != %q", fp1, fp2)
+	}
+}
+
+func TestRepoFingerprint_IgnoresGeneratedArtifactsWhenSourceIsDirty(t *testing.T) {
+	dir := initGitRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "main.graph.go"), []byte("// generated graph\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	run(t, dir, "git", "add", "-f", "main.graph.go")
+	run(t, dir, "git", "commit", "-m", "track generated artifact")
+
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n// dirty\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "main.graph.go"), []byte("// regenerated graph\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fpWithGeneratedDirty, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "main.graph.go"), []byte("// generated graph\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fpSourceOnlyDirty, err := RepoFingerprint(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fpWithGeneratedDirty != fpSourceOnlyDirty {
+		t.Fatalf("generated shard changes should not affect source fingerprint: %q != %q", fpWithGeneratedDirty, fpSourceOnlyDirty)
+	}
+}
+
 func TestRepoFingerprint_NotGitRepo(t *testing.T) {
 	dir := t.TempDir()
 	_, err := RepoFingerprint(dir)
