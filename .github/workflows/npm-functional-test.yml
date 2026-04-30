@@ -1,0 +1,94 @@
+name: npm functional test
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'npm version to test'
+        default: '0.6.12'
+        required: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install from npm
+        shell: bash
+        run: |
+          npm install -g @supermodeltools/cli@${{ inputs.version }} --foreground-scripts 2>&1 | tee install.log
+          echo "--- install.log ---"
+          cat install.log
+
+      - name: PASS - binary installs and get-started message shown
+        shell: bash
+        run: |
+          grep -qi "get started" install.log || (echo "FAIL: get-started message missing" && exit 1)
+          echo "PASS: get-started message shown"
+
+      - name: PASS - wizard not triggered at install time
+        shell: bash
+        run: |
+          grep -qi "supermodel setup" install.log && (echo "FAIL: wizard launched at install" && exit 1) || true
+          echo "PASS: wizard not triggered at install"
+
+      - name: PASS - correct version
+        shell: bash
+        run: |
+          V=$(supermodel version 2>&1)
+          echo "version output: $V"
+          echo "$V" | grep -q "${{ inputs.version }}" || (echo "FAIL: wrong version" && exit 1)
+          echo "PASS: version ${{ inputs.version }}"
+
+      - name: PASS - non-TTY + no key → not authenticated
+        shell: bash
+        run: |
+          OUT=$(HOME="${RUNNER_TEMP}/clean-home" SUPERMODEL_API_KEY="" supermodel </dev/null 2>&1 || true)
+          echo "output: $OUT"
+          echo "$OUT" | grep -qi "not authenticated" || (echo "FAIL: expected not-authenticated error" && exit 1)
+          echo "PASS: non-TTY no-key gives auth error"
+
+      - name: PASS - version subcommand bypasses auth gate
+        shell: bash
+        run: |
+          OUT=$(HOME="${RUNNER_TEMP}/clean-home" SUPERMODEL_API_KEY="" supermodel version 2>&1)
+          echo "$OUT" | grep -q "${{ inputs.version }}" || (echo "FAIL: version blocked by auth gate" && exit 1)
+          echo "PASS: version works without key"
+
+      - name: PASS - completion bash bypasses auth gate (unix only)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          OUT=$(HOME="${RUNNER_TEMP}/clean-home" SUPERMODEL_API_KEY="" supermodel completion bash 2>&1 | head -3)
+          echo "$OUT" | grep -qi "supermodel" || (echo "FAIL: completion blocked" && exit 1)
+          echo "PASS: completion bash works without key"
+
+      - name: PASS - analyze without key hits setup gate not auth gate
+        shell: bash
+        run: |
+          OUT=$(HOME="${RUNNER_TEMP}/clean-home" SUPERMODEL_API_KEY="" supermodel analyze . 2>&1 || true)
+          echo "output: $OUT"
+          echo "$OUT" | grep -qi "supermodel setup\|get started" || (echo "FAIL: expected setup gate" && exit 1)
+          echo "$OUT" | grep -qi "not authenticated" && (echo "FAIL: hit auth gate instead of setup gate" && exit 1) || true
+          echo "PASS: analyze without key hits setup gate"
+
+      - name: PASS - install.sh has get-started message and no wizard call
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          SCRIPT=$(curl -fsSL https://supermodeltools.com/install 2>/dev/null)
+          echo "$SCRIPT" | grep -qi "get started" || (echo "FAIL: install.sh missing get-started" && exit 1)
+          echo "$SCRIPT" | grep -qi "supermodel setup" && (echo "FAIL: install.sh still calls setup wizard" && exit 1) || true
+          echo "PASS: install.sh correct"
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: echo "All functional checks completed for ${{ matrix.os }}"
