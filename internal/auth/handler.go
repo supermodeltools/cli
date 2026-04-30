@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -23,6 +24,18 @@ import (
 
 const dashboardBase = "https://dashboard.supermodeltools.com"
 
+// loginOut is the writer used for all Login output. Override in tests to
+// capture output without touching os.Stdout.
+var loginOut io.Writer = os.Stdout
+
+// stdinReader is the reader used by readSecret in non-TTY mode. Override in
+// tests to supply canned input without touching os.Stdin.
+var stdinReader io.Reader = os.Stdin
+
+// openBrowserFunc is the injectable browser-open function. Override in tests
+// to simulate headless environments where a browser cannot be launched.
+var openBrowserFunc = openBrowserDefault
+
 // Login runs the browser-based login flow. Opens the dashboard to create an
 // API key, receives it via localhost callback, validates, and saves it.
 // Falls back to manual paste if the browser flow fails.
@@ -35,8 +48,8 @@ func Login(ctx context.Context) error {
 	// Start localhost server on a random port.
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Could not start local server — falling back to manual login.")
-		return loginManual(cfg)
+		fmt.Fprintln(loginOut, "Could not start local server — falling back to manual login.")
+		return loginManual(cfg, "")
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
 	state := randomState()
@@ -71,20 +84,20 @@ func Login(ctx context.Context) error {
 
 	// Build the dashboard URL and open the browser.
 	authURL := fmt.Sprintf("%s/cli-auth?port=%d&state=%s", dashboardBase, port, state)
-	fmt.Println("Opening browser to log in...")
-	fmt.Printf("If the browser doesn't open, visit:\n  %s\n\n", authURL)
+	fmt.Fprintln(loginOut, "Opening browser to log in...")
+	fmt.Fprintf(loginOut, "If the browser doesn't open, visit:\n  %s\n\n", authURL)
 
-	if err := openBrowser(authURL); err != nil {
-		fmt.Fprintln(os.Stderr, "Could not open browser — falling back to manual login.")
+	if err := openBrowserFunc(authURL); err != nil {
+		fmt.Fprintln(loginOut, "Could not open browser — falling back to manual login.")
 		srv.Close()
-		return loginManual(cfg)
+		return loginManual(cfg, authURL)
 	}
 
 	// Wait for callback or timeout.
-	fmt.Print("Waiting for authentication...")
+	fmt.Fprint(loginOut, "Waiting for authentication...")
 	select {
 	case key := <-keyCh:
-		fmt.Println()
+		fmt.Fprintln(loginOut)
 		cfg.APIKey = strings.TrimSpace(key)
 		if err := cfg.Save(); err != nil {
 			return err
@@ -92,15 +105,15 @@ func Login(ctx context.Context) error {
 		ui.Success("Authenticated — key saved to %s", config.Path())
 		return nil
 	case err := <-errCh:
-		fmt.Println()
+		fmt.Fprintln(loginOut)
 		return fmt.Errorf("local server error: %w", err)
 	case <-time.After(5 * time.Minute):
-		fmt.Println()
-		fmt.Fprintln(os.Stderr, "Timed out waiting for browser login — falling back to manual login.")
+		fmt.Fprintln(loginOut)
+		fmt.Fprintln(loginOut, "Timed out waiting for browser login — falling back to manual login.")
 		srv.Close()
-		return loginManual(cfg)
+		return loginManual(cfg, authURL)
 	case <-ctx.Done():
-		fmt.Println()
+		fmt.Fprintln(loginOut)
 		return ctx.Err()
 	}
 }
@@ -141,10 +154,16 @@ func Logout(_ context.Context) error {
 	return nil
 }
 
-// loginManual is the fallback paste-based login.
-func loginManual(cfg *config.Config) error {
-	fmt.Println("Get your API key at https://dashboard.supermodeltools.com/api-keys")
-	fmt.Print("Paste your API key: ")
+// loginManual is the fallback paste-based login. When authURL is non-empty
+// (i.e. the browser-open step failed), it is printed so the user can visit it
+// from another machine or browser.
+func loginManual(cfg *config.Config, authURL string) error {
+	if authURL != "" {
+		fmt.Fprintf(loginOut, "Visit the following URL to get your API key:\n  %s\n\n", authURL)
+	} else {
+		fmt.Fprintf(loginOut, "Get your API key at %s/api-keys\n", dashboardBase)
+	}
+	fmt.Fprint(loginOut, "Paste your API key: ")
 
 	key, err := readSecret()
 	if err != nil {
@@ -163,7 +182,7 @@ func loginManual(cfg *config.Config) error {
 	return nil
 }
 
-func openBrowser(url string) error {
+func openBrowserDefault(url string) error {
 	switch runtime.GOOS {
 	case "darwin":
 		return exec.Command("open", url).Start()
@@ -183,17 +202,18 @@ func randomState() string {
 }
 
 // readSecret reads a line from stdin, suppressing echo when a TTY is attached.
+// In non-TTY mode it reads from stdinReader (injectable for tests).
 func readSecret() (string, error) {
 	fd := int(syscall.Stdin) //nolint:unconvert // syscall.Stdin is uintptr on Windows
 	if term.IsTerminal(fd) {
 		b, err := term.ReadPassword(fd)
-		fmt.Println()
+		fmt.Fprintln(loginOut)
 		if err != nil {
 			return "", err
 		}
 		return string(b), nil
 	}
-	scanner := bufio.NewScanner(os.Stdin)
+	scanner := bufio.NewScanner(stdinReader)
 	if scanner.Scan() {
 		return scanner.Text(), nil
 	}

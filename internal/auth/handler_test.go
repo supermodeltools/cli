@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -8,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -282,5 +284,61 @@ func TestLogout_SaveError(t *testing.T) {
 	t.Cleanup(func() { os.Chmod(cfgDir, 0o755) }) //nolint:errcheck
 	if err := Logout(context.Background()); err == nil {
 		t.Error("expected error when cfg.Save fails during logout")
+	}
+}
+
+// TestLoginFallback_HeadlessBrowser verifies that when the browser cannot be
+// opened (headless/SSH/container environments), Login prints the auth URL to
+// stdout and falls back to prompting the user to paste an API key manually.
+func TestLoginFallback_HeadlessBrowser(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
+	t.Setenv("SUPERMODEL_API_KEY", "")
+
+	// Override the injectable browser-open function to simulate headless failure.
+	orig := openBrowserFunc
+	openBrowserFunc = func(url string) error {
+		return fmt.Errorf("no display available")
+	}
+	t.Cleanup(func() { openBrowserFunc = orig })
+
+	// Provide stdin replacement so loginManual can read the pasted key.
+	stdinInput := "smsk_live_headless_test\n"
+	origStdinReader := stdinReader
+	stdinReader = strings.NewReader(stdinInput)
+	t.Cleanup(func() { stdinReader = origStdinReader })
+
+	// Capture output to verify the auth URL was printed.
+	var outBuf bytes.Buffer
+	origOut := loginOut
+	loginOut = &outBuf
+	t.Cleanup(func() { loginOut = origOut })
+
+	ctx := context.Background()
+	if err := Login(ctx); err != nil {
+		t.Fatalf("Login returned unexpected error: %v", err)
+	}
+
+	output := outBuf.String()
+
+	// The auth URL (with port and state) must appear in the output so the user
+	// can visit it in a separate browser.
+	if !strings.Contains(output, dashboardBase+"/cli-auth") {
+		t.Errorf("expected auth URL containing %q in output, got:\n%s", dashboardBase+"/cli-auth", output)
+	}
+
+	// A prompt telling the user to paste their API key must appear.
+	if !strings.Contains(output, "Paste your API key") {
+		t.Errorf("expected 'Paste your API key' prompt in output, got:\n%s", output)
+	}
+
+	// The API key must have been saved.
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.APIKey != "smsk_live_headless_test" {
+		t.Errorf("expected API key %q saved, got %q", "smsk_live_headless_test", cfg.APIKey)
 	}
 }
