@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # Supermodel CLI installer
-# Usage: curl -fsSL https://supermodeltools.com/install.sh | sh
+# Usage: curl -fsSL https://supermodeltools.com/install | sh
 
 set -e
 
