@@ -1,0 +1,62 @@
+{
+  "name": "impact-analysis-real-repos-v1",
+  "description": "Pinned public TypeScript repositories used to score Supermodel-style impact analysis against real compiler failures.",
+  "cases": [
+    {
+      "name": "tinyspy-define-required-parameter",
+      "repo": "https://github.com/tinylibs/tinyspy.git",
+      "commit": "8226c9aeb75993a0ad10bec01b0c91031d36ff34",
+      "sourceRoots": ["src"],
+      "target": {
+        "file": "src/utils.ts",
+        "name": "define"
+      },
+      "mutation": {
+        "description": "Add a required parameter to the exported define helper.",
+        "file": "src/utils.ts",
+        "search": "export function define(\n  obj: any,\n  key: string | number | symbol,\n  descriptor: PropertyDescriptor\n) {",
+        "replace": "export function define(\n  obj: any,\n  key: string | number | symbol,\n  descriptor: PropertyDescriptor,\n  metadata: string\n) {"
+      },
+      "check": {
+        "command": "tsc",
+        "args": ["--project", "tsconfig.json", "--noEmit"]
+      }
+    },
+    {
+      "name": "tinybench-assert-required-parameter",
+      "repo": "https://github.com/tinylibs/tinybench.git",
+      "commit": "a5e251e5c98da4b293e1b76e58243979daca50be",
+      "sourceRoots": ["src"],
+      "target": {
+        "file": "src/utils.ts",
+        "name": "assert"
+      },
+      "mutation": {
+        "description": "Add a required parameter to the exported assert helper.",
+        "file": "src/utils.ts",
+        "search": "export const assert = (condition: boolean, message: string): void => {",
+        "replace": "export const assert = (\n  condition: boolean,\n  message: string,\n  code: string\n): void => {"
+      },
+      "check": {
+        "command": "tsc",
+        "args": [
+          "--noEmit",
+          "--target",
+          "ES2022",
+          "--module",
+          "preserve",
+          "--moduleResolution",
+          "Bundler",
+          "--skipLibCheck",
+          "--strict",
+          "false",
+          "--types",
+          "node",
+          "--typeRoots",
+          "${nodeTypes}",
+          "src/*.ts"
+        ]
+      }
+    }
+  ]
+}

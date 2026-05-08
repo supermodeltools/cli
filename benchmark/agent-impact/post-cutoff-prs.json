@@ -1,0 +1,372 @@
+{
+  "name": "post-cutoff-large-pr-candidates",
+  "knowledgeCutoffBoundary": "2024-06",
+  "selectionRule": "Merged after 2025-01-01, from large public repositories, with stable base and merge SHAs available from GitHub. Initial slate favors PRs with production and test files where possible.",
+  "replayDesign": {
+    "checkout": "base_sha",
+    "reference": "merge_commit_sha or PR patch",
+    "controlArm": "agent receives the failing checkout and task prompt only",
+    "impactArm": "agent receives the same failing checkout plus Supermodel impact context generated from the PR target files before seeing verifier output",
+    "recommendedTaskShape": "Apply the PR's test additions to the base checkout, withhold the production fix, run the focused verifier, then ask the agent to repair without seeing the reference patch.",
+    "primaryMetrics": [
+      "success",
+      "file-level F1 against reference PR production files",
+      "time",
+      "tool calls",
+      "input tokens",
+      "output tokens",
+      "reasoning tokens",
+      "time to first reference file"
+    ]
+  },
+  "candidates": [
+    {
+      "id": "nextjs-93417-draft-mode-streaming",
+      "repo": "vercel/next.js",
+      "url": "https://github.com/vercel/next.js/pull/93417",
+      "number": 93417,
+      "title": "Fix streaming in draft mode for cache components",
+      "mergedAt": "2026-05-01T22:56:29Z",
+      "baseRef": "canary",
+      "baseSha": "65340b27724dc2878e4fcef4b8608ad06e7b4cc8",
+      "mergeCommitSha": "aacf6e19e710aebbfa1dbdf93558b37caa3d290b",
+      "repoSizeKb": 2560072,
+      "language": "JavaScript",
+      "changedFiles": 5,
+      "additions": 42,
+      "deletions": 0,
+      "files": [
+        "packages/next/src/build/templates/app-page.ts",
+        "test/e2e/app-dir/cache-components/app/draftmode/streaming/layout.tsx",
+        "test/e2e/app-dir/cache-components/app/draftmode/streaming/loading.tsx",
+        "test/e2e/app-dir/cache-components/app/draftmode/streaming/page.tsx",
+        "test/e2e/app-dir/cache-components/cache-components.draft-mode.test.ts"
+      ],
+      "impactRanking": {
+        "testFiles": [
+          "test/e2e/app-dir/cache-components/app/draftmode/streaming/layout.tsx",
+          "test/e2e/app-dir/cache-components/app/draftmode/streaming/loading.tsx",
+          "test/e2e/app-dir/cache-components/app/draftmode/streaming/page.tsx",
+          "test/e2e/app-dir/cache-components/cache-components.draft-mode.test.ts"
+        ],
+        "productionFiles": [
+          "packages/next/src/build/templates/app-page.ts"
+        ],
+        "impactContextMode": "real-supermodel-scoped-ranking"
+      },
+      "notes": "Large repo, focused runtime/e2e behavior. Good for search-cost measurement, but verifier may be expensive."
+    },
+    {
+      "id": "vscode-314217-tool-search-resume",
+      "repo": "microsoft/vscode",
+      "url": "https://github.com/microsoft/vscode/pull/314217",
+      "number": 314217,
+      "title": "Fix tool_search bookkeeping when resuming from stateful marker",
+      "mergedAt": "2026-05-04T20:58:00Z",
+      "baseRef": "main",
+      "baseSha": "5c4d9a275639b6ad7b2dad7192c07a5f2112c185",
+      "mergeCommitSha": "932dd112a0e7c3d29b6446463e1c3be2da51dc4d",
+      "repoSizeKb": 1244413,
+      "language": "TypeScript",
+      "changedFiles": 2,
+      "additions": 86,
+      "deletions": 5,
+      "files": [
+        "extensions/copilot/src/platform/endpoint/node/responsesApi.ts",
+        "extensions/copilot/src/platform/endpoint/node/test/responsesApiToolSearch.spec.ts"
+      ],
+      "impactRanking": {
+        "testFiles": [
+          "extensions/copilot/src/platform/endpoint/node/test/responsesApiToolSearch.spec.ts"
+        ],
+        "productionFiles": [
+          "extensions/copilot/src/platform/endpoint/node/responsesApi.ts"
+        ],
+        "impactContextMode": "real-supermodel-scoped-ranking"
+      },
+      "notes": "Large TypeScript repo, production plus focused test file. Candidate for a targeted unit-style verifier."
+    },
+    {
+      "id": "mui-48472-switch-slot-role",
+      "repo": "mui/material-ui",
+      "url": "https://github.com/mui/material-ui/pull/48472",
+      "number": 48472,
+      "title": "[switch] Fix incorrect `role` with `slotProps.input` (@mj12albert)",
+      "mergedAt": "2026-05-04T16:59:38Z",
+      "baseRef": "v7.x",
+      "baseSha": "c3628bd4930e9089fdf41cba78fc2b5798a2bc76",
+      "mergeCommitSha": "a2c7fa0eaeec48767ef7728a1d418609e0bf44ea",
+      "repoSizeKb": 736512,
+      "language": "JavaScript",
+      "changedFiles": 2,
+      "additions": 22,
+      "deletions": 7,
+      "files": [
+        "packages/mui-material/src/Switch/Switch.js",
+        "packages/mui-material/src/Switch/Switch.test.js"
+      ],
+      "impactRanking": {
+        "testFiles": [
+          "packages/mui-material/src/Switch/Switch.test.js"
+        ],
+        "productionFiles": [
+          "packages/mui-material/src/Switch/Switch.js"
+        ],
+        "impactContextMode": "real-supermodel-scoped-ranking"
+      },
+      "notes": "Large component library, focused component behavior with test coverage."
+    },
+    {
+      "id": "grafana-123935-alert-rule-pagination",
+      "repo": "grafana/grafana",
+      "url": "https://github.com/grafana/grafana/pull/123935",
+      "number": 123935,
+      "title": "Alerting: fix pagination for ungrouped alert rules",
+      "mergedAt": "2026-05-04T19:46:34Z",
+      "baseRef": "main",
+      "baseSha": "d1aa1103fb21f4eee24c2e9eb5e5b65488699466",
+      "mergeCommitSha": "1f3b89573f8d81cd1bab72407b42d41fd4561eb1",
+      "repoSizeKb": 1635691,
+      "language": "TypeScript",
+      "changedFiles": 2,
+      "additions": 67,
+      "deletions": 22,
+      "files": [
+        "pkg/services/ngalert/store/alert_rule.go",
+        "pkg/services/ngalert/store/alert_rule_test.go"
+      ],
+      "replay": {
+        "verifier": [
+          "go test ./pkg/services/ngalert/store -run 'TestIntegration_ListAlertRulesByGroup/should_paginate_with_no-group_rule_group_filter' -count=1"
+        ],
+        "testFiles": [
+          "pkg/services/ngalert/store/alert_rule_test.go"
+        ],
+        "productionFiles": [
+          "pkg/services/ngalert/store/alert_rule.go"
+        ],
+        "impactContextMode": "oracle-reference-production-files"
+      },
+      "notes": "Large mixed repo, Go backend behavior with focused test coverage."
+    },
+    {
+      "id": "react-36047-fragment-listener-leak",
+      "repo": "facebook/react",
+      "url": "https://github.com/facebook/react/pull/36047",
+      "number": 36047,
+      "title": "Fix FragmentInstance listener leak: normalize boolean vs object capture options per DOM spec",
+      "mergedAt": "2026-04-22T13:40:35Z",
+      "baseRef": "main",
+      "baseSha": "c80a07509582daadf275f36ffe7a88c3b12e9db4",
+      "mergeCommitSha": "142cfde89edab3d4eabd6335458b4c8736cebfb6",
+      "repoSizeKb": 968010,
+      "language": "JavaScript",
+      "changedFiles": 2,
+      "additions": 165,
+      "deletions": 1,
+      "files": [
+        "packages/react-dom-bindings/src/client/ReactFiberConfigDOM.js",
+        "packages/react-dom/src/__tests__/ReactDOMFragmentRefs-test.js"
+      ],
+      "impactRanking": {
+        "testFiles": [
+          "packages/react-dom/src/__tests__/ReactDOMFragmentRefs-test.js"
+        ],
+        "productionFiles": [
+          "packages/react-dom-bindings/src/client/ReactFiberConfigDOM.js"
+        ],
+        "impactContextMode": "real-supermodel-scoped-ranking"
+      },
+      "notes": "Large framework repo, semantic runtime bug with a focused regression test."
+    },
+    {
+      "id": "angular-68512-async-validator-pending",
+      "repo": "angular/angular",
+      "url": "https://github.com/angular/angular/pull/68512",
+      "number": 68512,
+      "title": "fix(forms): ensure debounced async validators produce pending status during debounce",
+      "mergedAt": "2026-05-04T20:03:08Z",
+      "baseRef": "main",
+      "baseSha": "a4145dea06450f5947a1b76e5e7e2478dfb89444",
+      "mergeCommitSha": "0ea50ffe5adb07515867e8bf30d1abee49413003",
+      "repoSizeKb": 629690,
+      "language": "TypeScript",
+      "changedFiles": 4,
+      "additions": 68,
+      "deletions": 14,
+      "files": [
+        "packages/core/src/core_private_export.ts",
+        "packages/core/src/resource/resource.ts",
+        "packages/forms/signals/src/api/rules/validation/validate_async.ts",
+        "packages/forms/signals/test/node/validation_status.spec.ts"
+      ],
+      "impactRanking": {
+        "testFiles": [
+          "packages/forms/signals/test/node/validation_status.spec.ts"
+        ],
+        "productionFiles": [
+          "packages/core/src/core_private_export.ts",
+          "packages/core/src/resource/resource.ts",
+          "packages/forms/signals/src/api/rules/validation/validate_async.ts"
+        ],
+        "impactContextMode": "real-supermodel-scoped-ranking"
+      },
+      "notes": "Large TypeScript framework repo, cross-package forms/core change with regression test."
+    },
+    {
+      "id": "prisma-29512-unmapped-driver-error",
+      "repo": "prisma/prisma",
+      "url": "https://github.com/prisma/prisma/pull/29512",
+      "number": 29512,
+      "title": "fix(client-engine-runtime): surface unmapped driver errors as user-facing P2039",
+      "mergedAt": "2026-04-27T16:59:40Z",
+      "baseRef": "main",
+      "baseSha": "895729a632ce43217962badf0849c2ffc3da2047",
+      "mergeCommitSha": "0036baf8c9bb0b53e18c04fb27de4acf0535a306",
+      "repoSizeKb": 168327,
+      "language": "TypeScript",
+      "changedFiles": 9,
+      "additions": 362,
+      "deletions": 36,
+      "files": [
+        "AGENTS.md",
+        "packages/client-engine-runtime/src/user-facing-error.test.ts",
+        "packages/client-engine-runtime/src/user-facing-error.ts",
+        "packages/client/src/runtime/core/engines/client/ClientEngine.ts",
+        "packages/client/tests/functional/fulltext-search/__snapshots__/tests.ts.snap",
+        "packages/client/tests/functional/fulltext-search/tests.ts",
+        "packages/client/tests/functional/issues/unmapped-driver-error-user-facing/_matrix.ts",
+        "packages/client/tests/functional/issues/unmapped-driver-error-user-facing/prisma/_schema.ts",
+        "packages/client/tests/functional/issues/unmapped-driver-error-user-facing/test.ts"
+      ],
+      "impactRanking": {
+        "testFiles": [
+          "packages/client-engine-runtime/src/user-facing-error.test.ts",
+          "packages/client/tests/functional/fulltext-search/__snapshots__/tests.ts.snap",
+          "packages/client/tests/functional/fulltext-search/tests.ts",
+          "packages/client/tests/functional/issues/unmapped-driver-error-user-facing/_matrix.ts",
+          "packages/client/tests/functional/issues/unmapped-driver-error-user-facing/prisma/_schema.ts",
+          "packages/client/tests/functional/issues/unmapped-driver-error-user-facing/test.ts"
+        ],
+        "productionFiles": [
+          "packages/client-engine-runtime/src/user-facing-error.ts",
+          "packages/client/src/runtime/core/engines/client/ClientEngine.ts"
+        ],
+        "impactContextMode": "real-supermodel-scoped-ranking"
+      },
+      "notes": "Large enough monorepo with multi-file runtime and functional-test changes. More expensive, but closer to real product work."
+    },
+    {
+      "id": "payload-16465-workflow-retry",
+      "repo": "payloadcms/payload",
+      "url": "https://github.com/payloadcms/payload/pull/16465",
+      "number": 16465,
+      "title": "fix: stop workflows retrying forever when no retries are configured",
+      "mergedAt": "2026-05-04T16:28:09Z",
+      "baseRef": "3.x",
+      "baseSha": "d6f7b4741684ad2fac3c624503101dbe6a5219ce",
+      "mergeCommitSha": "caf9150aa2f5dbf9b1e306258bca26d4aa2177b9",
+      "repoSizeKb": 182032,
+      "language": "TypeScript",
+      "changedFiles": 7,
+      "additions": 212,
+      "deletions": 17,
+      "files": [
+        "packages/payload/src/queues/errors/handleWorkflowError.ts",
+        "packages/payload/src/queues/operations/runJobs/index.ts",
+        "test/queues/getConfig.ts",
+        "test/queues/int.spec.ts",
+        "test/queues/payload-types.ts",
+        "test/queues/workflows/throwsInHandlerNoRetries.ts",
+        "test/queues/workflows/throwsInHandlerRetries1.ts"
+      ],
+      "impactRanking": {
+        "testFiles": [
+          "test/queues/getConfig.ts",
+          "test/queues/int.spec.ts",
+          "test/queues/payload-types.ts",
+          "test/queues/workflows/throwsInHandlerNoRetries.ts",
+          "test/queues/workflows/throwsInHandlerRetries1.ts"
+        ],
+        "productionFiles": [
+          "packages/payload/src/queues/errors/handleWorkflowError.ts",
+          "packages/payload/src/queues/operations/runJobs/index.ts"
+        ],
+        "impactContextMode": "real-supermodel-scoped-ranking"
+      },
+      "notes": "Application-style TypeScript repo with queue/workflow runtime behavior and integration coverage."
+    },
+    {
+      "id": "superset-39504-filter-dependency-graph",
+      "repo": "apache/superset",
+      "url": "https://github.com/apache/superset/pull/39504",
+      "number": 39504,
+      "title": "fix(dashboard): apply full transitive ancestor chain for dependent filters",
+      "mergedAt": "2026-04-22T14:54:52Z",
+      "baseRef": "master",
+      "baseSha": "151d7d76da2855a7c6c6c83e670e0f367f62a55e",
+      "mergeCommitSha": "18d89f25ce4db6258a01d409dd516003b1df7f0c",
+      "repoSizeKb": 931788,
+      "language": "TypeScript",
+      "changedFiles": 4,
+      "additions": 291,
+      "deletions": 18,
+      "files": [
+        "superset-frontend/src/dashboard/components/nativeFilters/FilterBar/FilterControls/FilterValue.tsx",
+        "superset-frontend/src/dashboard/components/nativeFilters/FilterBar/FilterControls/state.test.ts",
+        "superset-frontend/src/dashboard/components/nativeFilters/FilterBar/FilterControls/state.ts",
+        "superset-frontend/src/dashboard/components/nativeFilters/dependencyGraph.ts"
+      ],
+      "impactRanking": {
+        "testFiles": [
+          "superset-frontend/src/dashboard/components/nativeFilters/FilterBar/FilterControls/state.test.ts"
+        ],
+        "productionFiles": [
+          "superset-frontend/src/dashboard/components/nativeFilters/FilterBar/FilterControls/FilterValue.tsx",
+          "superset-frontend/src/dashboard/components/nativeFilters/FilterBar/FilterControls/state.ts",
+          "superset-frontend/src/dashboard/components/nativeFilters/dependencyGraph.ts"
+        ],
+        "impactContextMode": "real-supermodel-scoped-ranking"
+      },
+      "notes": "Large app repo, graph-like UI state bug. This is a strong conceptual fit for impact/context evaluation."
+    },
+    {
+      "id": "terraform-38338-import-provider-local",
+      "repo": "hashicorp/terraform",
+      "url": "https://github.com/hashicorp/terraform/pull/38338",
+      "number": 38338,
+      "title": "fix(import): include provider local in generated resource cfg when set in import",
+      "mergedAt": "2026-04-01T20:05:51Z",
+      "baseRef": "main",
+      "baseSha": "ca02fd9c2a33e855937944110b37e70693b07f3e",
+      "mergeCommitSha": "e3d2b7de8be0dfbfe12e243a914da20806975fef",
+      "repoSizeKb": 353630,
+      "language": "Go",
+      "changedFiles": 5,
+      "additions": 133,
+      "deletions": 12,
+      "files": [
+        ".changes/v1.16/BUG FIXES-20260401-152120.yaml",
+        "internal/configs/testdata/valid-modules/import-blocks/main.tf",
+        "internal/terraform/context_plan_import_test.go",
+        "internal/terraform/node_resource_plan.go",
+        "internal/terraform/node_resource_plan_instance.go"
+      ],
+      "replay": {
+        "verifier": [
+          "go test ./internal/terraform -run TestContext2Plan_importResourceConfigGenWithProviderLocalName -count=1"
+        ],
+        "testFiles": [
+          "internal/configs/testdata/valid-modules/import-blocks/main.tf",
+          "internal/terraform/context_plan_import_test.go"
+        ],
+        "productionFiles": [
+          "internal/terraform/node_resource_plan.go",
+          "internal/terraform/node_resource_plan_instance.go"
+        ],
+        "impactContextMode": "oracle-reference-production-files"
+      },
+      "notes": "Large Go repo with real planner behavior and focused tests. Good non-TypeScript control case."
+    }
+  ]
+}

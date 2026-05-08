@@ -1,0 +1,29 @@
+{
+  "name": "typescript-basic",
+  "description": "Small TypeScript fixture where a pricing helper is called directly by two files and imported transitively by two more.",
+  "target": {
+    "file": "src/pricing.ts",
+    "name": "calculateSubtotal"
+  },
+  "predictionFile": "prediction.supermodel-impact.json",
+  "mutations": [
+    {
+      "name": "add-required-currency-argument",
+      "description": "Adds a required second parameter to calculateSubtotal. Direct callers that still pass one argument should fail typecheck.",
+      "file": "src/pricing.ts",
+      "search": "export function calculateSubtotal(items: CartItem[]): number {",
+      "replace": "export function calculateSubtotal(items: CartItem[], currency: string): number { void currency;"
+    },
+    {
+      "name": "rename-exported-function",
+      "description": "Renames the exported target function. Direct importers should fail because calculateSubtotal is no longer exported.",
+      "file": "src/pricing.ts",
+      "search": "export function calculateSubtotal(items: CartItem[]): number {",
+      "replace": "export function calculateSubtotalV2(items: CartItem[]): number {"
+    }
+  ],
+  "expectedActualFiles": [
+    "src/cart.ts",
+    "src/checkout.ts"
+  ]
+}

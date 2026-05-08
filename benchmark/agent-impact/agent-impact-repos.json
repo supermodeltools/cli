@@ -1,0 +1,158 @@
+{
+  "name": "agent-impact-ab-v1",
+  "description": "A/B benchmark cases for measuring whether impact-analysis context changes top-agent repair cost and success.",
+  "defaultModel": "gpt-5.5",
+  "defaultTimeoutSeconds": 1800,
+  "cases": [
+    {
+      "name": "tinyspy-define-required-parameter",
+      "repo": "https://github.com/tinylibs/tinyspy.git",
+      "commit": "8226c9aeb75993a0ad10bec01b0c91031d36ff34",
+      "packageManager": "pnpm",
+      "install": ["pnpm install --frozen-lockfile --ignore-scripts"],
+      "verify": ["pnpm exec tsc --project tsconfig.json --noEmit"],
+      "target": {"file": "src/utils.ts", "symbol": "define"},
+      "mutation": {
+        "file": "src/utils.ts",
+        "search": "export function define(\n  obj: any,\n  key: string | number | symbol,\n  descriptor: PropertyDescriptor\n) {",
+        "replace": "export function define(\n  obj: any,\n  key: string | number | symbol,\n  descriptor: PropertyDescriptor,\n  metadata: string\n) {",
+        "mustContain": "metadata: string"
+      }
+    },
+    {
+      "name": "tinybench-assert-required-parameter",
+      "repo": "https://github.com/tinylibs/tinybench.git",
+      "commit": "a5e251e5c98da4b293e1b76e58243979daca50be",
+      "packageManager": "pnpm",
+      "install": ["pnpm install --frozen-lockfile --ignore-scripts"],
+      "verify": ["pnpm typecheck"],
+      "target": {"file": "src/utils.ts", "symbol": "assert"},
+      "mutation": {
+        "file": "src/utils.ts",
+        "search": "export const assert = (condition: boolean, message: string): void => {",
+        "replace": "export const assert = (\n  condition: boolean,\n  message: string,\n  code: string\n): void => {",
+        "mustContain": "code: string"
+      }
+    },
+    {
+      "name": "p-queue-constructor-required-options",
+      "repo": "https://github.com/sindresorhus/p-queue.git",
+      "commit": "fc4b7369d915ade31416d603fd35fd26c1885851",
+      "packageManager": "npm",
+      "install": ["npm install --ignore-scripts"],
+      "verify": ["npm run build"],
+      "target": {"file": "source/index.ts", "symbol": "PQueue.constructor"},
+      "mutation": {
+        "file": "source/index.ts",
+        "search": "constructor(options?: Options<QueueType, EnqueueOptionsType>) {",
+        "replace": "constructor(options: Options<QueueType, EnqueueOptionsType> & {benchmarkTag: string}) {",
+        "mustContain": "benchmarkTag: string"
+      }
+    },
+    {
+      "name": "ky-create-instance-required-defaults",
+      "repo": "https://github.com/sindresorhus/ky.git",
+      "commit": "e0fcf780de2bd69af2528e4b7b87ccae6bb727b1",
+      "packageManager": "npm",
+      "install": ["npm install --ignore-scripts"],
+      "verify": ["npm run build"],
+      "target": {"file": "source/index.ts", "symbol": "createInstance"},
+      "mutation": {
+        "file": "source/index.ts",
+        "search": "const createInstance = (defaults?: Partial<Options>): KyInstance => {",
+        "replace": "const createInstance = (defaults: Partial<Options> & {benchmarkTag: string}): KyInstance => {",
+        "mustContain": "benchmarkTag: string"
+      }
+    },
+    {
+      "name": "p-map-default-export-required-label",
+      "repo": "https://github.com/sindresorhus/p-map.git",
+      "commit": "100a217d3b1d28a3ba8ad726ea2986d7a696966e",
+      "packageManager": "npm",
+      "install": ["npm install --ignore-scripts"],
+      "verify": ["npx tsd"],
+      "target": {"file": "index.d.ts", "symbol": "pMap"},
+      "mutation": {
+        "file": "index.d.ts",
+        "search": "export default function pMap<Element, NewElement>(\n\tinput: AsyncIterable<Element | Promise<Element>> | Iterable<Element | Promise<Element>>,\n\tmapper: Mapper<Element, NewElement>,\n\toptions?: Options\n): Promise<Array<Exclude<NewElement, typeof pMapSkip>>>;",
+        "replace": "export default function pMap<Element, NewElement>(\n\tinput: AsyncIterable<Element | Promise<Element>> | Iterable<Element | Promise<Element>>,\n\tmapper: Mapper<Element, NewElement>,\n\toptions: Options,\n\tbenchmarkLabel: string\n): Promise<Array<Exclude<NewElement, typeof pMapSkip>>>;",
+        "mustContain": "benchmarkLabel: string"
+      }
+    },
+    {
+      "name": "p-retry-default-export-required-label",
+      "repo": "https://github.com/sindresorhus/p-retry.git",
+      "commit": "35681f6c70f8ca2bdcb9542281147679184269fa",
+      "packageManager": "npm",
+      "install": ["npm install --ignore-scripts"],
+      "verify": ["npx tsd"],
+      "target": {"file": "index.d.ts", "symbol": "pRetry"},
+      "mutation": {
+        "file": "index.d.ts",
+        "search": "export default function pRetry<T>(\n\tinput: (attemptNumber: number) => PromiseLike<T> | T,\n\toptions?: Options\n): Promise<T>;",
+        "replace": "export default function pRetry<T>(\n\tinput: (attemptNumber: number) => PromiseLike<T> | T,\n\toptions: Options,\n\tbenchmarkLabel: string\n): Promise<T>;",
+        "mustContain": "benchmarkLabel: string"
+      }
+    },
+    {
+      "name": "p-timeout-default-export-required-label",
+      "repo": "https://github.com/sindresorhus/p-timeout.git",
+      "commit": "245066ef7daa5e74024d5b6a188ae599a1b7bfdf",
+      "packageManager": "npm",
+      "install": ["npm install --ignore-scripts"],
+      "verify": ["npx tsd"],
+      "target": {"file": "index.d.ts", "symbol": "pTimeout"},
+      "mutation": {
+        "file": "index.d.ts",
+        "search": "export default function pTimeout<ValueType, ReturnType = ValueType>(\n\tinput: PromiseLike<ValueType>,\n\toptions: Options<ReturnType>\n): ClearablePromise<ValueType | ReturnType>;",
+        "replace": "export default function pTimeout<ValueType, ReturnType = ValueType>(\n\tinput: PromiseLike<ValueType>,\n\toptions: Options<ReturnType>,\n\tbenchmarkLabel: string\n): ClearablePromise<ValueType | ReturnType>;",
+        "mustContain": "benchmarkLabel: string"
+      }
+    },
+    {
+      "name": "p-throttle-default-export-required-label",
+      "repo": "https://github.com/sindresorhus/p-throttle.git",
+      "commit": "d95ed9ff6734e5b603d88e71a4624483b24759de",
+      "packageManager": "npm",
+      "install": ["npm install --ignore-scripts"],
+      "verify": ["npx tsd"],
+      "target": {"file": "index.d.ts", "symbol": "pThrottle"},
+      "mutation": {
+        "file": "index.d.ts",
+        "search": "export default function pThrottle(options: Options): <F extends AnyFunction>(function_: F) => ThrottledFunction<F>;",
+        "replace": "export default function pThrottle(options: Options, benchmarkLabel: string): <F extends AnyFunction>(function_: F) => ThrottledFunction<F>;",
+        "mustContain": "benchmarkLabel: string"
+      }
+    },
+    {
+      "name": "chalk-constructor-required-options",
+      "repo": "https://github.com/chalk/chalk.git",
+      "commit": "aa06bb5ac3f14df9fda8cfb54274dfc165ddfdef",
+      "packageManager": "npm",
+      "install": ["npm install --ignore-scripts"],
+      "verify": ["npx tsd"],
+      "target": {"file": "source/index.d.ts", "symbol": "Chalk"},
+      "mutation": {
+        "file": "source/index.d.ts",
+        "search": "export const Chalk: new (options?: Options) => ChalkInstance;",
+        "replace": "export const Chalk: new (options: Options & {benchmarkTag: string}) => ChalkInstance;",
+        "mustContain": "benchmarkTag: string"
+      }
+    },
+    {
+      "name": "yoctocolors-format-required-label",
+      "repo": "https://github.com/sindresorhus/yoctocolors.git",
+      "commit": "ab9da8d65ff69b6dc107cfc048e3769d3a450de4",
+      "packageManager": "npm",
+      "install": ["npm install --ignore-scripts"],
+      "verify": ["npx tsd"],
+      "target": {"file": "base.d.ts", "symbol": "Format"},
+      "mutation": {
+        "file": "base.d.ts",
+        "search": "export type Format = (string: string) => string;",
+        "replace": "export type Format = (string: string, benchmarkLabel: string) => string;",
+        "mustContain": "benchmarkLabel: string"
+      }
+    }
+  ]
+}

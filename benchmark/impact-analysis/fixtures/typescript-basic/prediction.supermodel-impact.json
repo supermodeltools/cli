@@ -1,0 +1,59 @@
+{
+  "metadata": {
+    "analysisType": "impact",
+    "method": "function_target_reverse_call_graph_fixture",
+    "fixtureNote": "This is a checked-in Supermodel-style prediction for the fixture after function-level targets stopped seeding importer-only files into affectedFunctions/affectedFiles."
+  },
+  "impacts": [
+    {
+      "target": {
+        "file": "src/pricing.ts",
+        "name": "calculateSubtotal",
+        "type": "function"
+      },
+      "blastRadius": {
+        "directDependents": 2,
+        "transitiveDependents": 0,
+        "affectedFiles": 2,
+        "affectedDomains": [
+          "Commerce"
+        ],
+        "riskScore": "medium",
+        "riskFactors": [
+          "Function-level target scored from direct reverse call edges"
+        ]
+      },
+      "affectedFunctions": [
+        {
+          "file": "src/cart.ts",
+          "name": "summarizeCart",
+          "line": 4,
+          "type": "function",
+          "distance": 1,
+          "relationship": "direct_caller"
+        },
+        {
+          "file": "src/checkout.ts",
+          "name": "createCheckoutQuote",
+          "line": 4,
+          "type": "function",
+          "distance": 1,
+          "relationship": "direct_caller"
+        }
+      ],
+      "affectedFiles": [
+        {
+          "file": "src/cart.ts",
+          "directDependencies": 1,
+          "transitiveDependencies": 0
+        },
+        {
+          "file": "src/checkout.ts",
+          "directDependencies": 1,
+          "transitiveDependencies": 0
+        }
+      ],
+      "entryPointsAffected": []
+    }
+  ]
+}
