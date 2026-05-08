@@ -1,0 +1,81 @@
+diff --git a/packages/core/src/core_private_export.ts b/packages/core/src/core_private_export.ts
+index c2237d9ec0..00692f1630 100644
+--- a/packages/core/src/core_private_export.ts
++++ b/packages/core/src/core_private_export.ts
+@@ -153,6 +153,7 @@ export {
+   SharedStylesHost as ɵSharedStylesHost,
+ } from './render3/interfaces/shared_styles_host';
+ export {
++  chain as ɵchain,
+   encapsulateResourceError as ɵencapsulateResourceError,
+   ResourceImpl as ɵResourceImpl,
+ } from './resource/resource';
+diff --git a/packages/core/src/resource/resource.ts b/packages/core/src/resource/resource.ts
+index dad83f1412..3655ea3881 100644
+--- a/packages/core/src/resource/resource.ts
++++ b/packages/core/src/resource/resource.ts
+@@ -598,19 +598,21 @@ class ResourceWrappedError extends Error {
+  * of the other resource if it is available, or propagating the status to the current resource if it
+  * is not.
+  */
++export function chain<T>(resource: Resource<T>): T {
++  switch (resource.status()) {
++    case 'idle':
++      throw ResourceParamsStatus.IDLE;
++    case 'error':
++      throw new ResourceDependencyError(resource);
++    case 'loading':
++    case 'reloading':
++      throw ResourceParamsStatus.LOADING;
++  }
++  return resource.value();
++}
++
+ export const paramsContext: ResourceParamsContext = {
+-  chain<T>(resource: Resource<T>): T {
+-    switch (resource.status()) {
+-      case 'idle':
+-        throw ResourceParamsStatus.IDLE;
+-      case 'error':
+-        throw new ResourceDependencyError(resource);
+-      case 'loading':
+-      case 'reloading':
+-        throw ResourceParamsStatus.LOADING;
+-    }
+-    return resource.value();
+-  },
++  chain,
+ };
+ 
+ let inParamsFunction = false;
+diff --git a/packages/forms/signals/src/api/rules/validation/validate_async.ts b/packages/forms/signals/src/api/rules/validation/validate_async.ts
+index 8785386475..ad3feb196c 100644
+--- a/packages/forms/signals/src/api/rules/validation/validate_async.ts
++++ b/packages/forms/signals/src/api/rules/validation/validate_async.ts
+@@ -6,7 +6,15 @@
+  * found in the LICENSE file at https://angular.dev/license
+  */
+ 
+-import {DebounceTimer, ResourceRef, ResourceSnapshot, Signal, debounced} from '@angular/core';
++import {
++  computed,
++  DebounceTimer,
++  ResourceRef,
++  ResourceSnapshot,
++  Signal,
++  debounced,
++  ɵchain,
++} from '@angular/core';
+ import {FieldNode} from '../../../field/node';
+ import {addDefaultField} from '../../../field/validation';
+ import {FieldPathNode} from '../../../schema/path_node';
+@@ -127,7 +135,8 @@ export function validateAsync<TValue, TParams, TResult, TPathKind extends PathKi
+     (_state, params) => {
+       if (opts.debounce !== undefined) {
+         const debouncedResource = debounced(() => params(), opts.debounce);
+-        return opts.factory(debouncedResource.value);
++        const wrappedParams = computed(() => ɵchain(debouncedResource));
++        return opts.factory(wrappedParams);
+       }
+       return opts.factory(params);
+     },
