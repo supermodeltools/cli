@@ -161,99 +161,14 @@ The benchmark supports three conclusions:
 
 The per-case logs matter more than the aggregate. A single false-positive-heavy impact file can make the agent inspect or edit the wrong place; those failures should be visible in `agent.jsonl`, `final.diff`, and verifier logs.
 
-## First Full Result
+## Result Artifacts
 
-The first 10-repository Codex run used small TypeScript libraries, not large application repos. The median repository was roughly 11 source/type/test files and 2k lines of code. The largest case was `sindresorhus/ky` at roughly 52 source/type/test files and 17.5k lines.
+Keep generated result artifacts separate from the harness PR so reviewers can evaluate runner logic and benchmark evidence independently.
 
-Result:
+For real impact ranking runs, check in result artifacts under `benchmark/agent-impact/results/<run-id>/` on a results branch. A complete result artifact should include:
 
-- Model: `gpt-5.5`
-- Runner: `codex-cli 0.128.0`
-- Control: 10/10 success, file F1 0.968, average 83.2s, average 16.3 tool calls
-- Impact context: 10/10 success, file F1 0.968, average 87.6s, average 20.3 tool calls
-
-Conclusion:
-
-> On small repositories with compiler or `tsd` failures, the current impact-context packet does not help a frontier agent. The verifier output is already a strong map, so the control agent can run the verifier, read the named files, and repair the issue without graph guidance.
-
-This is a negative result for this harness, not a verdict on impact analysis as a product. The next benchmark needs larger repos and harder, less compiler-directed failures where the agent has to search before it knows where to edit.
-
-The next benchmark should use:
-
-- larger repositories, ideally 50k-500k lines
-- post-June-2024 merged PRs so the target diffs are outside this model's stated knowledge cutoff
-- real PR base commits and merge commits
-- hidden reference files from the PR diff
-- runtime/test failures where logs do not already name every affected file
-- fixed token/time/tool-call budgets to measure whether impact context helps under pressure
-
-The first large-repo candidate slate is tracked in [post-cutoff-prs.json](./post-cutoff-prs.json), with the replay design in [post-cutoff-pr-benchmark.md](./post-cutoff-pr-benchmark.md).
-
-## First Large Post-Cutoff PR Replays
-
-The first large-repo replay used real merged PRs from 2026, with the PR test changes applied to the base checkout and the production fix withheld. Both arms ran in separate Docker containers with `codex-cli 0.128.0` and `gpt-5.5`.
-
-Important caveat: the impact arm currently uses oracle reference production files as an upper-bound file-ranking packet. This proves whether a good file packet can help an agent, not whether Supermodel can generate that packet yet.
-
-| Case | Arm | Success | File F1 | Time | Tool calls | Input tokens | Output tokens | Reasoning tokens | First reference file |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---|
-| Terraform #38338 | control | yes | 1.000 | 302s | 80 | 2,327,265 | 11,172 | 4,303 | event 13 |
-| Terraform #38338 | impact | yes | 1.000 | 202s | 52 | 2,203,134 | 6,718 | 2,718 | event 4 |
-| Grafana #123935 | control | yes | 1.000 | 245s | 30 | 722,856 | 8,362 | 5,610 | event 4 |
-| Grafana #123935 | impact | yes | 1.000 | 303s | 35 | 1,270,987 | 10,224 | 6,696 | event 5 |
-
-Interpretation:
-
-- Terraform is the positive signal we were looking for: the impact packet got the agent into the right production files earlier and reduced time, tool calls, and tokens.
-- Grafana is the counterexample: the control agent found the single reference file immediately from the failing runtime test, so the context packet added no advantage and the impact arm spent more.
-- File F1 is saturated at 1.000 in both cases, so the useful metric is efficiency under realistic search pressure, not final file accuracy.
-
-The next step is to replace the oracle file packet with real Supermodel-generated impact output for these same PR replays. If Supermodel ranks the Terraform files high and avoids adding distracting Grafana context, the product claim gets stronger. If it cannot, the benchmark tells us exactly where the graph ranking needs work.
-
-## Real Supermodel Scoped Ranking
-
-The next run invoked the local data-plane implementation instead of the oracle packet:
-
-```bash
-export SUPERMODEL_PUBLIC_API_REPO=/path/to/supermodel-public-api
-node benchmark/agent-impact/run-real-impact-ranking.mjs \
-  --cases terraform-38338-import-provider-local,grafana-123935-alert-rule-pagination \
-  --out-dir target/real-impact-ranking-scoped
-```
-
-Checked-in summary: [real-impact-ranking-scoped-results.md](./real-impact-ranking-scoped-results.md). Latest full local report: `target/real-impact-ranking-primary-precision/2026-05-06T19-35-21-980Z/report.md`.
-
-The harness now also emits agent-ready scoped packets at `target/real-impact-ranking-scoped/<run>/<case>/impact-analysis.scoped.json` and `IMPACT_ANALYSIS_SCOPED.md`.
-
-This exposed an important product distinction. `affectedFiles` is structural production impact. Regression tests should be returned separately as scoped validation context. The API now returns `validationFiles` per impact target, with score, confidence, and evidence. The precision follow-up adds `primaryValidationFiles`, a high-confidence subset for immediate inspection.
-
-Executive result after the `validationFiles` changes on the 10-repo post-cutoff benchmark:
-
-| Method | Precision | Recall | F1 | Correct / Expected | Predicted |
-|---|---:|---:|---:|---:|---:|
-| Baseline path/name matcher | 0.060 | 0.286 | 0.099 | 6 / 21 | 100 |
-| Supermodel best current | 0.274 | 0.952 | 0.426 | 20 / 21 | 73 |
-
-The Supermodel row is the best fixed strategy across all repos: scoped `validationFiles`, capped at the top 9 files. It does not use per-case oracle tuning.
-
-Per-repo performance:
-
-| Repo / PR | Expected | Baseline F1 | Supermodel F1 | Supermodel Correct | Supermodel Candidates |
-|---|---:|---:|---:|---:|---:|
-| Next.js #93417 | 4 | 0.000 | 0.615 | 4 / 4 | 9 |
-| VS Code #314217 | 1 | 0.182 | 0.333 | 1 / 1 | 5 |
-| MUI #48472 | 1 | 0.182 | 1.000 | 1 / 1 | 1 |
-| Grafana #123935 | 1 | 0.182 | 0.200 | 1 / 1 | 9 |
-| React #36047 | 1 | 0.000 | 0.200 | 1 / 1 | 9 |
-| Angular #68512 | 1 | 0.000 | 0.400 | 1 / 1 | 4 |
-| Prisma #29512 | 5 | 0.133 | 0.714 | 5 / 5 | 9 |
-| Payload #16465 | 5 | 0.000 | 0.571 | 4 / 5 | 9 |
-| Superset #39504 | 1 | 0.182 | 0.200 | 1 / 1 | 9 |
-| Terraform #38338 | 1 | 0.182 | 0.200 | 1 / 1 | 9 |
-
-Interpretation:
-
-- The product should answer scoped questions: "if this file/function/diff changes, what should I inspect or test?"
-- Aggregating every changed target in a PR can be noisy because unrelated changed functions produce their own plausible validation tests.
-- The useful packet is not "impact of everything." It is target-level production impact plus target-level validation files.
-- Supermodel finds 20 of 21 labeled validation files versus 6 of 21 for baseline, while returning fewer total candidates.
+- reproduction instructions with the exact API/CLI branches and command
+- aggregate precision, recall, and F1 tables
+- generated `report.md`
+- sanitized `summary.json`
+- per-case scoped packets when useful for audit

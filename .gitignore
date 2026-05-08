@@ -1,5 +1,6 @@
 dist/
 npm/bin/
+/target/
 *.exe
 /supermodel
 /cli
