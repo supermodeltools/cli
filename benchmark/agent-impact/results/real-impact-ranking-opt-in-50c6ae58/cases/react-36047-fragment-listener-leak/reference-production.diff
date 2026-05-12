@@ -1,0 +1,22 @@
+diff --git a/packages/react-dom-bindings/src/client/ReactFiberConfigDOM.js b/packages/react-dom-bindings/src/client/ReactFiberConfigDOM.js
+index 727ec694b..db3e2806a 100644
+--- a/packages/react-dom-bindings/src/client/ReactFiberConfigDOM.js
++++ b/packages/react-dom-bindings/src/client/ReactFiberConfigDOM.js
+@@ -3093,7 +3093,7 @@ function normalizeListenerOptions(
+     return `c=${opts ? '1' : '0'}`;
+   }
+ 
+-  return `c=${opts.capture ? '1' : '0'}&o=${opts.once ? '1' : '0'}&p=${opts.passive ? '1' : '0'}`;
++  return `c=${opts.capture ? '1' : '0'}`;
+ }
+ function indexOfEventListener(
+   eventListeners: Array<StoredEventListener>,
+@@ -4062,7 +4062,7 @@ export function registerSuspenseInstanceRetry(
+     instance.data !== SUSPENSE_PENDING_START_DATA ||
+     // The boundary is still in pending status but the document has finished loading
+     // before we could register the event handler that would have scheduled the retry
+-    // on load so we call teh callback now.
++    // on load so we call the callback now.
+     ownerDocument.readyState !== DOCUMENT_READY_STATE_LOADING
+   ) {
+     callback();
